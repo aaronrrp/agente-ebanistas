@@ -1086,12 +1086,20 @@ async function handleChatMessage(message = els.chatInput.value.trim()) {
   appendChat("user", message);
   els.chatInput.value = "";
 
-  const pending = appendChat("assistant", "Procesando diseño, cotización y cortes...");
+  const hasImage = Boolean(state.currentImageData);
+  const loadingText = hasImage
+    ? "🔍 Analizando imagen y procesando solicitud… (puede tardar 15–30 segundos)"
+    : "⚙️ Procesando diseño…";
+
+  const pending = appendChat("assistant", loadingText);
+  els.sendChatBtn.disabled = true;
+
   const apiPlan = await askBackendAssistant(message);
   const plan = apiPlan || buildLocalAssistantPlan(message);
   executeAssistantPlan(plan, message);
   pending.textContent = plan.assistantText;
   els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+  els.sendChatBtn.disabled = false;
 }
 
 function normalizeText(value) {
@@ -1263,7 +1271,8 @@ async function askBackendAssistant(message) {
 
   try {
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 5000);
+    // 35 seconds — enough for vision analysis of large images
+    const timeout = window.setTimeout(() => controller.abort(), 35000);
     const response = await fetch("/api/ebanista-ai", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1283,6 +1292,70 @@ async function askBackendAssistant(message) {
     return normalizeBackendPlan(data, message);
   } catch {
     return null;
+  }
+}
+
+// ── Space analysis — sends photo to dedicated endpoint ──────────────────────
+async function analyzeSpace(message) {
+  if (!state.currentImageData) {
+    appendChat("assistant", "⚠️ Primero sube una foto del espacio para analizarlo.");
+    return;
+  }
+  if (window.location.protocol === "file:") {
+    appendChat("assistant", "El análisis de espacios requiere el servidor activo (no funciona en modo archivo local). Accede desde tu URL de Render.");
+    return;
+  }
+
+  const userMsg = message || "Analiza este espacio y recomiéndame muebles de melamina que quedarían bien.";
+  appendChat("user", userMsg);
+
+  const pending = appendChat("assistant", "🔍 Analizando el espacio… identificando dimensiones, estilo y oportunidades de diseño. Esto tarda 15–30 segundos.");
+  els.sendChatBtn.disabled = true;
+  document.getElementById("analyzeSpaceBtn")?.setAttribute("disabled", true);
+
+  try {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 40000);
+    const res = await fetch("/api/analyze-space", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: userMsg, imageData: state.currentImageData }),
+      signal: controller.signal
+    });
+    window.clearTimeout(timeout);
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      pending.textContent = `❌ ${err.error || "No se pudo analizar el espacio."}`;
+      return;
+    }
+
+    const data = await res.json();
+    pending.textContent = data.assistantText || "Análisis completado.";
+
+    // Add all suggested items to the state and form
+    const itemsToAdd = data.items?.length ? data.items : (data.item ? [data.item] : []);
+    if (itemsToAdd.length) {
+      const normalized = itemsToAdd.map(it => normalizeAssistantItem(it, userMsg));
+      state.lastDesignItems = normalized;
+
+      // Show first item in form
+      fillFormFromItem(normalized[0], userMsg);
+      renderAssistantOutput(normalized[0], userMsg, { source: "openai", actions: data.actions || ["fill_form"] });
+
+      // If multiple items suggested, show summary
+      if (normalized.length > 1) {
+        const names = normalized.map((it, i) => `${i + 1}. ${it.name} (${it.width}×${it.height}×${it.depth} cm)`).join("\n");
+        appendChat("assistant", `Detecté ${normalized.length} muebles para este espacio:\n${names}\n\nEl formulario muestra el primero. Puedes agregar cada uno a la cotización.`);
+      }
+    }
+  } catch (e) {
+    pending.textContent = e.name === "AbortError"
+      ? "⏱ La IA tardó demasiado. Intenta con una imagen más pequeña o verifica tu clave de OpenAI en Render."
+      : `❌ Error: ${e.message}`;
+  } finally {
+    els.sendChatBtn.disabled = false;
+    document.getElementById("analyzeSpaceBtn")?.removeAttribute("disabled");
   }
 }
 
@@ -1518,36 +1591,72 @@ els.tenantSelect.addEventListener("change", (event) => {
   render();
 });
 
-els.tenantList.addEventListener("click", (event) => {
-  const editId = event.target.dataset.edit;
+els.tenantList.addEventListener("click", async (event) => {
+  const editId     = event.target.dataset.edit;
   const activateId = event.target.dataset.activate;
-  const suspendId = event.target.dataset.suspend;
+  const suspendId  = event.target.dataset.suspend;
   const renew365Id = event.target.dataset.renew365;
 
-  if (editId) state.selectedTenantId = editId;
+  if (editId) {
+    state.selectedTenantId = editId;
+    save(); render();
+    return;
+  }
 
   if (activateId) {
-    const tenant = state.tenants.find((item) => item.id === activateId);
+    const tenant = state.tenants.find(t => t.id === activateId);
+    if (!tenant) return;
+    // Optimistic local update
     tenant.status = "active";
     tenant.expiresAt = addDays(30);
     state.selectedTenantId = activateId;
+    save(); render();
     toast("Cuenta activada por 30 días ✓");
+    // Sync to server
+    if (window.location.protocol !== "file:" && AUTH.token) {
+      fetch(`/api/tenants/${activateId}/toggle`, { method: "POST", headers: adminApiHeader() })
+        .then(r => r.json()).then(updated => {
+          Object.assign(tenant, updated);
+          save(); render();
+        }).catch(() => {});
+    }
+    return;
   }
 
   if (suspendId) {
-    const tenant = state.tenants.find((item) => item.id === suspendId);
+    const tenant = state.tenants.find(t => t.id === suspendId);
+    if (!tenant) return;
     tenant.status = "suspended";
     state.selectedTenantId = suspendId;
-    toast("Cuenta suspendida", "error");
+    save(); render();
+    toast(`${tenant.companyName} suspendida — el link quedará bloqueado`, "error");
+    // Sync to server
+    if (window.location.protocol !== "file:" && AUTH.token) {
+      fetch(`/api/tenants/${suspendId}/toggle`, { method: "POST", headers: adminApiHeader() })
+        .then(r => r.json()).then(updated => {
+          Object.assign(tenant, updated);
+          save(); render();
+        }).catch(() => {});
+    }
+    return;
   }
 
   if (renew365Id) {
-    const tenant = state.tenants.find((t) => t.id === renew365Id);
+    const tenant = state.tenants.find(t => t.id === renew365Id);
+    if (!tenant) return;
     tenant.status = "active";
     const d = new Date(); d.setFullYear(d.getFullYear() + 1);
     tenant.expiresAt = d.toISOString().slice(0, 10);
-    toast(`${tenant.companyName} renovada por 1 año ✓`);
     save(); render();
+    toast(`${tenant.companyName} renovada por 1 año ✓`);
+    // Sync to server
+    if (window.location.protocol !== "file:" && AUTH.token) {
+      fetch(`/api/tenants/${renew365Id}/renew365`, { method: "POST", headers: adminApiHeader() })
+        .then(r => r.json()).then(updated => {
+          Object.assign(tenant, updated);
+          save(); render();
+        }).catch(() => {});
+    }
     return;
   }
 
@@ -1568,13 +1677,32 @@ els.resetDemoBtn.addEventListener("click", () => {
 els.designImage.addEventListener("change", (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
+
+  // Warn if image is very large (> 4 MB)
+  if (file.size > 4 * 1024 * 1024) {
+    appendChat("assistant", "⚠️ La imagen es grande (>4 MB). Funcionará pero puede tardar más. Considera reducirla si la IA no responde.");
+  }
+
   const reader = new FileReader();
   reader.onload = () => {
     state.currentImageData = reader.result;
-    els.imagePreview.innerHTML = `<img src="${reader.result}" alt="Imagen cargada para diseño IA">`;
-    appendChat("assistant", "Imagen cargada. Puedes pedirme que la mejore, que proponga un diseño o que la convierta en una propuesta 3D conceptual.");
+    els.imagePreview.innerHTML = `<img src="${reader.result}" alt="Foto del espacio" style="width:100%;border-radius:8px;cursor:zoom-in" onclick="this.style.maxHeight=this.style.maxHeight?'':'none'">`;
+
+    // Show the analyze button prominently
+    const analyzeBtn = document.getElementById("analyzeSpaceBtn");
+    if (analyzeBtn) {
+      analyzeBtn.classList.remove("hidden");
+      analyzeBtn.classList.add("pulse");
+    }
+
+    appendChat("assistant", "📸 Foto cargada. Presiona \"🔍 Analizar espacio\" para que detecte qué muebles quedarían bien aquí, o escríbeme lo que necesitas.");
   };
   reader.readAsDataURL(file);
+});
+
+document.getElementById("analyzeSpaceBtn")?.addEventListener("click", () => {
+  analyzeSpace(els.chatInput.value.trim() || null);
+  els.chatInput.value = "";
 });
 
 els.sendChatBtn.addEventListener("click", () => handleChatMessage());

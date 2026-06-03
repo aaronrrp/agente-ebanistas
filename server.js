@@ -232,7 +232,83 @@ function normalizeAi(payload, fallback) {
   };
 }
 
+// ── Space analysis system prompt ────────────────────────────────────────────
+const spacePrompt = `
+Eres un experto en diseño de interiores y fabricación de muebles de melamina para América Latina.
+
+El usuario te envía UNA FOTO DE UN ESPACIO real (habitación, cocina, sala, oficina, dormitorio, etc.).
+Tu tarea es analizar visualmente ese espacio y proponer muebles de melamina específicos que quedarían bien.
+
+CÓMO ANALIZAR LA FOTO:
+1. Identifica el tipo de espacio (cocina, dormitorio, sala, oficina, baño, etc.)
+2. Estima dimensiones usando referencias visuales:
+   - Puerta estándar: 200 cm alto × 80 cm ancho
+   - Enchufe en pared: 30–40 cm desde el piso
+   - Persona adulta: ~170 cm
+   - Ventana típica: 120 cm ancho × 100 cm alto
+3. Describe el estilo (moderno, rústico, minimalista, clásico)
+4. Identifica paredes/esquinas disponibles para muebles
+5. Detecta necesidades (almacenamiento, organización, TV, ropa, cocina, etc.)
+
+REGLAS PARA PROPONER MUEBLES:
+- Propón 1 a 3 muebles específicos que resuelvan las necesidades del espacio
+- Usa dimensiones reales basadas en el análisis de la foto
+- Explica brevemente por qué cada mueble encaja en ese espacio
+- Usa melamina 18 mm por defecto; 15 mm para muebles livianos
+- Closets: profundidad 55–60 cm. Muebles de cocina base: 90 cm alto, 55 cm fondo.
+
+Responde SOLO JSON válido:
+{
+  "assistantText": "Descripción del espacio analizado y por qué propones cada mueble. Sé específico: menciona la pared disponible, el estilo, las dimensiones estimadas del espacio. 2-4 oraciones.",
+  "spaceType": "cocina|dormitorio|sala|oficina|baño|lavandería|otro",
+  "actions": ["fill_form", "add_to_quote"],
+  "items": [
+    {
+      "name": "Nombre descriptivo del mueble (ej: Closet esquinero dormitorio)",
+      "furnitureType": "Cocina|Closet|Vanity|Centro de entretenimiento|Mueble de lavandería|Escritorio|Otro",
+      "dimensionBasis": "external",
+      "width": 120,
+      "height": 200,
+      "depth": 55,
+      "complexityKey": "low|medium|high|premium",
+      "doors": 2,
+      "drawers": 0,
+      "shelves": 2,
+      "shelfPlacement": "internal",
+      "doorPlacement": "overlay",
+      "drawerPlacement": "external_front",
+      "backPlacement": "internal",
+      "melamineThickness": "18 mm",
+      "edgeBanding": "Frentes visibles y puertas",
+      "hinges": "Blum CLIP top BLUMOTION 110° (cierre suave)",
+      "drawerSlides": "No incluir correderas",
+      "handles": "Barra aluminio 128mm",
+      "color": "RH01",
+      "notes": "Por qué este mueble encaja en el espacio analizado.",
+      "manualPrice": 0
+    }
+  ]
+}
+`.trim();
+
 // ── Route handlers ──────────────────────────────────────────────────────────
+
+async function callOpenAI(sysPrompt, userContent) {
+  const apiRes = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model,
+      input: [
+        { role: "system", content: [{ type: "input_text", text: sysPrompt }] },
+        { role: "user",   content: userContent }
+      ]
+    })
+  });
+  const data = await apiRes.json();
+  if (!apiRes.ok) throw new Error(data.error?.message || `OpenAI ${apiRes.status}`);
+  return parseJson(getAiText(data)) || { assistantText: getAiText(data) };
+}
 
 async function handleAi(req, res) {
   if (!process.env.OPENAI_API_KEY) {
@@ -246,16 +322,50 @@ async function handleAi(req, res) {
     text: JSON.stringify({ message: payload.message || "", tenant: payload.tenant || {}, currentItem: payload.currentItem || null })
   }];
   if (typeof payload.imageData === "string" && payload.imageData.startsWith("data:image/")) {
-    content.push({ type: "input_image", image_url: payload.imageData, detail: "auto" });
+    content.push({ type: "input_image", image_url: payload.imageData, detail: "high" });
   }
-  const apiRes = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model, input: [{ role: "system", content: [{ type: "input_text", text: systemPrompt }] }, { role: "user", content }] })
-  });
-  const data = await apiRes.json();
-  if (!apiRes.ok) { sendJson(res, apiRes.status, { error: data.error?.message || "OpenAI error" }); return; }
-  sendJson(res, 200, normalizeAi(parseJson(getAiText(data)), getAiText(data)));
+  try {
+    const parsed = await callOpenAI(systemPrompt, content);
+    sendJson(res, 200, normalizeAi(parsed, parsed?.assistantText));
+  } catch (e) {
+    sendJson(res, 500, { error: e.message });
+  }
+}
+
+// ── Space analysis — dedicated endpoint for room/photo analysis ─────────────
+async function handleSpaceAnalysis(req, res) {
+  if (!process.env.OPENAI_API_KEY) {
+    sendJson(res, 503, { error: "OPENAI_API_KEY no configurada. Sube tu clave en Render para usar análisis de espacios." });
+    return;
+  }
+  const body = await readBody(req);
+  const payload = body ? JSON.parse(body) : {};
+
+  if (!payload.imageData?.startsWith("data:image/")) {
+    sendJson(res, 400, { error: "Se requiere una imagen del espacio." });
+    return;
+  }
+
+  const userContent = [
+    { type: "input_text", text: payload.message || "Analiza este espacio y propón muebles de melamina que quedarían bien." },
+    { type: "input_image", image_url: payload.imageData, detail: "high" }
+  ];
+
+  try {
+    const parsed = await callOpenAI(spacePrompt, userContent);
+    // Normalize: use first item for backward compat, keep items array for multi-furniture
+    const firstItem = Array.isArray(parsed?.items) ? parsed.items[0] : parsed?.item || null;
+    sendJson(res, 200, {
+      source: "openai",
+      assistantText: parsed?.assistantText || "Analicé el espacio.",
+      spaceType: parsed?.spaceType || "otro",
+      actions: ["fill_form", "add_to_quote"],
+      item: firstItem,
+      items: parsed?.items || (firstItem ? [firstItem] : [])
+    });
+  } catch (e) {
+    sendJson(res, 500, { error: e.message });
+  }
 }
 
 async function handleAuthAdmin(req, res) {
@@ -413,7 +523,8 @@ const server = http.createServer(async (req, res) => {
     }
 
     // AI
-    if (method === "POST" && p === "/api/ebanista-ai") { await handleAi(req, res); return; }
+    if (method === "POST" && p === "/api/ebanista-ai")     { await handleAi(req, res); return; }
+    if (method === "POST" && p === "/api/analyze-space")   { await handleSpaceAnalysis(req, res); return; }
 
     // Auth
     if (method === "POST" && p === "/api/auth/admin")  { await handleAuthAdmin(req, res); return; }
