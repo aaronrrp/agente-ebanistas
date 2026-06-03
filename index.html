@@ -93,44 +93,36 @@
           <article class="metric-card"><span>Cotizaciones</span><strong id="quoteCount">0</strong></article>
         </div>
 
-        <div class="content-grid admin-grid">
+        <div class="content-grid admin-grid-single">
           <section class="panel">
-            <h3>Ebanistas registrados</h3>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+              <h3 style="margin:0">Ebanistas registrados</h3>
+              <button class="secondary-btn" id="resetDemoBtn" type="button" style="font-size:.8rem">Restaurar demo</button>
+            </div>
             <div id="tenantList" class="tenant-list"></div>
           </section>
-
-          <section class="panel">
-            <h3>Configuración de empresa</h3>
-            <form id="tenantForm" class="form-grid">
-              <input type="hidden" id="tenantId">
-              <label>Empresa<input id="companyName" required></label>
-              <label>Contacto<input id="contactName" required></label>
-              <label>Teléfono<input id="phone" required></label>
-              <label>Correo<input id="email" type="email"></label>
-              <label>Plan<select id="plan"><option>Básico</option><option>Pro</option><option>Premium</option></select></label>
-              <label>Estado<select id="status"><option value="active">Activo</option><option value="past_due">Vencido</option><option value="suspended">Suspendido</option></select></label>
-              <label>Vence<input id="expiresAt" type="date" required></label>
-              <label>Margen %<input id="margin" type="number" min="0" max="200" step="1" required></label>
-              <label>Costo instalación base<input id="installBase" type="number" min="0" step="1" required></label>
-              <label>Transporte base<input id="transportBase" type="number" min="0" step="1" required></label>
-              <label class="span-2">Materiales que ofrece<textarea id="materials" rows="3"></textarea></label>
-              <label class="span-2">Condiciones comerciales<textarea id="terms" rows="4"></textarea></label>
-              <label class="span-2">Logo de empresa
-                <input type="file" id="tenantLogo" accept="image/png,image/jpeg" style="font-size:.85rem">
-                <span style="font-size:.75rem;color:#9CA3AF">PNG o JPG, máx. 200 KB. Se muestra en cotizaciones.</span>
-              </label>
-              <label class="span-2">Tipos de muebles disponibles<textarea id="catalogFurnitureTypes" rows="3" placeholder="Uno por línea"></textarea></label>
-              <label class="span-2">Opciones de canto<textarea id="catalogEdgeOptions" rows="3" placeholder="Uno por línea"></textarea></label>
-              <label class="span-2">Opciones de bisagras<textarea id="catalogHingeOptions" rows="3" placeholder="Uno por línea"></textarea></label>
-              <label class="span-2">Opciones de correderas<textarea id="catalogSlideOptions" rows="3" placeholder="Uno por línea"></textarea></label>
-              <label class="span-2">Opciones de jaladores<textarea id="catalogHandleOptions" rows="3" placeholder="Uno por línea"></textarea></label>
-              <div class="form-actions span-2">
-                <button class="secondary-btn" id="resetDemoBtn" type="button">Restaurar demo</button>
-                <button class="primary-btn" type="submit">Guardar configuración</button>
-              </div>
-            </form>
-          </section>
         </div>
+        <!-- Hidden form elements kept for compatibility with renderTenantForm -->
+        <form id="tenantForm" style="display:none">
+          <input type="hidden" id="tenantId">
+          <input type="hidden" id="companyName">
+          <input type="hidden" id="contactName">
+          <input type="hidden" id="phone">
+          <input type="hidden" id="email">
+          <select id="plan" style="display:none"><option>Básico</option><option>Pro</option><option>Premium</option></select>
+          <select id="status" style="display:none"><option value="active">Activo</option><option value="past_due">Vencido</option><option value="suspended">Suspendido</option></select>
+          <input type="hidden" id="expiresAt">
+          <input type="hidden" id="margin">
+          <input type="hidden" id="installBase">
+          <input type="hidden" id="transportBase">
+          <textarea id="materials" style="display:none"></textarea>
+          <textarea id="terms" style="display:none"></textarea>
+          <textarea id="catalogFurnitureTypes" style="display:none"></textarea>
+          <textarea id="catalogEdgeOptions" style="display:none"></textarea>
+          <textarea id="catalogHingeOptions" style="display:none"></textarea>
+          <textarea id="catalogSlideOptions" style="display:none"></textarea>
+          <textarea id="catalogHandleOptions" style="display:none"></textarea>
+        </form>
       </section>
 
       <section id="clientView" class="view">
@@ -451,6 +443,45 @@ Tapa superior, 120, 55, 1, 18 mm, sin canto"></textarea>
       </div>
       <p class="link-hint">Envía este link por WhatsApp o correo. El ebanista lo abre en su teléfono y ya entra directamente a su espacio.</p>
       <button id="regenerateCodeBtn" class="tiny-btn" type="button" style="margin-top:.5rem">🔄 Generar nuevo código</button>
+    </div>
+  </div>
+
+  <!-- ── MODAL: nuevo / editar ebanista ──────────────────────── -->
+  <div id="ebanistaModal" class="modal-overlay hidden" role="dialog">
+    <div class="modal-card" style="max-width:500px">
+      <button id="closeEbanistaModalBtn" class="modal-close" type="button">✕</button>
+      <h3 id="ebanistaModalTitle">Nuevo ebanista</h3>
+      <div class="form-grid">
+        <label class="span-2">Empresa <span style="color:#ef4444">*</span>
+          <input id="em_company" placeholder="Ej: Muebles Rivera" autocomplete="off">
+        </label>
+        <label>Contacto
+          <input id="em_contact" placeholder="Luis Rivera">
+        </label>
+        <label>Teléfono / WhatsApp
+          <input id="em_phone" placeholder="+507 6000-0000">
+        </label>
+        <label>Plan
+          <select id="em_plan">
+            <option>Básico</option><option>Pro</option><option>Premium</option>
+          </select>
+        </label>
+        <label>Acceso válido hasta
+          <input id="em_expires" type="date">
+        </label>
+      </div>
+      <div id="em_result" class="hidden" style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:1rem;margin-top:1rem">
+        <p style="font-weight:600;color:#166534;margin:0 0 .75rem">✅ Guardado. Comparte este link por WhatsApp:</p>
+        <div class="link-box">
+          <input id="em_link" class="link-input" type="text" readonly>
+          <button id="em_copyBtn" class="secondary-btn" type="button">Copiar</button>
+        </div>
+        <p class="link-hint">El ebanista abre el link y entra directo. No necesita contraseña.</p>
+      </div>
+      <div class="form-actions" id="em_actions">
+        <button id="cancelEbanistaModalBtn" class="secondary-btn" type="button">Cancelar</button>
+        <button id="saveEbanistaModalBtn" class="primary-btn" type="button">Guardar y ver link →</button>
+      </div>
     </div>
   </div>
 

@@ -345,38 +345,37 @@ function renderTenantSelect() {
 
 function renderAdmin() {
   const active = state.tenants.filter(isTenantActive).length;
-  const suspended = state.tenants.filter((tenant) => !isTenantActive(tenant)).length;
+  const suspended = state.tenants.filter(t => !isTenantActive(t)).length;
   els.activeCount.textContent = active;
   els.suspendedCount.textContent = suspended;
   els.quoteCount.textContent = state.quotes.length;
 
-  els.tenantList.innerHTML = state.tenants.map((tenant) => {
-    const statusClass = isTenantActive(tenant) ? "status-active" : `status-${tenant.status}`;
-    const accessText = isTenantActive(tenant) ? "Acceso permitido" : "Agente bloqueado";
-    const daysLeft = Math.ceil((new Date(tenant.expiresAt) - new Date()) / 86400000);
-    const badgeClass = daysLeft > 10 ? "ok" : daysLeft > 3 ? "warn" : "critical";
-    const badgeText = isTenantActive(tenant) ? `${daysLeft}d restantes` : "Vencida";
-    const suspendLabel = isTenantActive(tenant) ? "Suspender" : "Activar";
-    const suspendAttr  = isTenantActive(tenant) ? `data-suspend="${tenant.id}"` : `data-activate="${tenant.id}"`;
+  if (!state.tenants.length) {
+    els.tenantList.innerHTML = '<p class="muted" style="padding:1.5rem 0">No hay ebanistas. Haz clic en <strong>+ Nuevo ebanista</strong> para agregar el primero.</p>';
+    return;
+  }
+
+  els.tenantList.innerHTML = state.tenants.map(t => {
+    const act = isTenantActive(t);
+    const daysLeft = Math.ceil((new Date(t.expiresAt) - new Date()) / 86400000);
+    const badge = act
+      ? `<span class="days-badge ${daysLeft > 10 ? "ok" : daysLeft > 3 ? "warn" : "critical"}">${daysLeft}d</span>`
+      : `<span class="days-badge critical">Vencido</span>`;
     return `
       <article class="tenant-card">
         <header>
           <div>
-            <strong>${tenant.companyName}</strong>
-            <p>${tenant.plan} · vence ${tenant.expiresAt} <span class="days-badge ${badgeClass}">${badgeText}</span></p>
+            <strong>${t.companyName}</strong>
+            <p>${t.plan} · ${t.phone || "—"} · vence ${t.expiresAt} ${badge}</p>
           </div>
-          <span class="status-pill ${statusClass}">${statusLabel(tenant.status)}</span>
+          <span class="status-pill ${act ? "status-active" : "status-suspended"}">${act ? "Activo" : "Suspendido"}</span>
         </header>
-        <p>${accessText} · ${tenant.contactName} · ${tenant.phone}</p>
-        <p class="tenant-code-line">Código: <code>${tenant.accessCode || "—"}</code></p>
         <div class="card-actions">
-          <button class="tiny-btn" type="button" data-edit="${tenant.id}">✏️ Editar</button>
-          <button class="tiny-btn highlight-btn" type="button" data-link-tenant="${tenant.id}">🔗 Ver link</button>
-          <button class="tiny-btn" type="button" data-renew365="${tenant.id}">+1 año</button>
-          <button class="${isTenantActive(tenant) ? "danger-btn" : "tiny-btn"} tiny-btn" type="button" ${suspendAttr}>${suspendLabel}</button>
+          <button class="tiny-btn highlight-btn" type="button" data-link-tenant="${t.id}">🔗 Ver link</button>
+          <button class="tiny-btn" type="button" data-edit-tenant="${t.id}">✏️ Editar</button>
+          <button class="tiny-btn ${act ? "danger-btn" : ""}" type="button" data-toggle-tenant="${t.id}">${act ? "Suspender" : "Activar"}</button>
         </div>
-      </article>
-    `;
+      </article>`;
   }).join("");
 }
 
@@ -454,67 +453,97 @@ function renderAccess() {
   els.cutsWorkspace.classList.toggle("hidden", !active);
 }
 
-async function addTenant() {
-  // Try to create on server first (so it gets a proper accessCode)
-  if (window.location.protocol !== "file:" && AUTH.token) {
-    try {
-      const res = await fetch("/api/tenants", {
-        method: "POST",
-        headers: adminApiHeader(),
-        body: JSON.stringify({
-          companyName: "Nueva ebanistería",
-          contactName: "Contacto",
-          phone: "+507",
-          email: "",
-          plan: "Básico",
-          margin: 30,
-          installBase: 75,
-          transportBase: 30,
-          materials: "Melamina hidrófuga, canto PVC, herrajes estándar.",
-          terms: "60% para iniciar fabricación y 40% contra entrega.",
-          catalog: cloneCatalog()
-        })
-      });
-      if (res.ok) {
-        const serverTenant = await res.json();
-        // Merge catalog if missing
-        if (!serverTenant.catalog) serverTenant.catalog = cloneCatalog();
-        state.tenants.unshift(serverTenant);
-        state.selectedTenantId = serverTenant.id;
-        save(); render();
-        toast("Ebanista creado. Edita los datos y guarda. Luego usa 🔗 Ver link para enviarle su acceso.");
-        return;
-      }
-    } catch {}
-  }
-  // Fallback: local only
-  const newTenant = {
-    id: crypto.randomUUID(),
-    companyName: "Nueva ebanistería",
-    contactName: "Contacto",
-    phone: "+507",
-    email: "",
-    plan: "Básico",
-    status: "active",
-    expiresAt: addDays(30),
-    margin: 30,
-    installBase: 75,
-    transportBase: 30,
-    materials: "Melamina hidrófuga, canto PVC, herrajes estándar.",
-    terms: "60% para iniciar fabricación y 40% contra entrega o antes de instalación.",
-    accessCode: `ebanista-${Math.random().toString(36).slice(2, 8)}`,
-    catalog: cloneCatalog()
-  };
-  state.tenants.unshift(newTenant);
-  state.selectedTenantId = newTenant.id;
-  save(); render();
-  toast("Ebanista creado localmente. Edita los datos y guarda.");
-}
+function addTenant() { openEbanistaModal(null); }
 
 function addDays(days) {
   const date = new Date();
   date.setDate(date.getDate() + days);
   return date.toISOString().slice(0, 10);
+}
+
+function getTenantLink(tenant) {
+  const minimal = {
+    id: tenant.id, companyName: tenant.companyName, contactName: tenant.contactName || "",
+    phone: tenant.phone || "", email: tenant.email || "", plan: tenant.plan || "Básico",
+    status: tenant.status, expiresAt: tenant.expiresAt, margin: tenant.margin || 30,
+    installBase: tenant.installBase || 75, transportBase: tenant.transportBase || 30,
+    materials: tenant.materials || "", terms: tenant.terms || "", accessCode: tenant.accessCode
+  };
+  const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(minimal))));
+  return `${window.location.origin}/?code=${tenant.accessCode}&d=${encoded}`;
+}
+
+let _ebModalEditId = null;
+
+function openEbanistaModal(editId) {
+  _ebModalEditId = editId || null;
+  const t = editId ? state.tenants.find(t => t.id === editId) : null;
+  document.getElementById("ebanistaModalTitle").textContent = editId ? "Editar ebanista" : "Nuevo ebanista";
+  document.getElementById("em_company").value = t?.companyName || "";
+  document.getElementById("em_contact").value = t?.contactName || "";
+  document.getElementById("em_phone").value = t?.phone || "";
+  document.getElementById("em_plan").value = t?.plan || "Básico";
+  document.getElementById("em_expires").value = t?.expiresAt || addDays(30);
+  document.getElementById("em_result").classList.add("hidden");
+  document.getElementById("em_actions").style.display = "";
+  const btn = document.getElementById("saveEbanistaModalBtn");
+  if (btn) { btn.textContent = "Guardar y ver link →"; btn.disabled = false; }
+  document.getElementById("ebanistaModal").classList.remove("hidden");
+  setTimeout(() => document.getElementById("em_company").focus(), 80);
+}
+
+function closeEbanistaModal() {
+  document.getElementById("ebanistaModal").classList.add("hidden");
+  _ebModalEditId = null;
+}
+
+async function saveEbanistaFromModal() {
+  const company = document.getElementById("em_company").value.trim();
+  if (!company) {
+    document.getElementById("em_company").focus();
+    return;
+  }
+  const btn = document.getElementById("saveEbanistaModalBtn");
+  btn.textContent = "Guardando…"; btn.disabled = true;
+
+  const id = _ebModalEditId || crypto.randomUUID();
+  const existing = state.tenants.find(t => t.id === id);
+  const accessCode = existing?.accessCode ||
+    `${company.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]/g, "").slice(0, 8)}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const tenantData = {
+    ...(existing || {}), id,
+    companyName: company,
+    contactName: document.getElementById("em_contact").value.trim() || "Contacto",
+    phone: document.getElementById("em_phone").value.trim() || "+507",
+    email: existing?.email || "",
+    plan: document.getElementById("em_plan").value,
+    status: existing?.status || "active",
+    expiresAt: document.getElementById("em_expires").value || addDays(30),
+    margin: existing?.margin ?? 30,
+    installBase: existing?.installBase ?? 75,
+    transportBase: existing?.transportBase ?? 30,
+    materials: existing?.materials || "Melamina hidrófuga, canto PVC, herrajes estándar.",
+    terms: existing?.terms || "60% para iniciar fabricación y 40% contra entrega.",
+    accessCode,
+    catalog: existing?.catalog || cloneCatalog()
+  };
+
+  if (existing) { Object.assign(existing, tenantData); }
+  else { state.tenants.unshift(tenantData); state.selectedTenantId = id; }
+  save(); render();
+
+  // Background server sync (non-blocking)
+  if (window.location.protocol !== "file:" && AUTH.token) {
+    fetch(`/api/tenants/${id}`, { method: "PUT", headers: adminApiHeader(), body: JSON.stringify(tenantData) }).catch(() => {});
+  }
+
+  const link = getTenantLink(tenantData);
+  document.getElementById("em_link").value = link;
+  document.getElementById("em_result").classList.remove("hidden");
+  document.getElementById("em_actions").style.display = "none";
+  btn.textContent = "Guardado ✓";
+  toast(`${company} guardado ✓`);
 }
 
 function saveTenant(event) {
@@ -1118,25 +1147,82 @@ function appendChat(role, text) {
   return bubble;
 }
 
-async function handleChatMessage(message = els.chatInput.value.trim()) {
-  if (!message) return;
-  appendChat("user", message);
+async function sendToAI() {
+  const message = els.chatInput.value.trim();
+  const hasImage = Boolean(state.currentImageData);
+
+  if (!message && !hasImage) {
+    appendChat("assistant", "⚠️ Escribe un mensaje o sube una imagen primero.");
+    return;
+  }
+
+  if (message) appendChat("user", message);
+  if (hasImage && !message) appendChat("user", "📷 (imagen enviada)");
   els.chatInput.value = "";
 
-  const hasImage = Boolean(state.currentImageData);
-  const loadingText = hasImage
-    ? "🔍 Analizando imagen y procesando solicitud… (puede tardar 15–30 segundos)"
-    : "⚙️ Procesando diseño…";
-
-  const pending = appendChat("assistant", loadingText);
+  const pending = appendChat("assistant", hasImage
+    ? "🔍 Analizando imagen y espacio… esto tarda 15–30 segundos."
+    : "⚙️ Procesando solicitud…");
   els.sendChatBtn.disabled = true;
+  document.getElementById("analyzeSpaceBtn")?.setAttribute("disabled", "true");
 
-  const apiPlan = await askBackendAssistant(message);
-  const plan = apiPlan || buildLocalAssistantPlan(message);
-  executeAssistantPlan(plan, message);
-  pending.textContent = plan.assistantText;
-  els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
-  els.sendChatBtn.disabled = false;
+  try {
+    const endpoint = hasImage ? "/api/analyze-space" : "/api/ebanista-ai";
+    const body = hasImage
+      ? { message: message || "Analiza este espacio y propón muebles de melamina.", imageData: state.currentImageData }
+      : { message, tenant: currentTenant(), currentItem: state.lastDesignItems[0] || null };
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 55000);
+
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      if (res.status === 503) {
+        pending.textContent = "⚠️ Sin clave de OpenAI. El diseño IA requiere OPENAI_API_KEY configurada en Render.";
+      } else {
+        pending.textContent = `❌ Error ${res.status}: ${data.error || "Error desconocido"}`;
+      }
+      return;
+    }
+
+    pending.textContent = data.assistantText || "Respuesta recibida.";
+
+    const items = data.items?.length ? data.items : (data.item ? [data.item] : []);
+    if (items.length > 0) {
+      const normalized = items.map(it => normalizeAssistantItem(it, message));
+      state.lastDesignItems = normalized;
+      fillFormFromItem(normalized[0], message);
+      renderAssistantOutput(normalized[0], message, { source: "openai", actions: data.actions || ["fill_form"] });
+      if (normalized.length > 1) {
+        appendChat("assistant", `Propuse ${normalized.length} muebles. El primero está en el formulario.`);
+      }
+    }
+
+    if (data.designPrompt) {
+      generateConceptImage(data.designPrompt);
+    }
+
+  } catch (e) {
+    if (e.name === "AbortError") {
+      pending.textContent = "⏱ Tiempo agotado (55s). Intenta con imagen más pequeña o verifica OPENAI_API_KEY.";
+    } else if (e.message?.includes("fetch")) {
+      pending.textContent = "❌ No se pudo conectar. El servidor puede estar iniciando (espera 30s y reintenta).";
+    } else {
+      pending.textContent = `❌ Error: ${e.message}`;
+    }
+  } finally {
+    els.sendChatBtn.disabled = false;
+    document.getElementById("analyzeSpaceBtn")?.removeAttribute("disabled");
+  }
 }
 
 function normalizeText(value) {
@@ -1303,104 +1389,6 @@ function buildLocalAssistantPlan(message) {
   };
 }
 
-async function askBackendAssistant(message) {
-  if (window.location.protocol === "file:") return null;
-
-  try {
-    const controller = new AbortController();
-    // 35 seconds — enough for vision analysis of large images
-    const timeout = window.setTimeout(() => controller.abort(), 35000);
-    const response = await fetch("/api/ebanista-ai", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message,
-        imageData: state.currentImageData,
-        tenant: currentTenant(),
-        currentItem: state.lastDesignItems[0] || null
-      }),
-      signal: controller.signal
-    });
-    window.clearTimeout(timeout);
-
-    if (!response.ok) return null;
-    const data = await response.json();
-    if (!data?.item && !data?.assistantText) return null;
-    return normalizeBackendPlan(data, message);
-  } catch {
-    return null;
-  }
-}
-
-// ── Space analysis — sends photo to dedicated endpoint ──────────────────────
-async function analyzeSpace(message) {
-  if (!state.currentImageData) {
-    appendChat("assistant", "⚠️ Primero sube una foto del espacio para analizarlo.");
-    return;
-  }
-  if (window.location.protocol === "file:") {
-    appendChat("assistant", "El análisis de espacios requiere el servidor activo (no funciona en modo archivo local). Accede desde tu URL de Render.");
-    return;
-  }
-
-  const userMsg = message || "Analiza este espacio y recomiéndame muebles de melamina que quedarían bien.";
-  appendChat("user", userMsg);
-
-  const pending = appendChat("assistant", "🔍 Analizando el espacio… identificando dimensiones, estilo y oportunidades de diseño. Esto tarda 15–30 segundos.");
-  els.sendChatBtn.disabled = true;
-  document.getElementById("analyzeSpaceBtn")?.setAttribute("disabled", true);
-
-  try {
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 40000);
-    const res = await fetch("/api/analyze-space", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: userMsg, imageData: state.currentImageData }),
-      signal: controller.signal
-    });
-    window.clearTimeout(timeout);
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      pending.textContent = `❌ ${err.error || "No se pudo analizar el espacio."}`;
-      return;
-    }
-
-    const data = await res.json();
-    pending.textContent = data.assistantText || "Análisis completado.";
-
-    // Add all suggested items to the state and form
-    const itemsToAdd = data.items?.length ? data.items : (data.item ? [data.item] : []);
-    if (itemsToAdd.length) {
-      const normalized = itemsToAdd.map(it => normalizeAssistantItem(it, userMsg));
-      state.lastDesignItems = normalized;
-
-      // Show first item in form
-      fillFormFromItem(normalized[0], userMsg);
-      renderAssistantOutput(normalized[0], userMsg, { source: "openai", actions: data.actions || ["fill_form"] });
-
-      // If multiple items suggested, show summary
-      if (normalized.length > 1) {
-        const names = normalized.map((it, i) => `${i + 1}. ${it.name} (${it.width}×${it.height}×${it.depth} cm)`).join("\n");
-        appendChat("assistant", `Detecté ${normalized.length} muebles para este espacio:\n${names}\n\nEl formulario muestra el primero. Puedes agregar cada uno a la cotización.`);
-      }
-    }
-
-    // ── Generate visual concept image with DALL-E ───────────────────────
-    if (data.designPrompt) {
-      generateConceptImage(data.designPrompt);
-    }
-
-  } catch (e) {
-    pending.textContent = e.name === "AbortError"
-      ? "⏱ La IA tardó demasiado. Intenta con una imagen más pequeña o verifica tu clave de OpenAI en Render."
-      : `❌ Error: ${e.message}`;
-  } finally {
-    els.sendChatBtn.disabled = false;
-    document.getElementById("analyzeSpaceBtn")?.removeAttribute("disabled");
-  }
-}
 
 // ── Generate concept image with DALL-E 3 ────────────────────────────────────
 async function generateConceptImage(designPrompt) {
@@ -1665,86 +1653,66 @@ els.tenantSelect.addEventListener("change", (event) => {
 });
 
 els.tenantList.addEventListener("click", async (event) => {
-  const editId      = event.target.dataset.edit;
-  const activateId  = event.target.dataset.activate;
-  const suspendId   = event.target.dataset.suspend;
-  const renew365Id  = event.target.dataset.renew365;
-  const linkTenantId = event.target.dataset.linkTenant;
+  const btn = event.target.closest("button[data-link-tenant], button[data-edit-tenant], button[data-toggle-tenant]");
+  if (!btn) return;
 
-  if (linkTenantId) {
-    openLinkModal(linkTenantId);
-    return;
-  }
+  const linkId   = btn.dataset.linkTenant;
+  const editId   = btn.dataset.editTenant;
+  const toggleId = btn.dataset.toggleTenant;
 
-  if (editId) {
-    state.selectedTenantId = editId;
-    save(); render();
-    return;
-  }
-
-  if (activateId) {
-    const tenant = state.tenants.find(t => t.id === activateId);
-    if (!tenant) return;
-    // Optimistic local update
-    tenant.status = "active";
-    tenant.expiresAt = addDays(30);
-    state.selectedTenantId = activateId;
-    save(); render();
-    toast("Cuenta activada por 30 días ✓");
-    // Sync to server
-    if (window.location.protocol !== "file:" && AUTH.token) {
-      fetch(`/api/tenants/${activateId}/toggle`, { method: "POST", headers: adminApiHeader() })
-        .then(r => r.json()).then(updated => {
-          Object.assign(tenant, updated);
-          save(); render();
-        }).catch(() => {});
+  if (linkId) {
+    openEbanistaModal(linkId);
+    // After modal opens, also show the link immediately
+    const t = state.tenants.find(t => t.id === linkId);
+    if (t) {
+      const link = getTenantLink(t);
+      document.getElementById("em_link").value = link;
+      document.getElementById("em_result").classList.remove("hidden");
+      document.getElementById("em_actions").style.display = "none";
+      document.getElementById("saveEbanistaModalBtn").textContent = "Guardado ✓";
     }
     return;
   }
 
-  if (suspendId) {
-    const tenant = state.tenants.find(t => t.id === suspendId);
-    if (!tenant) return;
-    tenant.status = "suspended";
-    state.selectedTenantId = suspendId;
-    save(); render();
-    toast(`${tenant.companyName} suspendida — el link quedará bloqueado`, "error");
-    // Sync to server
-    if (window.location.protocol !== "file:" && AUTH.token) {
-      fetch(`/api/tenants/${suspendId}/toggle`, { method: "POST", headers: adminApiHeader() })
-        .then(r => r.json()).then(updated => {
-          Object.assign(tenant, updated);
-          save(); render();
-        }).catch(() => {});
-    }
-    return;
-  }
+  if (editId) { openEbanistaModal(editId); return; }
 
-  if (renew365Id) {
-    const tenant = state.tenants.find(t => t.id === renew365Id);
-    if (!tenant) return;
-    tenant.status = "active";
-    const d = new Date(); d.setFullYear(d.getFullYear() + 1);
-    tenant.expiresAt = d.toISOString().slice(0, 10);
+  if (toggleId) {
+    const t = state.tenants.find(t => t.id === toggleId);
+    if (!t) return;
+    const wasActive = isTenantActive(t);
+    t.status = wasActive ? "suspended" : "active";
+    if (!wasActive) t.expiresAt = addDays(30);
     save(); render();
-    toast(`${tenant.companyName} renovada por 1 año ✓`);
-    // Sync to server
+    toast(`${t.companyName} ${wasActive ? "suspendida" : "activada"} ✓`);
     if (window.location.protocol !== "file:" && AUTH.token) {
-      fetch(`/api/tenants/${renew365Id}/renew365`, { method: "POST", headers: adminApiHeader() })
-        .then(r => r.json()).then(updated => {
-          Object.assign(tenant, updated);
-          save(); render();
-        }).catch(() => {});
+      fetch(`/api/tenants/${toggleId}/toggle`, { method: "POST", headers: adminApiHeader() }).catch(() => {});
     }
-    return;
   }
-
-  save();
-  render();
 });
 
-els.addTenantBtn.addEventListener("click", addTenant);
-els.tenantForm.addEventListener("submit", saveTenant);
+els.addTenantBtn.addEventListener("click", () => openEbanistaModal(null));
+document.getElementById("closeEbanistaModalBtn")?.addEventListener("click", closeEbanistaModal);
+document.getElementById("cancelEbanistaModalBtn")?.addEventListener("click", closeEbanistaModal);
+document.getElementById("saveEbanistaModalBtn")?.addEventListener("click", saveEbanistaFromModal);
+document.getElementById("ebanistaModal")?.addEventListener("click", e => {
+  if (e.target.id === "ebanistaModal") closeEbanistaModal();
+});
+document.getElementById("em_copyBtn")?.addEventListener("click", () => {
+  const val = document.getElementById("em_link").value;
+  navigator.clipboard.writeText(val).then(() => {
+    toast("Link copiado ✓");
+    const btn = document.getElementById("em_copyBtn");
+    btn.textContent = "¡Copiado!";
+    setTimeout(() => { btn.textContent = "Copiar"; }, 2000);
+  }).catch(() => {
+    const inp = document.getElementById("em_link");
+    inp.select(); document.execCommand("copy");
+    toast("Link copiado ✓");
+  });
+});
+document.getElementById("em_company")?.addEventListener("keydown", e => {
+  if (e.key === "Enter") saveEbanistaFromModal();
+});
 
 els.resetDemoBtn.addEventListener("click", () => {
   localStorage.removeItem("tm_tenants");
@@ -1779,18 +1747,19 @@ els.designImage.addEventListener("change", (event) => {
   reader.readAsDataURL(file);
 });
 
-document.getElementById("analyzeSpaceBtn")?.addEventListener("click", () => {
-  analyzeSpace(els.chatInput.value.trim() || null);
-  els.chatInput.value = "";
-});
+document.getElementById("analyzeSpaceBtn")?.addEventListener("click", () => sendToAI());
 
-els.sendChatBtn.addEventListener("click", () => handleChatMessage());
-els.enhanceImageBtn.addEventListener("click", enhanceLoadedImage);
-els.mock3dBtn.addEventListener("click", () => handleChatMessage("Crea una propuesta 3D conceptual con el mueble de la imagen o referencia cargada."));
-els.chatInput.addEventListener("keydown", (event) => {
-  if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-    handleChatMessage();
-  }
+els.sendChatBtn.addEventListener("click", sendToAI);
+els.enhanceImageBtn.addEventListener("click", () => {
+  els.chatInput.value = "Mejora esta imagen del mueble y resalta los detalles del diseño";
+  sendToAI();
+});
+els.mock3dBtn.addEventListener("click", () => {
+  els.chatInput.value = "Crea una propuesta 3D conceptual del mueble de la imagen";
+  sendToAI();
+});
+els.chatInput.addEventListener("keydown", event => {
+  if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) sendToAI();
 });
 els.sendDesignToQuoteBtn.addEventListener("click", sendDesignToQuote);
 
@@ -2113,62 +2082,13 @@ function adminApiHeader() {
   return AUTH.token ? { Authorization: `Bearer ${AUTH.token}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
 }
 
-// Override saveTenant to also POST to server
-const _origSaveTenant = saveTenant;
-// Patch: after local save, also push to server
-function saveTenantWithSync(event) {
-  event.preventDefault();
-  const tenant = state.tenants.find(t => t.id === els.tenantId.value);
-  if (!tenant) return;
-  Object.assign(tenant, {
-    companyName: els.companyName.value.trim(),
-    contactName: els.contactName.value.trim(),
-    phone: els.phone.value.trim(),
-    email: els.email.value.trim(),
-    plan: els.plan.value,
-    status: els.status.value,
-    expiresAt: els.expiresAt.value,
-    margin: Number(els.margin.value),
-    installBase: Number(els.installBase.value),
-    transportBase: Number(els.transportBase.value),
-    materials: els.materials.value.trim(),
-    terms: els.terms.value.trim(),
-    catalog: {
-      furnitureTypes: linesToList(els.catalogFurnitureTypes.value, defaultCatalog.furnitureTypes),
-      edgeOptions:    linesToList(els.catalogEdgeOptions.value,    defaultCatalog.edgeOptions),
-      hingeOptions:   linesToList(els.catalogHingeOptions.value,   defaultCatalog.hingeOptions),
-      slideOptions:   linesToList(els.catalogSlideOptions.value,   defaultCatalog.slideOptions),
-      handleOptions:  linesToList(els.catalogHandleOptions.value,  defaultCatalog.handleOptions)
-    }
-  });
-  // Handle logo
-  const logoFile = document.getElementById("tenantLogo")?.files?.[0];
-  if (logoFile) {
-    const reader = new FileReader();
-    reader.onload = () => { tenant.logoBase64 = reader.result; save(); render(); };
-    reader.readAsDataURL(logoFile);
-  }
-  save();
-  toast("Configuración guardada ✓");
-  // Sync to server
-  if (window.location.protocol !== "file:" && AUTH.token) {
-    fetch(`/api/tenants/${tenant.id}`, {
-      method: "PUT", headers: adminApiHeader(), body: JSON.stringify(tenant)
-    }).catch(() => {});
-  }
-  render();
-}
-// Replace the form submit listener
-els.tenantForm.removeEventListener("submit", saveTenant);
-els.tenantForm.addEventListener("submit", saveTenantWithSync);
 
 // ── Link modal ─────────────────────────────────────────────────────────────
 function openLinkModal(tenantId) {
   const tenant = state.tenants.find(t => t.id === tenantId);
   if (!tenant) return;
   AUTH.linkModalTenantId = tenantId;
-  const baseUrl = window.location.origin;
-  const url = `${baseUrl}/?code=${tenant.accessCode}`;
+  const url = getTenantLink(tenant);
   document.getElementById("linkModalDesc").textContent = `Link de acceso para ${tenant.companyName}:`;
   document.getElementById("linkModalUrl").value = url;
   document.getElementById("linkModal").classList.remove("hidden");
@@ -2220,6 +2140,38 @@ async function tryAutoLogin() {
   const params = new URLSearchParams(window.location.search);
   const urlCode = params.get("code");
   if (urlCode) {
+    // Try URL-encoded tenant data first (works even when server is sleeping)
+    const urlData = params.get("d");
+    if (urlData) {
+      try {
+        const decoded = JSON.parse(decodeURIComponent(escape(atob(urlData))));
+        const today = new Date().toISOString().slice(0, 10);
+        if (decoded.accessCode === urlCode) {
+          if (decoded.status !== "active" || decoded.expiresAt < today) {
+            // Show login screen with error
+            showLogin();
+            document.getElementById("loginCodePanel")?.classList.remove("hidden");
+            setLoginError("Tu acceso está suspendido o venció. Contacta al administrador.");
+            return;
+          }
+          // Valid tenant from URL — log in without hitting server
+          const existing = state.tenants.find(t => t.id === decoded.id);
+          if (existing) { Object.assign(existing, decoded); }
+          else { decoded.catalog = decoded.catalog || cloneCatalog(); state.tenants.push(decoded); }
+          save();
+          AUTH.mode = "ebanista";
+          AUTH.tenantId = decoded.id;
+          state.selectedTenantId = decoded.id;
+          sessionStorage.setItem("ebAuthMode", "ebanista");
+          sessionStorage.setItem("ebTenantId", decoded.id);
+          document.querySelector('[data-view="adminView"]')?.classList.add("hidden");
+          showApp();
+          showView("clientView");
+          return;
+        }
+      } catch {}
+    }
+
     document.getElementById("loginCodeInput").value = urlCode;
     // Switch to ebanista tab
     document.querySelectorAll("[data-login-tab]").forEach(b => b.classList.remove("active"));
