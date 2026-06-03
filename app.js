@@ -356,6 +356,8 @@ function renderAdmin() {
     const daysLeft = Math.ceil((new Date(tenant.expiresAt) - new Date()) / 86400000);
     const badgeClass = daysLeft > 10 ? "ok" : daysLeft > 3 ? "warn" : "critical";
     const badgeText = isTenantActive(tenant) ? `${daysLeft}d restantes` : "Vencida";
+    const suspendLabel = isTenantActive(tenant) ? "Suspender" : "Activar";
+    const suspendAttr  = isTenantActive(tenant) ? `data-suspend="${tenant.id}"` : `data-activate="${tenant.id}"`;
     return `
       <article class="tenant-card">
         <header>
@@ -366,11 +368,12 @@ function renderAdmin() {
           <span class="status-pill ${statusClass}">${statusLabel(tenant.status)}</span>
         </header>
         <p>${accessText} · ${tenant.contactName} · ${tenant.phone}</p>
+        <p class="tenant-code-line">Código: <code>${tenant.accessCode || "—"}</code></p>
         <div class="card-actions">
-          <button class="tiny-btn" type="button" data-edit="${tenant.id}">Editar</button>
-          <button class="tiny-btn" type="button" data-activate="${tenant.id}">Activar 30 días</button>
+          <button class="tiny-btn" type="button" data-edit="${tenant.id}">✏️ Editar</button>
+          <button class="tiny-btn highlight-btn" type="button" data-link-tenant="${tenant.id}">🔗 Ver link</button>
           <button class="tiny-btn" type="button" data-renew365="${tenant.id}">+1 año</button>
-          <button class="danger-btn tiny-btn" type="button" data-suspend="${tenant.id}">Suspender</button>
+          <button class="${isTenantActive(tenant) ? "danger-btn" : "tiny-btn"} tiny-btn" type="button" ${suspendAttr}>${suspendLabel}</button>
         </div>
       </article>
     `;
@@ -451,7 +454,40 @@ function renderAccess() {
   els.cutsWorkspace.classList.toggle("hidden", !active);
 }
 
-function addTenant() {
+async function addTenant() {
+  // Try to create on server first (so it gets a proper accessCode)
+  if (window.location.protocol !== "file:" && AUTH.token) {
+    try {
+      const res = await fetch("/api/tenants", {
+        method: "POST",
+        headers: adminApiHeader(),
+        body: JSON.stringify({
+          companyName: "Nueva ebanistería",
+          contactName: "Contacto",
+          phone: "+507",
+          email: "",
+          plan: "Básico",
+          margin: 30,
+          installBase: 75,
+          transportBase: 30,
+          materials: "Melamina hidrófuga, canto PVC, herrajes estándar.",
+          terms: "60% para iniciar fabricación y 40% contra entrega.",
+          catalog: cloneCatalog()
+        })
+      });
+      if (res.ok) {
+        const serverTenant = await res.json();
+        // Merge catalog if missing
+        if (!serverTenant.catalog) serverTenant.catalog = cloneCatalog();
+        state.tenants.unshift(serverTenant);
+        state.selectedTenantId = serverTenant.id;
+        save(); render();
+        toast("Ebanista creado. Edita los datos y guarda. Luego usa 🔗 Ver link para enviarle su acceso.");
+        return;
+      }
+    } catch {}
+  }
+  // Fallback: local only
   const newTenant = {
     id: crypto.randomUUID(),
     companyName: "Nueva ebanistería",
@@ -466,12 +502,13 @@ function addTenant() {
     transportBase: 30,
     materials: "Melamina hidrófuga, canto PVC, herrajes estándar.",
     terms: "60% para iniciar fabricación y 40% contra entrega o antes de instalación.",
+    accessCode: `ebanista-${Math.random().toString(36).slice(2, 8)}`,
     catalog: cloneCatalog()
   };
   state.tenants.unshift(newTenant);
   state.selectedTenantId = newTenant.id;
-  save();
-  render();
+  save(); render();
+  toast("Ebanista creado localmente. Edita los datos y guarda.");
 }
 
 function addDays(days) {
@@ -1592,10 +1629,16 @@ els.tenantSelect.addEventListener("change", (event) => {
 });
 
 els.tenantList.addEventListener("click", async (event) => {
-  const editId     = event.target.dataset.edit;
-  const activateId = event.target.dataset.activate;
-  const suspendId  = event.target.dataset.suspend;
-  const renew365Id = event.target.dataset.renew365;
+  const editId      = event.target.dataset.edit;
+  const activateId  = event.target.dataset.activate;
+  const suspendId   = event.target.dataset.suspend;
+  const renew365Id  = event.target.dataset.renew365;
+  const linkTenantId = event.target.dataset.linkTenant;
+
+  if (linkTenantId) {
+    openLinkModal(linkTenantId);
+    return;
+  }
 
   if (editId) {
     state.selectedTenantId = editId;
@@ -2116,48 +2159,6 @@ document.getElementById("regenerateCodeBtn")?.addEventListener("click", async ()
   openLinkModal(id); // Refresh modal with new code
   toast("Código regenerado ✓");
 });
-
-// Extend renderAdmin to add "Ver link" button to each card
-const _origRenderAdmin = renderAdmin;
-function renderAdmin() {
-  _origRenderAdmin();
-  // Add "Ver link" button to each card if in admin mode
-  if (AUTH.mode !== "admin") return;
-  document.querySelectorAll("[data-link-tenant]").forEach(btn => {
-    btn.addEventListener("click", () => openLinkModal(btn.dataset.linkTenant));
-  });
-}
-
-// ── Patch renderAdmin to include data-link-tenant button ──────────────────
-// We need to redefine renderAdmin to inject the link button
-// This is done by patching after the DOM is built
-const _patchTenantList = () => {
-  if (AUTH.mode !== "admin") return;
-  const listEl = document.getElementById("tenantList");
-  if (!listEl) return;
-  listEl.querySelectorAll(".tenant-card").forEach((card, idx) => {
-    const tenant = state.tenants[idx];
-    if (!tenant) return;
-    const actionsDiv = card.querySelector(".card-actions");
-    if (!actionsDiv) return;
-    if (!actionsDiv.querySelector(`[data-link-tenant="${tenant.id}"]`)) {
-      const btn = document.createElement("button");
-      btn.className = "tiny-btn";
-      btn.type = "button";
-      btn.dataset.linkTenant = tenant.id;
-      btn.textContent = "🔗 Link acceso";
-      btn.addEventListener("click", () => openLinkModal(tenant.id));
-      actionsDiv.appendChild(btn);
-    }
-  });
-};
-
-// Patch render to inject link buttons after each renderAdmin call
-const _origRender = render;
-function render() {
-  _origRender();
-  setTimeout(_patchTenantList, 0);
-}
 
 // ── URL code auto-login ────────────────────────────────────────────────────
 async function tryAutoLogin() {
