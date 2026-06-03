@@ -6,7 +6,7 @@ const { readFile } = require("node:fs/promises");
 
 const rootDir = __dirname;
 const port = Number(process.env.PORT || 5174);
-const model = process.env.OPENAI_MODEL || "gpt-5.5";
+const model = process.env.OPENAI_MODEL || "gpt-4o";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin1234";
 const TENANTS_FILE = path.join(__dirname, "tenants.json");
 
@@ -261,6 +261,7 @@ Responde SOLO JSON válido:
 {
   "assistantText": "Descripción del espacio analizado y por qué propones cada mueble. Sé específico: menciona la pared disponible, el estilo, las dimensiones estimadas del espacio. 2-4 oraciones.",
   "spaceType": "cocina|dormitorio|sala|oficina|baño|lavandería|otro",
+  "designPrompt": "English DALL-E 3 prompt (under 900 chars) for a photorealistic interior design rendering showing the suggested furniture IN the space. Be specific: room type, furniture style, melamine color, dimensions, lighting. Example: 'Photorealistic interior design of a modern bedroom with a white melamine built-in closet 200cm tall x 150cm wide, soft close doors, minimalist style, warm lighting, high quality render'",
   "actions": ["fill_form", "add_to_quote"],
   "items": [
     {
@@ -353,15 +354,49 @@ async function handleSpaceAnalysis(req, res) {
 
   try {
     const parsed = await callOpenAI(spacePrompt, userContent);
-    // Normalize: use first item for backward compat, keep items array for multi-furniture
     const firstItem = Array.isArray(parsed?.items) ? parsed.items[0] : parsed?.item || null;
     sendJson(res, 200, {
       source: "openai",
       assistantText: parsed?.assistantText || "Analicé el espacio.",
       spaceType: parsed?.spaceType || "otro",
+      designPrompt: parsed?.designPrompt || null,
       actions: ["fill_form", "add_to_quote"],
       item: firstItem,
       items: parsed?.items || (firstItem ? [firstItem] : [])
+    });
+  } catch (e) {
+    sendJson(res, 500, { error: e.message });
+  }
+}
+
+// ── Image generation — DALL-E 3 ────────────────────────────────────────────
+async function handleGenerateImage(req, res) {
+  if (!process.env.OPENAI_API_KEY) {
+    sendJson(res, 503, { error: "OPENAI_API_KEY no configurada." });
+    return;
+  }
+  const body = await readBody(req);
+  const { prompt } = body ? JSON.parse(body) : {};
+  if (!prompt) { sendJson(res, 400, { error: "Se requiere prompt." }); return; }
+
+  try {
+    const apiRes = await fetch("https://api.openai.com/v1/images/generations", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "dall-e-3",
+        prompt: prompt.slice(0, 900),
+        n: 1,
+        size: "1024x1024",
+        quality: "standard",
+        response_format: "url"
+      })
+    });
+    const data = await apiRes.json();
+    if (!apiRes.ok) throw new Error(data.error?.message || `OpenAI ${apiRes.status}`);
+    sendJson(res, 200, {
+      imageUrl: data.data?.[0]?.url || null,
+      revisedPrompt: data.data?.[0]?.revised_prompt || null
     });
   } catch (e) {
     sendJson(res, 500, { error: e.message });
@@ -525,6 +560,7 @@ const server = http.createServer(async (req, res) => {
     // AI
     if (method === "POST" && p === "/api/ebanista-ai")     { await handleAi(req, res); return; }
     if (method === "POST" && p === "/api/analyze-space")   { await handleSpaceAnalysis(req, res); return; }
+    if (method === "POST" && p === "/api/generate-image")  { await handleGenerateImage(req, res); return; }
 
     // Auth
     if (method === "POST" && p === "/api/auth/admin")  { await handleAuthAdmin(req, res); return; }

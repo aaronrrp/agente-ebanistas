@@ -1182,6 +1182,15 @@ textarea {
 .logout-btn:hover { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
 .logout-btn.hidden { display: none; }
 
+/* ── Concept image (DALL-E render) ──────────────────────────────── */
+.concept-image-wrap { margin: 1rem 0; border-radius: 10px; overflow: hidden; border: 1px solid #e5e7eb; }
+.concept-img-loading { padding: 1.25rem; text-align: center; font-size: .9rem; color: #6b7280; background: #f9fafb; }
+.concept-img-label { font-size: .78rem; font-weight: 700; color: #7c3aed; text-align: center; margin: .5rem 0 .25rem; padding: 0 .75rem; }
+.concept-img { display: block; width: 100%; cursor: pointer; transition: opacity .2s; }
+.concept-img:hover { opacity: .9; }
+.concept-img-hint { font-size: .72rem; color: #9ca3af; text-align: center; padding: .25rem .75rem .6rem; margin: 0; }
+.small { font-size: .8rem; }
+
 /* ── Tenant card extras ───────────────────────────────────────── */
 .tenant-code-line { font-size: .78rem; color: #6b7280; margin: .25rem 0 0; }
 .tenant-code-line code { background: #f3f4f6; border-radius: 4px; padding: .1rem .35rem; font-size: .82rem; color: #374151; }

@@ -1386,6 +1386,12 @@ async function analyzeSpace(message) {
         appendChat("assistant", `Detecté ${normalized.length} muebles para este espacio:\n${names}\n\nEl formulario muestra el primero. Puedes agregar cada uno a la cotización.`);
       }
     }
+
+    // ── Generate visual concept image with DALL-E ───────────────────────
+    if (data.designPrompt) {
+      generateConceptImage(data.designPrompt);
+    }
+
   } catch (e) {
     pending.textContent = e.name === "AbortError"
       ? "⏱ La IA tardó demasiado. Intenta con una imagen más pequeña o verifica tu clave de OpenAI en Render."
@@ -1393,6 +1399,36 @@ async function analyzeSpace(message) {
   } finally {
     els.sendChatBtn.disabled = false;
     document.getElementById("analyzeSpaceBtn")?.removeAttribute("disabled");
+  }
+}
+
+// ── Generate concept image with DALL-E 3 ────────────────────────────────────
+async function generateConceptImage(designPrompt) {
+  const outputEl = document.getElementById("assistantOutput");
+  const imgWrap = document.createElement("div");
+  imgWrap.className = "concept-image-wrap";
+  imgWrap.innerHTML = `<div class="concept-img-loading">🎨 Generando render del diseño con DALL-E… (15–25 seg)</div>`;
+  if (outputEl) outputEl.prepend(imgWrap);
+
+  try {
+    const res = await fetch("/api/generate-image", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: designPrompt })
+    });
+    const data = await res.json();
+    if (data.imageUrl) {
+      imgWrap.innerHTML = `
+        <p class="concept-img-label">✨ Imagen conceptual generada por IA</p>
+        <img src="${data.imageUrl}" alt="Diseño conceptual" class="concept-img"
+             onclick="window.open(this.src,'_blank')" title="Clic para ampliar">
+        <p class="concept-img-hint">Clic en la imagen para verla completa · Esto es un render conceptual, no la foto real del espacio</p>
+      `;
+    } else {
+      imgWrap.innerHTML = `<p class="muted small">⚠ No se pudo generar imagen visual: ${data.error || "verifica tu OPENAI_API_KEY en Render"}</p>`;
+    }
+  } catch {
+    imgWrap.innerHTML = `<p class="muted small">⚠ No se pudo generar imagen conceptual.</p>`;
   }
 }
 
@@ -2036,21 +2072,33 @@ document.getElementById("logoutBtn")?.addEventListener("click", async () => {
   showLogin();
 });
 
-// ── Sync tenants from server (admin) ──────────────────────────────────────
+// ── Sync tenants — push local first (localStorage = source of truth) ─────────
 async function syncTenantsFromServer() {
   if (window.location.protocol === "file:" || !AUTH.token) return;
   try {
+    // 1. Push every local tenant to server so ebanistas can always access them
+    //    Use PUT if exists, POST if new (server handles upsert-like with PUT)
+    await Promise.all(state.tenants.map(t =>
+      fetch(`/api/tenants/${t.id}`, {
+        method: "PUT",
+        headers: adminApiHeader(),
+        body: JSON.stringify(t)
+      }).catch(() => {})
+    ));
+
+    // 2. Pull from server to add any tenants the server has that we don't
     const res = await fetch("/api/tenants", { headers: { Authorization: `Bearer ${AUTH.token}` } });
     if (!res.ok) return;
     const serverTenants = await res.json();
-    // Merge: for tenants that exist on both, update local with server data
+    let changed = false;
     serverTenants.forEach(st => {
       const local = state.tenants.find(t => t.id === st.id);
-      if (local) Object.assign(local, st);
-      else state.tenants.push({ ...st, catalog: st.catalog || cloneCatalog() });
+      if (!local) {
+        state.tenants.push({ ...st, catalog: st.catalog || cloneCatalog() });
+        changed = true;
+      }
     });
-    save();
-    render();
+    if (changed) { save(); render(); }
   } catch {}
 }
 
