@@ -579,7 +579,8 @@ const server = http.createServer(async (req, res) => {
         model,
         adminPasswordSet: ADMIN_PASSWORD !== "admin1234",
         tenantsCount: tenants.length,
-        apiEndpoint: "chat/completions"
+        apiEndpoint: "chat/completions",
+        build: "2026-06-03-v4"
       });
       return;
     }
