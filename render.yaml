@@ -3,12 +3,12 @@ services:
     name: agente-ebanistas
     runtime: node
     plan: free
-    buildCommand: echo "No build needed"
+    buildCommand: echo "listo"
     startCommand: node server.js
     envVars:
       - key: NODE_ENV
         value: production
       - key: ADMIN_PASSWORD
-        generateValue: true
+        sync: false
       - key: OPENAI_API_KEY
         sync: false
