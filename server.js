@@ -295,20 +295,31 @@ Responde SOLO JSON válido:
 // ── Route handlers ──────────────────────────────────────────────────────────
 
 async function callOpenAI(sysPrompt, userContent) {
-  const apiRes = await fetch("https://api.openai.com/v1/responses", {
+  // Convert from internal input_text/input_image format to Chat Completions format
+  const messages = [
+    { role: "system", content: sysPrompt },
+    { role: "user", content: userContent.map(c => {
+      if (c.type === "input_text") return { type: "text", text: c.text };
+      if (c.type === "input_image") return {
+        type: "image_url",
+        image_url: { url: c.image_url, detail: c.detail || "high" }
+      };
+      return c;
+    })}
+  ];
+
+  const apiRes = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model,
-      input: [
-        { role: "system", content: [{ type: "input_text", text: sysPrompt }] },
-        { role: "user",   content: userContent }
-      ]
-    })
+    body: JSON.stringify({ model, messages, max_tokens: 2000 })
   });
   const data = await apiRes.json();
-  if (!apiRes.ok) throw new Error(data.error?.message || `OpenAI ${apiRes.status}`);
-  return parseJson(getAiText(data)) || { assistantText: getAiText(data) };
+  if (!apiRes.ok) {
+    console.error("[callOpenAI] error response:", JSON.stringify(data));
+    throw new Error(data.error?.message || `OpenAI ${apiRes.status}`);
+  }
+  const text = data.choices?.[0]?.message?.content || "";
+  return parseJson(text) || { assistantText: text };
 }
 
 async function handleAi(req, res) {
@@ -462,10 +473,18 @@ async function handleCreateTenant(req, res) {
 
 async function handleUpdateTenant(req, res, id) {
   if (!requireAdmin(req, res)) return;
-  const idx = tenants.findIndex(t => t.id === id);
-  if (idx === -1) { sendJson(res, 404, { error: "No encontrado." }); return; }
   const body = await readBody(req);
   const data = body ? JSON.parse(body) : {};
+  const idx = tenants.findIndex(t => t.id === id);
+  if (idx === -1) {
+    // Upsert: tenant was cleared by redeploy, recreate it
+    const tenant = { ...data, id };
+    if (!tenant.accessCode) tenant.accessCode = makeCode(tenant.companyName || "ebanista");
+    tenants.push(tenant);
+    saveTenants(tenants);
+    sendJson(res, 200, tenant);
+    return;
+  }
   tenants[idx] = { ...tenants[idx], ...data, id };
   saveTenants(tenants);
   sendJson(res, 200, tenants[idx]);
@@ -553,7 +572,15 @@ const server = http.createServer(async (req, res) => {
 
     // Health
     if (method === "GET" && p === "/api/health") {
-      sendJson(res, 200, { openaiConfigured: Boolean(process.env.OPENAI_API_KEY), model, adminPasswordSet: ADMIN_PASSWORD !== "admin1234" });
+      const keySet = Boolean(process.env.OPENAI_API_KEY);
+      console.log(`[health] openaiConfigured=${keySet}, model=${model}, tenants=${tenants.length}`);
+      sendJson(res, 200, {
+        openaiConfigured: keySet,
+        model,
+        adminPasswordSet: ADMIN_PASSWORD !== "admin1234",
+        tenantsCount: tenants.length,
+        apiEndpoint: "chat/completions"
+      });
       return;
     }
 

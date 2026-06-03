@@ -2076,24 +2076,30 @@ document.getElementById("logoutBtn")?.addEventListener("click", async () => {
 async function syncTenantsFromServer() {
   if (window.location.protocol === "file:" || !AUTH.token) return;
   try {
-    // 1. Push every local tenant to server so ebanistas can always access them
-    //    Use PUT if exists, POST if new (server handles upsert-like with PUT)
-    await Promise.all(state.tenants.map(t =>
-      fetch(`/api/tenants/${t.id}`, {
+    // 1. Push every local tenant to server (local = source of truth)
+    await Promise.all(state.tenants.map(async t => {
+      const r = await fetch(`/api/tenants/${t.id}`, {
         method: "PUT",
         headers: adminApiHeader(),
         body: JSON.stringify(t)
-      }).catch(() => {})
-    ));
+      }).catch(() => ({ status: 500 }));
+      // If PUT returned 404 (shouldn't happen after upsert fix, but just in case), try POST
+      if (r.status === 404) {
+        await fetch("/api/tenants", {
+          method: "POST",
+          headers: adminApiHeader(),
+          body: JSON.stringify(t)
+        }).catch(() => {});
+      }
+    }));
 
-    // 2. Pull from server to add any tenants the server has that we don't
+    // 2. Pull server tenants to add any not in local
     const res = await fetch("/api/tenants", { headers: { Authorization: `Bearer ${AUTH.token}` } });
     if (!res.ok) return;
     const serverTenants = await res.json();
     let changed = false;
     serverTenants.forEach(st => {
-      const local = state.tenants.find(t => t.id === st.id);
-      if (!local) {
+      if (!state.tenants.find(t => t.id === st.id)) {
         state.tenants.push({ ...st, catalog: st.catalog || cloneCatalog() });
         changed = true;
       }
