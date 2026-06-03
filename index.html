@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TodomarketMR Agents</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- ── LOGIN SCREEN ─────────────────────────────────────────── -->
+  <div id="loginScreen" class="login-screen">
+    <div class="login-card">
+      <div class="login-logo">🪚</div>
+      <h1 class="login-title">Agente Ebanistas</h1>
+      <p class="login-subtitle">Plataforma SaaS para muebles a la medida</p>
+
+      <div class="login-tabs" role="tablist">
+        <button class="login-tab active" data-login-tab="code" type="button" role="tab">Soy ebanista</button>
+        <button class="login-tab" data-login-tab="admin" type="button" role="tab">Administrador</button>
+      </div>
+
+      <!-- Tab: ebanista por código -->
+      <div id="loginCodePanel" class="login-panel" role="tabpanel">
+        <p class="login-hint">Ingresa el código que te dio el administrador, o usa el enlace directo que te enviaron.</p>
+        <input id="loginCodeInput" class="login-input" type="text"
+               placeholder="Ejemplo: mueblrivera-4f8a2c"
+               autocomplete="off" autocapitalize="none" spellcheck="false">
+        <button id="loginCodeBtn" class="primary-btn login-btn" type="button">Ingresar →</button>
+      </div>
+
+      <!-- Tab: admin -->
+      <div id="loginAdminPanel" class="login-panel hidden" role="tabpanel">
+        <p class="login-hint">Acceso exclusivo para el administrador de la plataforma.</p>
+        <input id="loginPasswordInput" class="login-input" type="password"
+               placeholder="Contraseña de administrador">
+        <button id="loginAdminBtn" class="primary-btn login-btn" type="button">Entrar como admin →</button>
+      </div>
+
+      <p id="loginError" class="login-error hidden"></p>
+    </div>
+  </div>
+  <!-- ── END LOGIN ─────────────────────────────────────────────── -->
+
+  <div class="app-shell" id="appShell" style="display:none">
+    <aside class="sidebar">
+      <div class="brand-lockup">
+        <div class="brand-mark">TM</div>
+        <div>
+          <strong>TodomarketMR</strong>
+          <span>Agents</span>
+        </div>
+      </div>
+
+      <nav class="nav-stack" aria-label="Navegación principal">
+        <button class="nav-item active" data-view="adminView" type="button">🏢 Admin</button>
+        <button class="nav-item" data-view="clientView" type="button">👷 Ebanista</button>
+        <button class="nav-item" data-view="designerView" type="button">🤖 Diseñar IA</button>
+        <button class="nav-item" data-view="quoteView" type="button">📋 Cotizar</button>
+        <button class="nav-item" data-view="cutsView" type="button">✂️ Cortes</button>
+      </nav>
+
+      <div class="sidebar-note">
+        <strong>SaaS Ebanistas v2</strong>
+        <p>IA ebanista · cotizador · cortes · gestión de suscripciones.</p>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Plataforma SaaS</p>
+          <h1>Agente IA para ebanistas</h1>
+        </div>
+        <div class="tenant-switcher">
+          <label for="tenantSelect">Cuenta activa</label>
+          <select id="tenantSelect"></select>
+        </div>
+      </header>
+
+      <section id="adminView" class="view active">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Panel admin</p>
+            <h2>Controla clientes, planes y acceso</h2>
+          </div>
+          <button id="addTenantBtn" class="primary-btn" type="button">Nuevo ebanista</button>
+        </div>
+
+        <div class="metrics-grid">
+          <article class="metric-card"><span>Clientes activos</span><strong id="activeCount">0</strong></article>
+          <article class="metric-card"><span>Suspendidos</span><strong id="suspendedCount">0</strong></article>
+          <article class="metric-card"><span>Cotizaciones</span><strong id="quoteCount">0</strong></article>
+        </div>
+
+        <div class="content-grid admin-grid">
+          <section class="panel">
+            <h3>Ebanistas registrados</h3>
+            <div id="tenantList" class="tenant-list"></div>
+          </section>
+
+          <section class="panel">
+            <h3>Configuración de empresa</h3>
+            <form id="tenantForm" class="form-grid">
+              <input type="hidden" id="tenantId">
+              <label>Empresa<input id="companyName" required></label>
+              <label>Contacto<input id="contactName" required></label>
+              <label>Teléfono<input id="phone" required></label>
+              <label>Correo<input id="email" type="email"></label>
+              <label>Plan<select id="plan"><option>Básico</option><option>Pro</option><option>Premium</option></select></label>
+              <label>Estado<select id="status"><option value="active">Activo</option><option value="past_due">Vencido</option><option value="suspended">Suspendido</option></select></label>
+              <label>Vence<input id="expiresAt" type="date" required></label>
+              <label>Margen %<input id="margin" type="number" min="0" max="200" step="1" required></label>
+              <label>Costo instalación base<input id="installBase" type="number" min="0" step="1" required></label>
+              <label>Transporte base<input id="transportBase" type="number" min="0" step="1" required></label>
+              <label class="span-2">Materiales que ofrece<textarea id="materials" rows="3"></textarea></label>
+              <label class="span-2">Condiciones comerciales<textarea id="terms" rows="4"></textarea></label>
+              <label class="span-2">Logo de empresa
+                <input type="file" id="tenantLogo" accept="image/png,image/jpeg" style="font-size:.85rem">
+                <span style="font-size:.75rem;color:#9CA3AF">PNG o JPG, máx. 200 KB. Se muestra en cotizaciones.</span>
+              </label>
+              <label class="span-2">Tipos de muebles disponibles<textarea id="catalogFurnitureTypes" rows="3" placeholder="Uno por línea"></textarea></label>
+              <label class="span-2">Opciones de canto<textarea id="catalogEdgeOptions" rows="3" placeholder="Uno por línea"></textarea></label>
+              <label class="span-2">Opciones de bisagras<textarea id="catalogHingeOptions" rows="3" placeholder="Uno por línea"></textarea></label>
+              <label class="span-2">Opciones de correderas<textarea id="catalogSlideOptions" rows="3" placeholder="Uno por línea"></textarea></label>
+              <label class="span-2">Opciones de jaladores<textarea id="catalogHandleOptions" rows="3" placeholder="Uno por línea"></textarea></label>
+              <div class="form-actions span-2">
+                <button class="secondary-btn" id="resetDemoBtn" type="button">Restaurar demo</button>
+                <button class="primary-btn" type="submit">Guardar configuración</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      </section>
+
+      <section id="clientView" class="view">
+        <div id="subscriptionBanner" class="subscription-banner"></div>
+
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Panel ebanista</p>
+            <h2 id="clientTitle">Mi agente IA</h2>
+          </div>
+          <div class="button-row">
+            <button class="secondary-btn" data-view-jump="designerView" type="button">Diseñar con IA</button>
+            <button class="primary-btn" data-view-jump="quoteView" type="button">Nueva cotización</button>
+            <button class="secondary-btn" data-view-jump="cutsView" type="button">Ver cortes</button>
+          </div>
+        </div>
+
+        <div class="content-grid client-grid">
+          <section class="panel">
+            <h3>Resumen de cuenta</h3>
+            <dl id="clientSummary" class="summary-list"></dl>
+          </section>
+          <section class="panel">
+            <h3>Últimas cotizaciones</h3>
+            <div id="quoteHistory" class="quote-history"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="designerView" class="view">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">ChatGPT ebanista</p>
+            <h2>Mini chat para diseño, imagen, bocetos y propuesta técnica</h2>
+          </div>
+          <button id="sendDesignToQuoteBtn" class="secondary-btn" type="button">Enviar desglose a cotización</button>
+        </div>
+
+        <div id="designerLock" class="lock-panel hidden">
+          <h3>Agente desactivado</h3>
+          <p>La suscripción de esta empresa no está activa. Reactiva la cuenta para usar diseño IA.</p>
+        </div>
+
+        <div id="designerWorkspace" class="content-grid designer-grid">
+          <section class="panel">
+            <h3>Asistente ebanista</h3>
+            <div id="aiConnectionStatus" class="ai-status local">Modo local activo</div>
+            <label>Imagen de referencia
+              <input id="designImage" type="file" accept="image/*">
+            </label>
+            <div id="chatMessages" class="chat-messages">
+              <div class="chat-bubble assistant">
+                Dame una foto, boceto o medidas y preparo diseño técnico, cotización y cortes editables.
+              </div>
+            </div>
+            <label>Mensaje
+              <textarea id="chatInput" rows="5" placeholder="Ejemplo: crea un mueble de 30 ancho, 90 alto, 55 profundidad, 2 puertas externas, 1 repisa interna, fondo interno, sin jaladores, cotiza y calcula cortes."></textarea>
+            </label>
+            <div class="button-row">
+              <button id="sendChatBtn" class="primary-btn" type="button">Generar con IA</button>
+              <button id="enhanceImageBtn" class="secondary-btn" type="button">Mejorar imagen</button>
+              <button id="mock3dBtn" class="secondary-btn" type="button">Crear 3D conceptual</button>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h3>Imagen y propuesta</h3>
+            <div class="ai-stage">
+              <div id="imagePreview" class="image-preview">Sube una foto o boceto</div>
+              <div class="mock-3d" aria-label="Vista 3D demo">
+                <div class="cabinet-3d">
+                  <span class="door-a"></span>
+                  <span class="door-b"></span>
+                  <span class="drawer-a"></span>
+                  <span class="shelf-a"></span>
+                </div>
+              </div>
+            </div>
+            <div id="assistantOutput" class="design-output">
+              <p class="muted">Aquí aparecerán mejoras de imagen, propuestas técnicas y muebles listos para enviar a cotización.</p>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="quoteView" class="view">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Agente cotizador</p>
+            <h2>Cotización por muebles, especificaciones y precio editable</h2>
+          </div>
+          <button id="printQuoteBtn" class="secondary-btn" type="button">Imprimir / PDF</button>
+        </div>
+
+        <div id="quoteLock" class="lock-panel hidden">
+          <h3>Agente desactivado</h3>
+          <p>La suscripción de esta empresa no está activa. Reactiva la cuenta desde el panel admin para permitir nuevas cotizaciones.</p>
+        </div>
+
+        <div id="quoteWorkspace" class="content-grid quote-grid">
+          <section class="panel">
+            <h3>Datos generales</h3>
+            <form id="quoteForm" class="form-grid">
+              <label>Cliente final<input id="finalClient" required></label>
+              <label>Ubicación<input id="projectLocation" placeholder="Casa, local, zona o ciudad"></label>
+              <label>Validez de oferta días<input id="quoteValidity" type="number" min="1" value="15"></label>
+              <label>Precio final manual USD<input id="manualTotal" type="number" min="0" step="1" placeholder="Opcional"></label>
+              <label class="span-2">Notas generales<textarea id="clientNotes" rows="3" placeholder="Condiciones del espacio, color preferido, detalles del cliente o exclusiones."></textarea></label>
+              <div class="subsection span-2">
+                <h4>Asistente rápido del mueble</h4>
+                <p class="form-help">Escribe lo que pidió el cliente; la IA puede crear el mueble editable, agregarlo a la cotización y calcular cortes.</p>
+                <textarea id="furnitureBrief" rows="4" placeholder="Ejemplo: mueble de 30 cm de ancho, 90 alto y 55 fondo, 2 puertas externas, 1 repisa interna, fondo interno, sin jaladores."></textarea>
+                <div class="button-row">
+                  <button id="interpretFurnitureBtn" class="secondary-btn" type="button">Crear editable</button>
+                  <button id="aiAddFurnitureBtn" class="secondary-btn" type="button">Agregar a cotización</button>
+                  <button id="aiAddAndCutsBtn" class="primary-btn" type="button">Agregar y calcular cortes</button>
+                </div>
+              </div>
+
+              <div class="subsection span-2">
+                <h4>Agregar mueble</h4>
+                <div class="form-grid compact-grid">
+                  <label>Nombre del mueble<input id="itemName" placeholder="Ejemplo: Mueble inferior cocina"></label>
+                  <label>Tipo de mueble<select id="furnitureType"></select></label>
+                  <label>Medidas capturadas
+                    <select id="dimensionBasis">
+                      <option value="external" selected>Medidas exteriores del mueble</option>
+                      <option value="internal">Medidas internas del hueco</option>
+                    </select>
+                  </label>
+                  <label>Ancho cm<input id="widthCm" type="number" min="1" step="1" value="120"></label>
+                  <label>Alto cm<input id="heightCm" type="number" min="1" step="1" value="90"></label>
+                  <label>Profundidad cm<input id="depthCm" type="number" min="1" step="1" value="55"></label>
+                  <label>Complejidad
+                    <select id="complexity">
+                      <option value="low">Baja</option>
+                      <option value="medium">Media</option>
+                      <option value="high">Alta</option>
+                      <option value="premium">Premium / especial</option>
+                    </select>
+                  </label>
+                  <label>Puertas<input id="doors" type="number" min="0" step="1" value="2"></label>
+                  <label>Gavetas<input id="drawers" type="number" min="0" step="1" value="0"></label>
+                  <label>Repisas/divisiones<input id="shelves" type="number" min="0" step="1" value="2"></label>
+                  <label>Ubicación repisas
+                    <select id="shelfPlacement">
+                      <option value="internal" selected>Internas</option>
+                      <option value="external">Externas / vistas</option>
+                    </select>
+                  </label>
+                  <label>Tipo de puerta
+                    <select id="doorPlacement">
+                      <option value="overlay" selected>Sobrepuesta exterior</option>
+                      <option value="inset">Embutida / a ras</option>
+                      <option value="internal">Interna</option>
+                    </select>
+                  </label>
+                  <label>Tipo de gaveta
+                    <select id="drawerPlacement">
+                      <option value="external_front" selected>Frente exterior</option>
+                      <option value="inset_front">Frente embutido</option>
+                      <option value="internal_box">Caja interna solamente</option>
+                    </select>
+                  </label>
+                  <label>Tipo de fondo
+                    <select id="backPlacement">
+                      <option value="external" selected>Fondo exterior / sobrepuesto</option>
+                      <option value="internal">Fondo interno / embutido</option>
+                      <option value="none">Sin fondo</option>
+                    </select>
+                  </label>
+                  <label>Grosor melamina
+                    <select id="melamineThickness">
+                      <option>15 mm</option>
+                      <option selected>18 mm</option>
+                      <option>25 mm</option>
+                      <option>36 mm doble laminado</option>
+                    </select>
+                  </label>
+                  <label>Frentes con canto
+                    <select id="edgeBanding"></select>
+                  </label>
+                  <label>Tipo de bisagras
+                    <select id="hinges"></select>
+                    <span class="hw-info" aria-label="Información bisagras">ⓘ
+                      <span class="hw-tooltip">Blum/Häfele: copa 35mm estándar industria.<br>BLUMOTION = cierre suave integrado.<br>165° = apertura amplia para esquinas.</span>
+                    </span>
+                  </label>
+                  <label>Tipo de correderas
+                    <select id="drawerSlides"></select>
+                    <span class="hw-info" aria-label="Información correderas">ⓘ
+                      <span class="hw-tooltip">LEGRABOX: 70kg (premium).<br>MOVENTO: 40kg (undermount).<br>TANDEM: 30kg (lateral estándar).</span>
+                    </span>
+                  </label>
+                  <label>Tipo de jaladores
+                    <select id="handles"></select>
+                  </label>
+                  <div class="span-2">
+                    <label style="display:block;margin-bottom:.25rem;font-size:.875rem;font-weight:500">Color de melamina</label>
+                    <div id="colorPicker" class="color-picker-row"></div>
+                    <input type="hidden" id="selectedColor" value="RH01">
+                  </div>
+                  <label>Precio manual del mueble USD<input id="itemManualPrice" type="number" min="0" step="1" placeholder="Opcional"></label>
+                  <label class="span-2">Especificaciones del mueble<textarea id="itemNotes" rows="3" placeholder="Ejemplo: lleva espacio para fregador, puerta abatible izquierda, canto grueso en laterales visibles."></textarea></label>
+                  <button id="addQuoteItemBtn" class="secondary-btn span-2" type="button">Agregar mueble</button>
+                </div>
+              </div>
+
+              <div class="span-2">
+                <h4>Muebles agregados</h4>
+                <div id="quoteItemsList" class="quote-items-list"></div>
+              </div>
+
+              <div class="subsection span-2">
+                <h4>Piezas manuales para cortes</h4>
+                <p class="form-help">Formato sugerido por línea: nombre, ancho cm, alto cm, cantidad, grosor, canto.</p>
+                <textarea id="manualPiecesInput" rows="5" placeholder="Ejemplo:
+Lateral izquierdo, 55, 90, 1, 18 mm, canto frontal
+Lateral derecho, 55, 90, 1, 18 mm, canto frontal
+Tapa superior, 120, 55, 1, 18 mm, sin canto"></textarea>
+                <button id="addManualPiecesBtn" class="secondary-btn" type="button">Agregar piezas manuales a cortes</button>
+                <div id="manualPiecesList" class="quote-items-list"></div>
+              </div>
+
+              <label class="check-row">
+                <input id="includeInstall" type="checkbox" checked>
+                Incluir instalación
+              </label>
+              <label class="check-row">
+                <input id="includeTransport" type="checkbox" checked>
+                Incluir transporte
+              </label>
+              <button class="primary-btn span-2" type="submit">Generar cotización</button>
+              <button class="secondary-btn span-2" data-view-jump="cutsView" type="button">Ir a cortes</button>
+            </form>
+          </section>
+
+          <section class="quote-paper" id="quotePaper">
+            <div class="empty-state">
+              <h3>Vista previa</h3>
+              <p>Agrega uno o varios muebles y genera la cotización.</p>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="cutsView" class="view">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Cortes</p>
+            <h2>Despiece de muebles y cálculo de láminas</h2>
+          </div>
+          <div class="button-row">
+            <button id="generateCutsBtn" class="primary-btn" type="button">Calcular cortes</button>
+            <button id="exportCutsBtn" class="secondary-btn" type="button">⬇ Exportar CSV</button>
+          </div>
+        </div>
+
+        <div id="cutsLock" class="lock-panel hidden">
+          <h3>Agente desactivado</h3>
+          <p>La suscripción de esta empresa no está activa. Reactiva la cuenta para calcular cortes.</p>
+        </div>
+
+        <div id="cutsWorkspace" class="content-grid cuts-grid">
+          <section class="panel">
+            <h3>Tamaño de lámina</h3>
+            <div class="form-grid">
+              <label>Preset de lámina
+                <select id="sheetPreset">
+                  <option value="244,122">244 x 122 cm</option>
+                  <option value="275,183">275 x 183 cm</option>
+                  <option value="305,183">305 x 183 cm</option>
+                  <option value="custom">Personalizado</option>
+                </select>
+              </label>
+              <label>Desperdicio %
+                <input id="wastePercent" type="number" min="0" max="50" step="1" value="12">
+              </label>
+              <label>Ancho lámina cm
+                <input id="sheetWidth" type="number" min="1" step="1" value="244">
+              </label>
+              <label>Alto lámina cm
+                <input id="sheetHeight" type="number" min="1" step="1" value="122">
+              </label>
+              <button id="applySheetPresetBtn" class="secondary-btn span-2" type="button">Aplicar tamaño de lámina</button>
+            </div>
+
+            <div class="cut-note">
+              <strong>Cómo calcula esta demo</strong>
+              <p>Desglosa cada mueble en piezas rectangulares y estima láminas por área con desperdicio. Todavía no optimiza el acomodo real de corte ni veta; eso sería la siguiente mejora.</p>
+            </div>
+          </section>
+
+          <section class="panel cuts-output-panel">
+            <h3>Lista de cortes</h3>
+            <div id="cutsOutput" class="cuts-output">
+              <p class="muted">Agrega muebles en la sección Cotizar y luego presiona Calcular cortes.</p>
+            </div>
+            <div id="cutsVisual" class="cuts-visual"></div>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div><!-- end app-shell -->
+
+  <!-- ── MODAL: link de acceso del ebanista ─────────────────────── -->
+  <div id="linkModal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <button id="linkModalClose" class="modal-close" type="button" aria-label="Cerrar">✕</button>
+      <h3>Link de acceso del ebanista</h3>
+      <p id="linkModalDesc" class="link-modal-desc"></p>
+      <div class="link-box">
+        <input id="linkModalUrl" class="link-input" type="text" readonly>
+        <button id="copyLinkBtn" class="secondary-btn" type="button">Copiar</button>
+      </div>
+      <p class="link-hint">Envía este link por WhatsApp o correo. El ebanista lo abre en su teléfono y ya entra directamente a su espacio.</p>
+      <button id="regenerateCodeBtn" class="tiny-btn" type="button" style="margin-top:.5rem">🔄 Generar nuevo código</button>
+    </div>
+  </div>
+
+  <!-- ── Logout btn (admin only) ───────────────────────────────── -->
+  <button id="logoutBtn" class="logout-btn hidden" type="button" title="Cerrar sesión admin">Salir</button>
+
+  <script src="app.js"></script>
+</body>
+</html>

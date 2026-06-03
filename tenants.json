@@ -1,0 +1,48 @@
+[
+  {
+    "id": "a14de692-d672-4913-8a6a-fa4de9092bb5",
+    "companyName": "Muebles Rivera",
+    "contactName": "Luis Rivera",
+    "phone": "+507 6000-0001",
+    "email": "ventas@mueblesrivera.com",
+    "plan": "Pro",
+    "status": "active",
+    "expiresAt": "2026-07-03",
+    "margin": 35,
+    "installBase": 85,
+    "transportBase": 35,
+    "materials": "Melamina hidrófuga RH blanca, nogal y gris; canto PVC; bisagras cierre suave; correderas telescópicas.",
+    "terms": "60% para iniciar fabricación y 40% contra entrega. La cotización puede variar si cambian medidas o materiales.",
+    "accessCode": "mueblesr-f48393",
+    "catalog": {
+      "furnitureTypes": [],
+      "edgeOptions": [],
+      "hingeOptions": [],
+      "slideOptions": [],
+      "handleOptions": []
+    }
+  },
+  {
+    "id": "fb6ef948-8cba-4d90-8b95-941c4cd33e8a",
+    "companyName": "Ebanistería El Cedro",
+    "contactName": "María Santos",
+    "phone": "+507 6000-0002",
+    "email": "cotizaciones@elcedro.com",
+    "plan": "Básico",
+    "status": "suspended",
+    "expiresAt": "2025-12-31",
+    "margin": 28,
+    "installBase": 70,
+    "transportBase": 25,
+    "materials": "Melamina hidrófuga blanca, gris y madera clara. Herrajes estándar.",
+    "terms": "50% de abono inicial y 50% al finalizar.",
+    "accessCode": "elcedro-c8b5c4",
+    "catalog": {
+      "furnitureTypes": [],
+      "edgeOptions": [],
+      "hingeOptions": [],
+      "slideOptions": [],
+      "handleOptions": []
+    }
+  }
+]

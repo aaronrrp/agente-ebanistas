@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: agente-ebanistas
+    runtime: node
+    plan: free
+    buildCommand: echo "No build needed"
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ADMIN_PASSWORD
+        generateValue: true
+      - key: OPENAI_API_KEY
+        sync: false
