@@ -423,62 +423,60 @@ async function handleSpaceAnalysis(req, res) {
   }
 }
 
-// ── Image generation — DALL-E 3/2 con fallback a Pollinations.ai (gratis) ──
+// ── Image generation ────────────────────────────────────────────────────────
+// Orden: DALL-E (si está disponible) → Hugging Face (HF_TOKEN) → error
 async function handleGenerateImage(req, res) {
   const body = await readBody(req);
   const { prompt } = body ? JSON.parse(body) : {};
   if (!prompt) { sendJson(res, 400, { error: "Se requiere prompt." }); return; }
 
-  // 1. Intenta DALL-E si hay API key
+  // 1. DALL-E si hay clave OpenAI con acceso a imágenes
   if (process.env.OPENAI_API_KEY) {
-    const attempts = [
-      { model: "dall-e-3", size: "1024x1024", quality: "standard" },
-      { model: "dall-e-2", size: "512x512" }
-    ];
-    for (const cfg of attempts) {
+    for (const cfg of [{ model: "dall-e-3", size: "1024x1024" }, { model: "dall-e-2", size: "512x512" }]) {
       try {
-        const reqBody = { model: cfg.model, prompt: prompt.slice(0, 900), n: 1, size: cfg.size };
-        if (cfg.quality) reqBody.quality = cfg.quality;
         const apiRes = await fetch("https://api.openai.com/v1/images/generations", {
           method: "POST",
           headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-          body: JSON.stringify(reqBody)
+          body: JSON.stringify({ model: cfg.model, prompt: prompt.slice(0, 900), n: 1, size: cfg.size })
         });
         const data = await apiRes.json();
-        if (apiRes.ok) {
-          sendJson(res, 200, { imageUrl: data.data?.[0]?.url || null, source: cfg.model });
+        if (apiRes.ok && data.data?.[0]?.url) {
+          sendJson(res, 200, { imageUrl: data.data[0].url, source: cfg.model });
           return;
         }
-        const errMsg = data.error?.message || "";
-        if (errMsg.includes("does not exist") || errMsg.includes("model_not_found") ||
-            errMsg.includes("billing") || errMsg.includes("quota") || apiRes.status === 404) continue;
-        // Other error — skip to Pollinations
+        const err = data.error?.message || "";
+        if (err.includes("does not exist") || err.includes("billing") || err.includes("quota") || apiRes.status === 404) continue;
         break;
-      } catch { /* continue to Pollinations */ }
+      } catch { /* try next */ }
     }
   }
 
-  // 2. Fallback: Pollinations.ai — el servidor descarga la imagen y la retorna como base64
-  //    para evitar problemas de IP rate-limit en el browser
-  const encoded = encodeURIComponent(prompt.slice(0, 500));
-  const seed = Math.floor(Math.random() * 99999);
-  const polUrl = `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=1024&seed=${seed}&nologo=true&model=turbo`;
-
-  for (let attempt = 0; attempt < 3; attempt++) {
+  // 2. Hugging Face Inference API (gratis con HF_TOKEN)
+  if (process.env.HF_TOKEN) {
+    const hfPrompt = `${prompt.slice(0, 450)}, photorealistic interior design, high quality, 4k render`;
     try {
-      const imgRes = await fetch(polUrl, { signal: AbortSignal.timeout(40000) });
-      const ct = imgRes.headers.get("content-type") || "";
-      if (imgRes.ok && ct.startsWith("image/")) {
-        const buf = await imgRes.arrayBuffer();
-        const b64 = Buffer.from(buf).toString("base64");
-        sendJson(res, 200, { imageUrl: `data:${ct};base64,${b64}`, source: "pollinations" });
-        return;
+      const hfRes = await fetch(
+        "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0",
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${process.env.HF_TOKEN}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ inputs: hfPrompt, parameters: { num_inference_steps: 20, width: 1024, height: 1024 } }),
+          signal: AbortSignal.timeout(90000)
+        }
+      );
+      if (hfRes.ok) {
+        const ct = hfRes.headers.get("content-type") || "image/jpeg";
+        if (ct.startsWith("image/")) {
+          const buf = await hfRes.arrayBuffer();
+          const b64 = Buffer.from(buf).toString("base64");
+          sendJson(res, 200, { imageUrl: `data:${ct};base64,${b64}`, source: "huggingface" });
+          return;
+        }
       }
-      // Rate-limited or error — wait and retry
-      if (attempt < 2) await new Promise(r => setTimeout(r, 3000));
-    } catch { if (attempt < 2) await new Promise(r => setTimeout(r, 3000)); }
+    } catch { /* fall through */ }
   }
-  sendJson(res, 500, { error: "No se pudo generar imagen. Intenta de nuevo en unos segundos." });
+
+  sendJson(res, 503, { error: "Configura HF_TOKEN en Render para activar los renders (gratis en huggingface.co)." });
 }
 
 async function handleAuthAdmin(req, res) {
