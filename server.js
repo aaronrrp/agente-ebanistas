@@ -434,91 +434,57 @@ async function handleSpaceAnalysis(req, res) {
 }
 
 // ── Image generation ────────────────────────────────────────────────────────
-// Orden: DALL-E (si está disponible) → Hugging Face (HF_TOKEN) → error
+// Orden: Together.ai FLUX (rápido, gratis) → DALL-E → Pollinations (cliente)
 async function handleGenerateImage(req, res) {
   const body = await readBody(req);
   const { prompt } = body ? JSON.parse(body) : {};
   if (!prompt) { sendJson(res, 400, { error: "Se requiere prompt." }); return; }
 
-  // 1. DALL-E si hay clave OpenAI con acceso a imágenes
+  const imgPrompt = `${prompt.slice(0, 700)}, photorealistic interior design render, high quality, 4k, soft lighting`;
+
+  // 1. Together.ai — FLUX.1-schnell-Free (gratis, rápido, ~5-10 seg)
+  if (process.env.TOGETHER_API_KEY) {
+    try {
+      console.log("[Together] trying FLUX.1-schnell-Free...");
+      const tr = await fetch("https://api.together.xyz/v1/images/generations", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${process.env.TOGETHER_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "black-forest-labs/FLUX.1-schnell-Free", prompt: imgPrompt, width: 1024, height: 1024, steps: 4, n: 1 }),
+        signal: AbortSignal.timeout(60000)
+      });
+      const td = await tr.json();
+      console.log(`[Together] status=${tr.status} err="${td.error?.message || "ok"}"`);
+      if (tr.ok && td.data?.[0]?.url) {
+        console.log("[Together] success!");
+        sendJson(res, 200, { imageUrl: td.data[0].url, source: "together-flux" });
+        return;
+      }
+    } catch (e) { console.log(`[Together] exception: ${e.message}`); }
+  }
+
+  // 2. DALL-E (si la cuenta tiene acceso a imagen)
   if (process.env.OPENAI_API_KEY) {
     for (const cfg of [{ model: "dall-e-3", size: "1024x1024" }, { model: "dall-e-2", size: "512x512" }]) {
       try {
         console.log(`[DALLE] trying ${cfg.model}...`);
-        const apiRes = await fetch("https://api.openai.com/v1/images/generations", {
+        const ar = await fetch("https://api.openai.com/v1/images/generations", {
           method: "POST",
           headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: cfg.model, prompt: prompt.slice(0, 900), n: 1, size: cfg.size })
+          body: JSON.stringify({ model: cfg.model, prompt: prompt.slice(0, 900), n: 1, size: cfg.size }),
+          signal: AbortSignal.timeout(45000)
         });
-        const data = await apiRes.json();
-        console.log(`[DALLE] ${cfg.model} → status=${apiRes.status} err="${data.error?.message || "ok"}"`);
-        if (apiRes.ok && data.data?.[0]?.url) {
-          console.log(`[DALLE] success with ${cfg.model}`);
-          sendJson(res, 200, { imageUrl: data.data[0].url, source: cfg.model });
+        const ad = await ar.json();
+        console.log(`[DALLE] ${cfg.model} → status=${ar.status} err="${ad.error?.message || "ok"}"`);
+        if (ar.ok && ad.data?.[0]?.url) {
+          sendJson(res, 200, { imageUrl: ad.data[0].url, source: cfg.model });
           return;
         }
-        // Always try next model on any error
-      } catch (e) {
-        console.log(`[DALLE] exception: ${e.message}`);
-      }
+      } catch (e) { console.log(`[DALLE] exception: ${e.message}`); }
     }
   }
 
-  // 2. Hugging Face Inference API (gratis con HF_TOKEN)
-  if (process.env.HF_TOKEN) {
-    const hfPrompt = `${prompt.slice(0, 450)}, photorealistic interior design render, high quality, 4k`;
-    // Models ordered: fastest first. FLUX-schnell = 4 steps, very fast.
-    const hfModels = [
-      { url: "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell", w: 512, h: 512, steps: 4 },
-      { url: "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2-1", w: 768, h: 768, steps: 20 },
-    ];
-    for (const hfCfg of hfModels) {
-      for (let attempt = 0; attempt < 2; attempt++) {
-        try {
-          const modelName = hfCfg.url.split("/").slice(-1)[0];
-          console.log(`[HF] model=${modelName} attempt=${attempt+1}`);
-          const hfRes = await fetch(hfCfg.url, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${process.env.HF_TOKEN}`,
-              "Content-Type": "application/json",
-              "x-wait-for-model": "true"
-            },
-            body: JSON.stringify({ inputs: hfPrompt, parameters: { num_inference_steps: hfCfg.steps, width: hfCfg.w, height: hfCfg.h } }),
-            signal: AbortSignal.timeout(120000)
-          });
-          const ct = hfRes.headers.get("content-type") || "";
-          console.log(`[HF] status=${hfRes.status} ct=${ct}`);
-          if (hfRes.ok && ct.startsWith("image/")) {
-            const buf = await hfRes.arrayBuffer();
-            const b64 = Buffer.from(buf).toString("base64");
-            sendJson(res, 200, { imageUrl: `data:${ct};base64,${b64}`, source: "huggingface" });
-            return;
-          }
-          try {
-            const errText = await hfRes.text();
-            console.log(`[HF] error body: ${errText.slice(0, 300)}`);
-            const errData = JSON.parse(errText);
-            if (hfRes.status === 503 && errData.estimated_time) {
-              const wait = Math.min(Number(errData.estimated_time) * 1000, 20000);
-              console.log(`[HF] model loading, waiting ${wait}ms`);
-              await new Promise(r => setTimeout(r, wait));
-              continue;
-            }
-          } catch {}
-          break;
-        } catch (e) {
-          console.log(`[HF] exception: ${e.message}`);
-          break;
-        }
-      }
-    }
-    // HF failed — tell client to try Pollinations directly from their browser
-    sendJson(res, 503, { error: "Servidor de renders ocupado.", pollinations: true });
-    return;
-  }
-
-  sendJson(res, 503, { error: "Configura HF_TOKEN en Render para activar los renders (gratis en huggingface.co)." });
+  // 3. Fallback: Pollinations desde el navegador del cliente (diferente IP)
+  sendJson(res, 503, { error: "Servidor de renders ocupado.", pollinations: true });
 }
 
 async function handleAuthAdmin(req, res) {
@@ -688,7 +654,7 @@ const server = http.createServer(async (req, res) => {
         adminPasswordSet: ADMIN_PASSWORD !== "admin1234",
         tenantsCount: tenants.length,
         apiEndpoint: "chat/completions",
-        build: "2026-06-03-v11"
+        build: "2026-06-03-v12"
       });
       return;
     }
