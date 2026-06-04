@@ -359,17 +359,6 @@
                 <div id="quoteItemsList" class="quote-items-list"></div>
               </div>
 
-              <div class="subsection span-2">
-                <h4>Piezas manuales para cortes</h4>
-                <p class="form-help">Formato sugerido por línea: nombre, ancho cm, alto cm, cantidad, grosor, canto.</p>
-                <textarea id="manualPiecesInput" rows="5" placeholder="Ejemplo:
-Lateral izquierdo, 55, 90, 1, 18 mm, canto frontal
-Lateral derecho, 55, 90, 1, 18 mm, canto frontal
-Tapa superior, 120, 55, 1, 18 mm, sin canto"></textarea>
-                <button id="addManualPiecesBtn" class="secondary-btn" type="button">Agregar piezas manuales a cortes</button>
-                <div id="manualPiecesList" class="quote-items-list"></div>
-              </div>
-
               <label class="check-row">
                 <input id="includeInstall" type="checkbox" checked>
                 Incluir instalación
@@ -435,7 +424,17 @@ Tapa superior, 120, 55, 1, 18 mm, sin canto"></textarea>
 
             <div class="cut-note">
               <strong>Cómo calcula esta demo</strong>
-              <p>Desglosa cada mueble en piezas rectangulares y estima láminas por área con desperdicio. Todavía no optimiza el acomodo real de corte ni veta; eso sería la siguiente mejora.</p>
+              <p>Desglosa cada mueble en piezas rectangulares y estima láminas por área con desperdicio.</p>
+            </div>
+
+            <div class="subsection" style="margin-top:16px">
+              <h4>Piezas manuales</h4>
+              <p class="form-help">Una pieza por línea: nombre, ancho cm, alto cm, cantidad, grosor, canto.</p>
+              <textarea id="manualPiecesInput" rows="5" placeholder="Lateral izquierdo, 55, 90, 1, 18 mm, canto frontal
+Lateral derecho, 55, 90, 1, 18 mm, canto frontal
+Tapa superior, 120, 55, 1, 18 mm, sin canto"></textarea>
+              <button id="addManualPiecesBtn" class="secondary-btn" style="margin-top:8px;width:100%" type="button">Agregar piezas a cortes</button>
+              <div id="manualPiecesList" class="quote-items-list" style="margin-top:8px"></div>
             </div>
           </section>
 
