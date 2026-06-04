@@ -1492,23 +1492,49 @@ async function generateConceptImage(designPrompt, parentEl) {
     if (data.imageUrl) {
       showRenderImage(data.imageUrl);
     } else if (data.pollinations) {
-      // Server HF failed → try Pollinations directly from client browser (different IP)
-      wrap.innerHTML = `<div class="render-loading">🎨 Generando render… (puede tardar ~30 seg)</div>`;
-      try {
-        const seed = Math.floor(Math.random() * 999999);
-        const pText = (designPrompt.slice(0, 280) + ", photorealistic furniture render, interior design, 4k, soft lighting").replace(/\s+/g, " ");
-        const pUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(pText)}?width=512&height=512&nologo=true&seed=${seed}`;
-        await new Promise((resolve, reject) => {
-          const img = new Image();
-          img.onload = resolve;
-          img.onerror = reject;
-          img.src = pUrl;
-          setTimeout(reject, 90000); // 90s — Pollinations puede ser lento
-        });
-        showRenderImage(pUrl);
-      } catch {
-        wrap.innerHTML = `<p style="color:#991b1b;font-size:0.8rem">⚠ El servicio de renders está lento. Escribe "hazme el render" para intentar de nuevo.</p>`;
-      }
+      // Server HF failed → Pollinations direct from client browser (different IP, no blocking)
+      wrap.innerHTML = "";
+      const seed = Math.floor(Math.random() * 999999);
+      const pText = (designPrompt.slice(0, 250) + ", photorealistic furniture interior design 4k soft lighting").replace(/\s+/g, " ");
+      const pUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(pText)}?nologo=true&seed=${seed}&width=512&height=512`;
+
+      // Show loading text while image downloads in background
+      const loadTxt = document.createElement("div");
+      loadTxt.className = "render-loading";
+      loadTxt.textContent = "🎨 Generando render… puede tardar 1-2 min";
+      wrap.appendChild(loadTxt);
+
+      const img = document.createElement("img");
+      img.alt = "Render conceptual";
+      img.style.cssText = "width:100%;border-radius:8px;display:none;cursor:pointer";
+      img.title = "Clic para ampliar";
+      wrap.appendChild(img);
+
+      // 2-minute hard timeout
+      const pTimer = setTimeout(() => {
+        img.src = "";
+        wrap.innerHTML = `<p style="color:#991b1b;font-size:0.8rem">⚠ El render tardó demasiado. Escribe "hazme el render" para reintentar.</p>`;
+        if (els.chatMessages) els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+      }, 120000);
+
+      img.onerror = () => {
+        clearTimeout(pTimer);
+        wrap.innerHTML = `<p style="color:#991b1b;font-size:0.8rem">⚠ Error generando render. Escribe "hazme el render" para reintentar.</p>`;
+        if (els.chatMessages) els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+      };
+      img.onload = () => {
+        clearTimeout(pTimer);
+        loadTxt.remove();
+        img.style.display = "block";
+        img.addEventListener("click", () => window.open(pUrl, "_blank"));
+        const dlBtn = document.createElement("button");
+        dlBtn.style.cssText = "display:block;margin-top:6px;font-size:0.75rem;background:none;border:none;color:#059669;cursor:pointer;padding:0";
+        dlBtn.textContent = "⬇ Descargar";
+        dlBtn.addEventListener("click", () => downloadRender(pUrl));
+        wrap.appendChild(dlBtn);
+        if (els.chatMessages) els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+      };
+      img.src = pUrl; // starts downloading immediately, non-blocking
     } else {
       wrap.innerHTML = `<p style="color:#991b1b;font-size:0.8rem">⚠ ${data.error || "No se pudo generar render"}</p>`;
     }
