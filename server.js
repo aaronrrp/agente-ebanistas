@@ -417,46 +417,55 @@ async function handleSpaceAnalysis(req, res) {
   }
 }
 
-// ── Image generation — DALL-E 3 ────────────────────────────────────────────
+// ── Image generation — DALL-E 3/2 con fallback a Pollinations.ai (gratis) ──
 async function handleGenerateImage(req, res) {
-  if (!process.env.OPENAI_API_KEY) {
-    sendJson(res, 503, { error: "OPENAI_API_KEY no configurada." });
-    return;
-  }
   const body = await readBody(req);
   const { prompt } = body ? JSON.parse(body) : {};
   if (!prompt) { sendJson(res, 400, { error: "Se requiere prompt." }); return; }
 
-  const attempts = [
-    { model: "dall-e-3", size: "1024x1024", quality: "standard" },
-    { model: "dall-e-2", size: "512x512" }
-  ];
-  for (const cfg of attempts) {
-    try {
-      const body = { model: cfg.model, prompt: prompt.slice(0, cfg.model === "dall-e-2" ? 1000 : 900), n: 1, size: cfg.size };
-      if (cfg.quality) body.quality = cfg.quality;
-      const apiRes = await fetch("https://api.openai.com/v1/images/generations", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify(body)
-      });
-      const data = await apiRes.json();
-      if (apiRes.ok) {
-        sendJson(res, 200, { imageUrl: data.data?.[0]?.url || null, model: cfg.model });
-        return;
-      }
-      const errMsg = data.error?.message || "";
-      // If model not available, try next
-      if (errMsg.includes("does not exist") || errMsg.includes("model_not_found") || apiRes.status === 404) continue;
-      sendJson(res, 500, { error: errMsg || `OpenAI ${apiRes.status}` });
-      return;
-    } catch (e) {
-      if (attempts.indexOf(cfg) < attempts.length - 1) continue;
-      sendJson(res, 500, { error: e.message });
-      return;
+  // 1. Intenta DALL-E si hay API key
+  if (process.env.OPENAI_API_KEY) {
+    const attempts = [
+      { model: "dall-e-3", size: "1024x1024", quality: "standard" },
+      { model: "dall-e-2", size: "512x512" }
+    ];
+    for (const cfg of attempts) {
+      try {
+        const reqBody = { model: cfg.model, prompt: prompt.slice(0, 900), n: 1, size: cfg.size };
+        if (cfg.quality) reqBody.quality = cfg.quality;
+        const apiRes = await fetch("https://api.openai.com/v1/images/generations", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify(reqBody)
+        });
+        const data = await apiRes.json();
+        if (apiRes.ok) {
+          sendJson(res, 200, { imageUrl: data.data?.[0]?.url || null, source: cfg.model });
+          return;
+        }
+        const errMsg = data.error?.message || "";
+        if (errMsg.includes("does not exist") || errMsg.includes("model_not_found") ||
+            errMsg.includes("billing") || errMsg.includes("quota") || apiRes.status === 404) continue;
+        // Other error — skip to Pollinations
+        break;
+      } catch { /* continue to Pollinations */ }
     }
   }
-  sendJson(res, 500, { error: "Generación de imágenes no disponible en este plan de OpenAI." });
+
+  // 2. Fallback gratuito: Pollinations.ai (sin API key)
+  try {
+    const encoded = encodeURIComponent(prompt.slice(0, 500));
+    const seed = Math.floor(Math.random() * 9999);
+    const imageUrl = `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=1024&seed=${seed}&nologo=true&enhance=true`;
+    // Verify the URL resolves (HEAD request)
+    const check = await fetch(imageUrl, { method: "HEAD", signal: AbortSignal.timeout(5000) });
+    if (check.ok || check.status === 200) {
+      sendJson(res, 200, { imageUrl, source: "pollinations" });
+      return;
+    }
+  } catch { /* fall through */ }
+
+  sendJson(res, 500, { error: "No se pudo generar imagen. Intenta de nuevo." });
 }
 
 async function handleAuthAdmin(req, res) {
