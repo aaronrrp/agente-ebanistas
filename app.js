@@ -1455,23 +1455,25 @@ function buildLocalAssistantPlan(message) {
 async function generateConceptImage(designPrompt, parentEl) {
   const wrap = document.createElement("div");
   wrap.className = "chat-render";
-  wrap.innerHTML = `<div class="render-loading">🎨 Generando render visual… 15–25 seg</div>`;
+  wrap.innerHTML = `<div class="render-loading">🎨 Generando render visual… puede tardar hasta 45 seg</div>`;
   if (parentEl) { parentEl.appendChild(wrap); els.chatMessages.scrollTop = els.chatMessages.scrollHeight; }
 
   try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 130000);
     const res = await fetch("/api/generate-image", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: designPrompt })
+      body: JSON.stringify({ prompt: designPrompt }),
+      signal: ctrl.signal
     });
+    clearTimeout(t);
     const data = await res.json();
     if (data.imageUrl) {
       wrap.innerHTML = `
         <img src="${data.imageUrl}" alt="Render conceptual"
-             style="width:100%;border-radius:8px;cursor:zoom-in;display:block"
-             onclick="window.open(this.src,'_blank')" title="Clic para ampliar">
+             style="width:100%;border-radius:8px;display:block"
+             title="Clic para ampliar" onclick="window.open(this.src,'_blank')">
         <div style="display:flex;gap:8px;margin-top:6px">
-          <a href="${data.imageUrl}" target="_blank"
-             style="font-size:0.75rem;color:#7c3aed;text-decoration:none">🔍 Ver ampliada</a>
           <button onclick="downloadRender('${data.imageUrl}')"
              style="font-size:0.75rem;background:none;border:none;color:#059669;cursor:pointer;padding:0">⬇ Descargar</button>
         </div>`;

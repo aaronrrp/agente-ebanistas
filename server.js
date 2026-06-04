@@ -458,11 +458,27 @@ async function handleGenerateImage(req, res) {
     }
   }
 
-  // 2. Fallback gratuito: Pollinations.ai — URL directa, el navegador la carga
+  // 2. Fallback: Pollinations.ai — el servidor descarga la imagen y la retorna como base64
+  //    para evitar problemas de IP rate-limit en el browser
   const encoded = encodeURIComponent(prompt.slice(0, 500));
   const seed = Math.floor(Math.random() * 99999);
-  const imageUrl = `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=1024&seed=${seed}&nologo=true&model=flux`;
-  sendJson(res, 200, { imageUrl, source: "pollinations" });
+  const polUrl = `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=1024&seed=${seed}&nologo=true&model=turbo`;
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const imgRes = await fetch(polUrl, { signal: AbortSignal.timeout(40000) });
+      const ct = imgRes.headers.get("content-type") || "";
+      if (imgRes.ok && ct.startsWith("image/")) {
+        const buf = await imgRes.arrayBuffer();
+        const b64 = Buffer.from(buf).toString("base64");
+        sendJson(res, 200, { imageUrl: `data:${ct};base64,${b64}`, source: "pollinations" });
+        return;
+      }
+      // Rate-limited or error — wait and retry
+      if (attempt < 2) await new Promise(r => setTimeout(r, 3000));
+    } catch { if (attempt < 2) await new Promise(r => setTimeout(r, 3000)); }
+  }
+  sendJson(res, 500, { error: "No se pudo generar imagen. Intenta de nuevo en unos segundos." });
 }
 
 async function handleAuthAdmin(req, res) {
