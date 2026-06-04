@@ -90,7 +90,7 @@
         <div class="section-heading">
           <div>
             <p class="eyebrow">Panel admin</p>
-            <h2>Controla clientes, planes y acceso</h2>
+            <h2>Controla acceso y suscripciones</h2>
           </div>
           <button id="addTenantBtn" class="primary-btn" type="button">Nuevo ebanista</button>
         </div>
@@ -162,7 +162,6 @@
           <input type="hidden" id="contactName">
           <input type="hidden" id="phone">
           <input type="hidden" id="email">
-          <select id="plan" style="display:none"><option>Básico</option><option>Pro</option><option>Premium</option></select>
           <select id="status" style="display:none"><option value="active">Activo</option><option value="past_due">Vencido</option><option value="suspended">Suspendido</option></select>
           <input type="hidden" id="expiresAt">
           <input type="hidden" id="margin">
@@ -495,10 +494,8 @@ Tapa superior, 120, 55, 1, 18 mm, sin canto"></textarea>
         <label>Teléfono / WhatsApp
           <input id="em_phone" placeholder="+507 6000-0000">
         </label>
-        <label>Plan
-          <select id="em_plan">
-            <option>Básico</option><option>Pro</option><option>Premium</option>
-          </select>
+        <label>Tarifa mensual USD
+          <input id="em_fee" type="number" min="0" step="1" placeholder="Ej: 30">
         </label>
         <label>Acceso válido hasta
           <input id="em_expires" type="date">

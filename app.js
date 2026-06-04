@@ -65,7 +65,7 @@ const defaultTenants = [
     contactName: "Luis Rivera",
     phone: "+507 6000-0001",
     email: "ventas@mueblesrivera.com",
-    plan: "Pro",
+    monthlyFee: 35,
     status: "active",
     expiresAt: "2026-07-03",
     margin: 35,
@@ -81,7 +81,7 @@ const defaultTenants = [
     contactName: "María Santos",
     phone: "+507 6000-0002",
     email: "cotizaciones@elcedro.com",
-    plan: "Básico",
+    monthlyFee: 25,
     status: "suspended",
     expiresAt: "2026-05-28",
     margin: 28,
@@ -164,7 +164,6 @@ const els = {
   contactName: document.getElementById("contactName"),
   phone: document.getElementById("phone"),
   email: document.getElementById("email"),
-  plan: document.getElementById("plan"),
   status: document.getElementById("status"),
   expiresAt: document.getElementById("expiresAt"),
   margin: document.getElementById("margin"),
@@ -420,18 +419,20 @@ function renderAdmin() {
     const badge = act
       ? `<span class="days-badge ${daysLeft > 10 ? "ok" : daysLeft > 3 ? "warn" : "critical"}">${daysLeft}d</span>`
       : `<span class="days-badge critical">Vencido</span>`;
+    const feeLabel = t.monthlyFee ? `$${t.monthlyFee}/mes` : "Sin tarifa";
     return `
       <article class="tenant-card">
         <header>
           <div>
-            <strong>${t.companyName}</strong>
-            <p>${t.plan} · ${t.phone || "—"} · vence ${t.expiresAt} ${badge}</p>
+            <strong>${escapeHtml(t.companyName)}</strong>
+            <p>${feeLabel} · ${t.phone || "—"} · acceso hasta ${t.expiresAt} ${badge}</p>
           </div>
-          <span class="status-pill ${act ? "status-active" : "status-suspended"}">${act ? "Activo" : "Suspendido"}</span>
+          <span class="status-pill ${act ? "status-active" : "status-suspended"}">${act ? "Activo" : "Vencido"}</span>
         </header>
         <div class="card-actions">
           <button class="tiny-btn highlight-btn" type="button" data-link-tenant="${t.id}">🔗 Ver link</button>
-          <button class="tiny-btn" type="button" data-edit-tenant="${t.id}">✏️ Editar</button>
+          <button class="tiny-btn" type="button" data-renew-tenant="${t.id}">+30 días</button>
+          <button class="tiny-btn" type="button" data-edit-tenant="${t.id}">✏ Editar</button>
           <button class="tiny-btn ${act ? "danger-btn" : ""}" type="button" data-toggle-tenant="${t.id}">${act ? "Suspender" : "Activar"}</button>
         </div>
       </article>`;
@@ -446,7 +447,6 @@ function renderTenantForm(tenant) {
   els.contactName.value = tenant.contactName;
   els.phone.value = tenant.phone;
   els.email.value = tenant.email;
-  els.plan.value = tenant.plan;
   els.status.value = tenant.status;
   els.expiresAt.value = tenant.expiresAt;
   els.margin.value = tenant.margin;
@@ -475,15 +475,14 @@ function renderClient() {
 
   els.subscriptionBanner.className = `subscription-banner active ${active ? "ok" : "danger"}`;
   els.subscriptionBanner.textContent = active
-    ? `Suscripción activa hasta ${tenant.expiresAt}. Puede usar diseño IA y cotizaciones.`
-    : "Suscripción inactiva o vencida. Diseño IA y cotizaciones quedan bloqueados.";
+    ? `Acceso activo hasta ${tenant.expiresAt}.`
+    : "Acceso vencido. Contacta al administrador para renovar.";
 
-  els.clientSummary.innerHTML = summaryItem("Empresa", tenant.companyName)
-    + summaryItem("Plan", tenant.plan)
-    + summaryItem("Estado", active ? "Activo" : statusLabel(tenant.status))
-    + summaryItem("Vence", tenant.expiresAt)
+  els.clientSummary.innerHTML = summaryItem("Empresa", escapeHtml(tenant.companyName))
+    + summaryItem("Estado", active ? "✅ Activo" : "⛔ Vencido")
+    + summaryItem("Acceso hasta", tenant.expiresAt)
     + summaryItem("Margen", `${tenant.margin}%`)
-    + summaryItem("Contacto", tenant.phone);
+    + summaryItem("Contacto", tenant.phone || "—");
 
   const tenantQuotes = state.quotes.filter((quote) => quote.tenantId === tenant.id).slice(0, 6);
   els.quoteHistory.innerHTML = tenantQuotes.length ? tenantQuotes.map((quote) => `
@@ -523,7 +522,7 @@ function addDays(days) {
 function getTenantLink(tenant) {
   const minimal = {
     id: tenant.id, companyName: tenant.companyName, contactName: tenant.contactName || "",
-    phone: tenant.phone || "", email: tenant.email || "", plan: tenant.plan || "Básico",
+    phone: tenant.phone || "", email: tenant.email || "",
     status: tenant.status, expiresAt: tenant.expiresAt, margin: tenant.margin || 30,
     installBase: tenant.installBase || 75, transportBase: tenant.transportBase || 30,
     materials: tenant.materials || "", terms: tenant.terms || "", accessCode: tenant.accessCode
@@ -542,7 +541,7 @@ function openEbanistaModal(editId) {
   document.getElementById("em_company").value = t?.companyName || "";
   document.getElementById("em_contact").value = t?.contactName || "";
   document.getElementById("em_phone").value = t?.phone || "";
-  document.getElementById("em_plan").value = t?.plan || "Básico";
+  document.getElementById("em_fee").value = t?.monthlyFee || "";
   document.getElementById("em_expires").value = t?.expiresAt || addDays(30);
   document.getElementById("em_result").classList.add("hidden");
   document.getElementById("em_actions").style.display = "";
@@ -577,7 +576,7 @@ async function saveEbanistaFromModal() {
     contactName: document.getElementById("em_contact").value.trim() || "Contacto",
     phone: document.getElementById("em_phone").value.trim() || "+507",
     email: existing?.email || "",
-    plan: document.getElementById("em_plan").value,
+    monthlyFee: Number(document.getElementById("em_fee").value || 0),
     status: existing?.status || "active",
     expiresAt: document.getElementById("em_expires").value || addDays(30),
     margin: existing?.margin ?? 30,
@@ -616,7 +615,6 @@ function saveTenant(event) {
     contactName: els.contactName.value.trim(),
     phone: els.phone.value.trim(),
     email: els.email.value.trim(),
-    plan: els.plan.value,
     status: els.status.value,
     expiresAt: els.expiresAt.value,
     margin: Number(els.margin.value),
@@ -1874,12 +1872,25 @@ els.tenantSelect.addEventListener("change", (event) => {
 });
 
 els.tenantList.addEventListener("click", async (event) => {
-  const btn = event.target.closest("button[data-link-tenant], button[data-edit-tenant], button[data-toggle-tenant]");
+  const btn = event.target.closest("button[data-link-tenant], button[data-edit-tenant], button[data-toggle-tenant], button[data-renew-tenant]");
   if (!btn) return;
 
   const linkId   = btn.dataset.linkTenant;
   const editId   = btn.dataset.editTenant;
   const toggleId = btn.dataset.toggleTenant;
+  const renewId  = btn.dataset.renewTenant;
+
+  if (renewId) {
+    const t = state.tenants.find(t => t.id === renewId);
+    if (!t) return;
+    const base = t.expiresAt >= todayIso ? t.expiresAt : todayIso;
+    const d = new Date(base); d.setDate(d.getDate() + 30);
+    t.expiresAt = d.toISOString().slice(0, 10);
+    t.status = "active";
+    save(); render();
+    toast(`${escapeHtml(t.companyName)} renovado hasta ${t.expiresAt} ✓`);
+    return;
+  }
 
   if (linkId) {
     openEbanistaModal(linkId);

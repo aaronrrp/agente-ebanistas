@@ -51,7 +51,7 @@ function defaultTenants() {
       contactName: "Luis Rivera",
       phone: "+507 6000-0001",
       email: "ventas@mueblesrivera.com",
-      plan: "Pro",
+      monthlyFee: 35,
       status: "active",
       expiresAt: "2027-01-01",
       margin: 35,
@@ -68,7 +68,7 @@ function defaultTenants() {
       contactName: "María Santos",
       phone: "+507 6000-0002",
       email: "cotizaciones@elcedro.com",
-      plan: "Básico",
+      monthlyFee: 25,
       status: "active",
       expiresAt: "2027-01-01",
       margin: 28,
@@ -684,7 +684,7 @@ const server = http.createServer(async (req, res) => {
         adminPasswordSet: ADMIN_PASSWORD !== "admin1234",
         tenantsCount: tenants.length,
         apiEndpoint: "chat/completions",
-        build: "2026-06-04-v16"
+        build: "2026-06-04-v17"
       });
       return;
     }
