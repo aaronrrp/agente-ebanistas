@@ -521,12 +521,21 @@ function addDays(days) {
 }
 
 function getTenantLink(tenant) {
+  // Ensure accessCode is always set before generating the link
+  if (!tenant.accessCode) {
+    const prefix = (tenant.companyName || "ebanista")
+      .toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z0-9]/g, "").slice(0, 8) || "ebanista";
+    tenant.accessCode = `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
+    save(); // persist to localStorage
+  }
   const minimal = {
     id: tenant.id, companyName: tenant.companyName, contactName: tenant.contactName || "",
     phone: tenant.phone || "", email: tenant.email || "",
     status: tenant.status, expiresAt: tenant.expiresAt, margin: tenant.margin || 30,
     installBase: tenant.installBase || 75, transportBase: tenant.transportBase || 30,
-    materials: tenant.materials || "", terms: tenant.terms || "", accessCode: tenant.accessCode
+    materials: tenant.materials || "", terms: tenant.terms || "",
+    accessCode: tenant.accessCode
   };
   // URL-encode the JSON directly — no base64, no + / = corruption
   const encoded = encodeURIComponent(JSON.stringify(minimal));
@@ -2573,10 +2582,12 @@ function _loginAsEbanista(tenant) {
 
 async function tryAutoLogin() {
   const params = new URLSearchParams(window.location.search);
-  const urlCode = params.get("code");
+  // Treat the literal string "undefined" as absent (avoids ?code=undefined bug)
+  const rawCode = params.get("code");
+  const urlCode = (rawCode && rawCode !== "undefined") ? rawCode : null;
 
-  // ── 1. URL has ?code= (ebanista link) ─────────────────────────────────────
-  if (urlCode) {
+  // ── 1. URL has ?code= or ?d= (ebanista link) ──────────────────────────────
+  if (urlCode || params.get("d")) {
     // Path A: ?d= parameter — instant login, no server needed
     const urlData = params.get("d");
     if (urlData) {
@@ -2590,7 +2601,9 @@ async function tryAutoLogin() {
           const padded = mod4 ? b64 + "=".repeat(4 - mod4) : b64;
           decoded = JSON.parse(decodeURIComponent(escape(atob(padded))));
         }
-        if (decoded?.accessCode === urlCode) {
+        // Accept if: code matches, OR code is absent, OR decoded has no accessCode (legacy URL)
+        const codeOk = !urlCode || !decoded?.accessCode || decoded.accessCode === urlCode;
+        if (decoded?.id && codeOk) {
           const today = new Date().toISOString().slice(0, 10);
           if (decoded.status !== "active" || decoded.expiresAt < today) {
             showLogin();
@@ -2602,6 +2615,8 @@ async function tryAutoLogin() {
         }
       } catch {}
     }
+
+    if (!urlCode) { showLogin(); return; } // ?d= was present but invalid, no code either
 
     // Path B: no ?d= or parse failed → ask server, show loading state while waiting
     showLogin();
