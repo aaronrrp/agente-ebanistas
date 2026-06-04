@@ -1266,12 +1266,25 @@ async function sendToAI() {
     if (items.length > 0) {
       const normalized = items.map(it => normalizeAssistantItem(it, message));
       state.lastDesignItems = normalized;
-      const btn = document.createElement("button");
-      btn.className = "chat-quote-btn";
-      btn.textContent = "📋 Enviar a cotización";
-      btn.onclick = () => { fillFormFromItem(normalized[0], message); showView("quoteView"); };
+      const aiActions = Array.isArray(data.actions) ? data.actions : [];
+      const wantsCuts  = aiActions.includes("calculate_cuts");
+      const wantsQuote = aiActions.includes("add_to_quote") || !wantsCuts;
       pending.appendChild(document.createElement("br"));
-      pending.appendChild(btn);
+      if (wantsQuote) {
+        const btn = document.createElement("button");
+        btn.className = "chat-quote-btn";
+        btn.textContent = "📋 Enviar a cotización";
+        btn.onclick = () => { addItemsToQuote(normalized); showView("quoteView"); };
+        pending.appendChild(btn);
+      }
+      if (wantsCuts) {
+        const btn = document.createElement("button");
+        btn.className = "chat-quote-btn";
+        if (wantsQuote) btn.style.marginLeft = "6px";
+        btn.textContent = "✂️ Ir a cortes";
+        btn.onclick = () => { addItemsToQuote(normalized); showView("cutsView"); renderCuts(); };
+        pending.appendChild(btn);
+      }
     }
 
     // Image renders removed — generateConceptImage disabled
@@ -2083,6 +2096,7 @@ const AUTH = {
 };
 
 function showApp() {
+  document.getElementById("appLoading")?.remove();
   document.getElementById("loginScreen").style.display = "none";
   document.getElementById("appShell").style.display = "";
   document.getElementById("logoutBtn").classList.toggle("hidden", AUTH.mode !== "admin");
@@ -2091,6 +2105,7 @@ function showApp() {
 }
 
 function showLogin() {
+  document.getElementById("appLoading")?.remove();
   document.getElementById("loginScreen").style.display = "";
   document.getElementById("appShell").style.display = "none";
 }

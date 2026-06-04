@@ -203,6 +203,12 @@ Si faltan datos, infiere valores razonables y explica la suposición en assistan
 - Si el usuario pide "imagen", "render" o "foto": explica en assistantText que los renders visuales no están disponibles en este momento, pero ofrece la propuesta técnica completa del mueble.
 - Si hay un mueble previo en currentItem, úsalo como base para la respuesta.
 
+══ ACCIONES (campo "actions") ══
+- Propuesta normal / primer contacto → ["fill_form"]
+- Usuario pide cotizar, precio, presupuesto, "agregar a cotización", "cuánto cuesta", "dame el precio" → ["fill_form", "add_to_quote"]
+- Usuario pide cortes, lista de cortes, "calcula los cortes", "necesito los cortes", "genera cortes", "tabla de cortes" → ["fill_form", "add_to_quote", "calculate_cuts"]
+- Siempre incluye "fill_form". Nunca uses acciones que no estén en esta lista.
+
 ══ REGLAS TÉCNICAS ══
 - Fondo interno/embutido: resta grosor melamina a profundidad de repisas y gavetas internas.
 - Fondo exterior/sobrepuesto o sin fondo: NO restes profundidad a repisas internas.
@@ -677,7 +683,7 @@ const server = http.createServer(async (req, res) => {
         adminPasswordSet: ADMIN_PASSWORD !== "admin1234",
         tenantsCount: tenants.length,
         apiEndpoint: "chat/completions",
-        build: "2026-06-03-v14"
+        build: "2026-06-04-v15"
       });
       return;
     }
