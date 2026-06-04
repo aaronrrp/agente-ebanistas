@@ -2258,71 +2258,95 @@ document.getElementById("regenerateCodeBtn")?.addEventListener("click", async ()
 });
 
 // ── URL code auto-login ────────────────────────────────────────────────────
+// ── Helper: log in as ebanista tenant ────────────────────────────────────────
+function _loginAsEbanista(tenant) {
+  const existing = state.tenants.find(t => t.id === tenant.id);
+  if (existing) Object.assign(existing, tenant);
+  else { tenant.catalog = tenant.catalog || cloneCatalog(); state.tenants.push(tenant); }
+  save();
+  AUTH.mode = "ebanista";
+  AUTH.tenantId = tenant.id;
+  state.selectedTenantId = tenant.id;
+  sessionStorage.setItem("ebAuthMode", "ebanista");
+  sessionStorage.setItem("ebTenantId", tenant.id);
+  document.querySelector('[data-view="adminView"]')?.classList.add("hidden");
+  showApp();
+  showView("clientView");
+}
+
 async function tryAutoLogin() {
-  // 1. Check URL for ?code=
   const params = new URLSearchParams(window.location.search);
   const urlCode = params.get("code");
+
+  // ── 1. URL has ?code= (ebanista link) ─────────────────────────────────────
   if (urlCode) {
-    // Try URL-encoded tenant data first (works even when server is sleeping)
+    // Path A: ?d= parameter — instant login, no server needed
     const urlData = params.get("d");
     if (urlData) {
       try {
-        // Try as plain JSON first (new format, URLSearchParams already decoded it)
-        // Fall back to base64 variants for older links
         let decoded;
-        try {
-          decoded = JSON.parse(urlData);
-        } catch {
-          // Old base64 link — handle spaces (+ decoded as space) and URL-safe chars
-          const b64 = urlData.replace(/ /g, '+').replace(/-/g, '+').replace(/_/g, '/');
+        try { decoded = JSON.parse(urlData); }
+        catch {
+          // Fallback for old base64 links
+          const b64 = urlData.replace(/ /g, "+").replace(/-/g, "+").replace(/_/g, "/");
           const mod4 = b64.length % 4;
-          const padded = mod4 ? b64 + '='.repeat(4 - mod4) : b64;
+          const padded = mod4 ? b64 + "=".repeat(4 - mod4) : b64;
           decoded = JSON.parse(decodeURIComponent(escape(atob(padded))));
         }
-        const today = new Date().toISOString().slice(0, 10);
-        if (decoded.accessCode === urlCode) {
+        if (decoded?.accessCode === urlCode) {
+          const today = new Date().toISOString().slice(0, 10);
           if (decoded.status !== "active" || decoded.expiresAt < today) {
-            // Show login screen with error
             showLogin();
-            document.getElementById("loginCodePanel")?.classList.remove("hidden");
             setLoginError("Tu acceso está suspendido o venció. Contacta al administrador.");
             return;
           }
-          // Valid tenant from URL — log in without hitting server
-          const existing = state.tenants.find(t => t.id === decoded.id);
-          if (existing) { Object.assign(existing, decoded); }
-          else { decoded.catalog = decoded.catalog || cloneCatalog(); state.tenants.push(decoded); }
-          save();
-          AUTH.mode = "ebanista";
-          AUTH.tenantId = decoded.id;
-          state.selectedTenantId = decoded.id;
-          sessionStorage.setItem("ebAuthMode", "ebanista");
-          sessionStorage.setItem("ebTenantId", decoded.id);
-          document.querySelector('[data-view="adminView"]')?.classList.add("hidden");
-          showApp();
-          showView("clientView");
+          _loginAsEbanista(decoded);  // instant — no server needed
           return;
         }
       } catch {}
     }
 
-    document.getElementById("loginCodeInput").value = urlCode;
-    // Switch to ebanista tab
+    // Path B: no ?d= or parse failed → ask server, show loading state while waiting
+    showLogin();
+    // Switch to ebanista tab and pre-fill code
     document.querySelectorAll("[data-login-tab]").forEach(b => b.classList.remove("active"));
     document.querySelector('[data-login-tab="code"]')?.classList.add("active");
     document.getElementById("loginCodePanel")?.classList.remove("hidden");
     document.getElementById("loginAdminPanel")?.classList.add("hidden");
-    document.getElementById("loginCodeBtn")?.click();
+    document.getElementById("loginCodeInput").value = urlCode;
+    const btn = document.getElementById("loginCodeBtn");
+    const inp = document.getElementById("loginCodeInput");
+    if (btn) { btn.textContent = "Conectando…"; btn.disabled = true; }
+    if (inp) inp.disabled = true;
+    try {
+      const res = await fetch(`/api/tenant-by-code?code=${encodeURIComponent(urlCode)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.active) { _loginAsEbanista(data); return; }
+        setLoginError("Tu acceso está suspendido o venció. Contacta al administrador.");
+      } else {
+        // Try local state as last resort
+        const local = state.tenants.find(t => t.accessCode === urlCode);
+        if (local && isTenantActive(local)) { _loginAsEbanista(local); return; }
+        setLoginError("Código no válido. Pide un link actualizado a tu administrador.");
+      }
+    } catch {
+      const local = state.tenants.find(t => t.accessCode === urlCode);
+      if (local && isTenantActive(local)) { _loginAsEbanista(local); return; }
+      setLoginError("Sin conexión al servidor. Pide un link actualizado.");
+    } finally {
+      if (btn) { btn.textContent = "Ingresar →"; btn.disabled = false; }
+      if (inp) inp.disabled = false;
+    }
     return;
   }
 
-  // 2. Restore session from sessionStorage
+  // ── 2. Restore session from sessionStorage ────────────────────────────────
   const savedMode = sessionStorage.getItem("ebAuthMode");
   const savedToken = sessionStorage.getItem("ebAdminToken");
   const savedTenantId = sessionStorage.getItem("ebTenantId");
 
   if (savedMode === "admin" && savedToken) {
-    // Verify token is still valid
     if (window.location.protocol !== "file:") {
       try {
         const res = await fetch("/api/auth/check", { headers: { Authorization: `Bearer ${savedToken}` } });
@@ -2338,7 +2362,6 @@ async function tryAutoLogin() {
         }
       } catch {}
     } else {
-      // file:// mode: always allow
       AUTH.mode = "admin";
       showApp();
       showView("adminView");
@@ -2348,17 +2371,13 @@ async function tryAutoLogin() {
 
   if (savedMode === "ebanista" && savedTenantId) {
     const tenant = state.tenants.find(t => t.id === savedTenantId);
-    if (tenant) {
-      AUTH.mode = "ebanista"; AUTH.tenantId = savedTenantId;
-      state.selectedTenantId = savedTenantId;
-      document.querySelector('[data-view="adminView"]')?.classList.add("hidden");
-      showApp();
-      showView("clientView");
+    if (tenant && isTenantActive(tenant)) {
+      _loginAsEbanista(tenant);
       return;
     }
   }
 
-  // 3. No valid session → show login
+  // ── 3. No valid session → show login ──────────────────────────────────────
   showLogin();
 }
 
