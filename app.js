@@ -1469,14 +1469,26 @@ async function generateConceptImage(designPrompt, parentEl) {
     clearTimeout(t);
     const data = await res.json();
     if (data.imageUrl) {
-      wrap.innerHTML = `
-        <img src="${data.imageUrl}" alt="Render conceptual"
-             style="width:100%;border-radius:8px;display:block"
-             title="Clic para ampliar" onclick="window.open(this.src,'_blank')">
-        <div style="display:flex;gap:8px;margin-top:6px">
-          <button onclick="downloadRender('${data.imageUrl}')"
-             style="font-size:0.75rem;background:none;border:none;color:#059669;cursor:pointer;padding:0">⬇ Descargar</button>
-        </div>`;
+      // Use DOM methods — never embed base64 data URLs in innerHTML/onclick
+      wrap.innerHTML = "";
+      const img = document.createElement("img");
+      img.alt = "Render conceptual";
+      img.style.cssText = "width:100%;border-radius:8px;display:block;cursor:pointer";
+      img.title = "Clic para ampliar";
+      const imgUrl = data.imageUrl;
+      img.addEventListener("click", () => window.open(imgUrl, "_blank"));
+      img.src = imgUrl;
+
+      const btnRow = document.createElement("div");
+      btnRow.style.cssText = "display:flex;gap:8px;margin-top:6px";
+      const dlBtn = document.createElement("button");
+      dlBtn.style.cssText = "font-size:0.75rem;background:none;border:none;color:#059669;cursor:pointer;padding:0";
+      dlBtn.textContent = "⬇ Descargar";
+      dlBtn.addEventListener("click", () => downloadRender(imgUrl));
+      btnRow.appendChild(dlBtn);
+
+      wrap.appendChild(img);
+      wrap.appendChild(btnRow);
     } else {
       wrap.innerHTML = `<p style="color:#991b1b;font-size:0.8rem">⚠ ${data.error || "No se pudo generar render"}</p>`;
     }
@@ -1500,13 +1512,24 @@ function clearImageState() {
 
 async function downloadRender(url) {
   try {
-    const res = await fetch(url);
-    const blob = await res.blob();
+    let blobUrl;
+    if (url.startsWith("data:")) {
+      // Convert data URL → Blob directly (avoids fetch issues with large base64)
+      const parts = url.split(",");
+      const mime = (parts[0].match(/:(.*?);/) || [])[1] || "image/jpeg";
+      const raw = atob(parts[1]);
+      const arr = new Uint8Array(raw.length);
+      for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+      blobUrl = URL.createObjectURL(new Blob([arr], { type: mime }));
+    } else {
+      const r = await fetch(url);
+      blobUrl = URL.createObjectURL(await r.blob());
+    }
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `diseno-ebanista-${Date.now()}.jpg`;
+    a.href = blobUrl;
+    a.download = `render-mueble-${Date.now()}.jpg`;
     a.click();
-    URL.revokeObjectURL(a.href);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
   } catch {
     window.open(url, "_blank");
   }
