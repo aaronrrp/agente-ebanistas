@@ -1468,17 +1468,16 @@ async function generateConceptImage(designPrompt, parentEl) {
     });
     clearTimeout(t);
     const data = await res.json();
-    if (data.imageUrl) {
-      // Use DOM methods — never embed base64 data URLs in innerHTML/onclick
+
+    // Helper: show image in the wrap element
+    function showRenderImage(imgUrl) {
       wrap.innerHTML = "";
       const img = document.createElement("img");
       img.alt = "Render conceptual";
       img.style.cssText = "width:100%;border-radius:8px;display:block;cursor:pointer";
       img.title = "Clic para ampliar";
-      const imgUrl = data.imageUrl;
       img.addEventListener("click", () => window.open(imgUrl, "_blank"));
       img.src = imgUrl;
-
       const btnRow = document.createElement("div");
       btnRow.style.cssText = "display:flex;gap:8px;margin-top:6px";
       const dlBtn = document.createElement("button");
@@ -1486,9 +1485,30 @@ async function generateConceptImage(designPrompt, parentEl) {
       dlBtn.textContent = "⬇ Descargar";
       dlBtn.addEventListener("click", () => downloadRender(imgUrl));
       btnRow.appendChild(dlBtn);
-
       wrap.appendChild(img);
       wrap.appendChild(btnRow);
+    }
+
+    if (data.imageUrl) {
+      showRenderImage(data.imageUrl);
+    } else if (data.pollinations) {
+      // Server HF failed → try Pollinations directly from client browser (different IP)
+      wrap.innerHTML = `<div class="render-loading">🎨 Generando render alternativo…</div>`;
+      try {
+        const seed = Math.floor(Math.random() * 999999);
+        const pPrompt = encodeURIComponent(designPrompt.slice(0, 300) + ", photorealistic interior design, furniture, 4k, high quality");
+        const pUrl = `https://image.pollinations.ai/prompt/${pPrompt}?width=512&height=512&nologo=true&model=flux&seed=${seed}`;
+        await new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = resolve;
+          img.onerror = reject;
+          img.src = pUrl;
+          setTimeout(reject, 40000);
+        });
+        showRenderImage(pUrl);
+      } catch {
+        wrap.innerHTML = `<p style="color:#991b1b;font-size:0.8rem">⚠ Renders temporalmente no disponibles. Intenta de nuevo en 1 minuto.</p>`;
+      }
     } else {
       wrap.innerHTML = `<p style="color:#991b1b;font-size:0.8rem">⚠ ${data.error || "No se pudo generar render"}</p>`;
     }

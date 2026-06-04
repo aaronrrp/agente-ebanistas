@@ -462,15 +462,16 @@ async function handleGenerateImage(req, res) {
   // 2. Hugging Face Inference API (gratis con HF_TOKEN)
   if (process.env.HF_TOKEN) {
     const hfPrompt = `${prompt.slice(0, 450)}, photorealistic interior design render, high quality, 4k`;
+    // Models ordered: fastest first. FLUX-schnell = 4 steps, very fast.
     const hfModels = [
-      { url: "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0", w: 1024, h: 1024, steps: 20 },
-      { url: "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2-1",          w: 768,  h: 768,  steps: 20 },
+      { url: "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell", w: 512, h: 512, steps: 4 },
+      { url: "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2-1", w: 768, h: 768, steps: 20 },
     ];
     for (const hfCfg of hfModels) {
-      // Retry up to 2 times per model (handles "model loading" 503)
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          console.log(`[HF] model=${hfCfg.url.split("/").slice(-1)[0]} attempt=${attempt+1}`);
+          const modelName = hfCfg.url.split("/").slice(-1)[0];
+          console.log(`[HF] model=${modelName} attempt=${attempt+1}`);
           const hfRes = await fetch(hfCfg.url, {
             method: "POST",
             headers: {
@@ -489,27 +490,26 @@ async function handleGenerateImage(req, res) {
             sendJson(res, 200, { imageUrl: `data:${ct};base64,${b64}`, source: "huggingface" });
             return;
           }
-          // Read error body for logging
           try {
             const errText = await hfRes.text();
             console.log(`[HF] error body: ${errText.slice(0, 300)}`);
             const errData = JSON.parse(errText);
-            // Model loading: wait estimated_time then retry
             if (hfRes.status === 503 && errData.estimated_time) {
-              const wait = Math.min(Number(errData.estimated_time) * 1000, 25000);
+              const wait = Math.min(Number(errData.estimated_time) * 1000, 20000);
               console.log(`[HF] model loading, waiting ${wait}ms`);
               await new Promise(r => setTimeout(r, wait));
-              continue; // retry same model
+              continue;
             }
           } catch {}
-          break; // non-loading error → try next model
+          break;
         } catch (e) {
           console.log(`[HF] exception: ${e.message}`);
           break;
         }
       }
     }
-    sendJson(res, 503, { error: "El modelo de renders está ocupado. Intenta de nuevo en 30 segundos." });
+    // HF failed — tell client to try Pollinations directly from their browser
+    sendJson(res, 503, { error: "Servidor de renders ocupado.", pollinations: true });
     return;
   }
 
@@ -683,7 +683,7 @@ const server = http.createServer(async (req, res) => {
         adminPasswordSet: ADMIN_PASSWORD !== "admin1234",
         tenantsCount: tenants.length,
         apiEndpoint: "chat/completions",
-        build: "2026-06-03-v7"
+        build: "2026-06-03-v8"
       });
       return;
     }
