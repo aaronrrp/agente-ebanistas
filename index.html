@@ -233,6 +233,7 @@
               <button id="clearImageBtn" class="img-thumb-remove" title="Quitar foto">✕</button>
             </div>
             <textarea id="chatInput" rows="2" placeholder="Ej: closet 200×60×55 cm, melamina blanca, 4 puertas con cierre suave…"></textarea>
+            <button id="voiceBtn" class="chat-voice-btn" type="button" title="Hablar con IA">🎤</button>
             <button id="sendChatBtn" class="chat-send-btn" type="button">↑</button>
           </div>
         </div>
@@ -369,6 +370,7 @@
               <label>Cliente final<input id="finalClient" required></label>
               <label>Ubicación<input id="projectLocation" placeholder="Casa, local, zona o ciudad"></label>
               <label>Validez de oferta días<input id="quoteValidity" type="number" min="1" value="15"></label>
+              <label>Margen de ganancia %<input id="marginPercent" type="number" min="0" max="100" step="1" placeholder="30"></label>
               <label>Precio final manual USD<input id="manualTotal" type="number" min="0" step="1" placeholder="Opcional"></label>
               <label class="span-2">Notas generales<textarea id="clientNotes" rows="3" placeholder="Condiciones del espacio, color preferido, detalles del cliente o exclusiones."></textarea></label>
 
@@ -496,6 +498,9 @@ Tapa superior, 120, 55, 1, 18 mm, sin canto"></textarea>
         </label>
         <label>Tarifa mensual USD
           <input id="em_fee" type="number" min="0" step="1" placeholder="Ej: 30">
+        </label>
+        <label>Margen de ganancia %
+          <input id="em_margin" type="number" min="0" max="100" step="1" placeholder="Ej: 30">
         </label>
         <label>Acceso válido hasta
           <input id="em_expires" type="date">

@@ -221,7 +221,9 @@ const els = {
   generateCutsBtn: document.getElementById("generateCutsBtn"),
   cutsOutput: document.getElementById("cutsOutput"),
   cutsLayoutOutput: document.getElementById("cutsLayoutOutput"),
-  exportCutsBtn: document.getElementById("exportCutsBtn")
+  exportCutsBtn: document.getElementById("exportCutsBtn"),
+  voiceBtn: document.getElementById("voiceBtn"),
+  marginPercent: document.getElementById("marginPercent")
 };
 
 function load(key, fallback) {
@@ -451,6 +453,10 @@ function renderTenantForm(tenant) {
   els.status.value = tenant.status;
   els.expiresAt.value = tenant.expiresAt;
   els.margin.value = tenant.margin;
+  // Sync visible margin input in quote form (only if not actively editing)
+  if (els.marginPercent && document.activeElement !== els.marginPercent) {
+    els.marginPercent.value = tenant.margin ?? 30;
+  }
   els.installBase.value = tenant.installBase;
   els.transportBase.value = tenant.transportBase;
   els.materials.value = tenant.materials;
@@ -552,6 +558,7 @@ function openEbanistaModal(editId) {
   document.getElementById("em_contact").value = t?.contactName || "";
   document.getElementById("em_phone").value = t?.phone || "";
   document.getElementById("em_fee").value = t?.monthlyFee || "";
+  document.getElementById("em_margin").value = t?.margin ?? 30;
   document.getElementById("em_expires").value = t?.expiresAt || addDays(30);
   document.getElementById("em_result").classList.add("hidden");
   document.getElementById("em_actions").style.display = "";
@@ -589,7 +596,7 @@ async function saveEbanistaFromModal() {
     monthlyFee: Number(document.getElementById("em_fee").value || 0),
     status: existing?.status || "active",
     expiresAt: document.getElementById("em_expires").value || addDays(30),
-    margin: existing?.margin ?? 30,
+    margin: Number(document.getElementById("em_margin").value) || existing?.margin || 30,
     installBase: existing?.installBase ?? 75,
     transportBase: existing?.transportBase ?? 30,
     materials: existing?.materials || "Melamina hidrófuga, canto PVC, herrajes estándar.",
@@ -855,7 +862,8 @@ function buildQuote(form) {
   const installCost = form.includeInstall.checked ? tenant.installBase + (state.draftItems.length * 28) : 0;
   const transportCost = form.includeTransport.checked ? tenant.transportBase : 0;
   const itemsSubtotal = state.draftItems.reduce((sum, item) => sum + item.finalPrice, 0);
-  const marginAmount = itemsSubtotal * (tenant.margin / 100);
+  const marginPct = Number(els.marginPercent?.value) > 0 ? Number(els.marginPercent.value) : (tenant.margin ?? 30);
+  const marginAmount = itemsSubtotal * (marginPct / 100);
   const contingency = itemsSubtotal * 0.08;
   const calculatedTotal = Math.ceil((itemsSubtotal + installCost + transportCost + marginAmount + contingency) / 5) * 5;
   const manualTotal = Number(document.getElementById("manualTotal").value || 0);
@@ -2692,6 +2700,82 @@ async function tryAutoLogin() {
   // ── 3. No valid session → show login ──────────────────────────────────────
   showLogin();
 }
+
+// ── Margin percent live update (quote form) ────────────────────────────────
+els.marginPercent?.addEventListener("change", (e) => {
+  const tenant = currentTenant();
+  if (!tenant) return;
+  const val = Number(e.target.value);
+  if (val >= 0 && val <= 100) {
+    tenant.margin = val;
+    els.margin.value = val;
+    save();
+    toast(`Margen actualizado a ${val}% ✓`);
+  }
+});
+
+// ── Voice input (Web Speech API) ──────────────────────────────────────────
+(function initVoice() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const btn = els.voiceBtn;
+  if (!btn) return;
+
+  if (!SpeechRecognition) {
+    btn.title = "Voz no disponible en este navegador (usa Chrome)";
+    btn.style.opacity = "0.35";
+    btn.disabled = true;
+    return;
+  }
+
+  let recognition = null;
+  let recording = false;
+
+  btn.addEventListener("click", () => {
+    if (recording) { recognition?.stop(); return; }
+
+    recognition = new SpeechRecognition();
+    recognition.lang = navigator.language?.startsWith("es") ? navigator.language : "es-ES";
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      recording = true;
+      btn.textContent = "⏹";
+      btn.classList.add("recording");
+      btn.title = "Detener grabación";
+    };
+
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map(r => r[0].transcript).join("");
+      els.chatInput.value = transcript;
+      els.chatInput.style.height = "auto";
+      els.chatInput.style.height = Math.min(els.chatInput.scrollHeight, 140) + "px";
+    };
+
+    recognition.onend = () => {
+      recording = false;
+      btn.textContent = "🎤";
+      btn.classList.remove("recording");
+      btn.title = "Hablar con IA";
+    };
+
+    recognition.onerror = (event) => {
+      recording = false;
+      btn.textContent = "🎤";
+      btn.classList.remove("recording");
+      btn.title = "Hablar con IA";
+      if (event.error === "not-allowed") {
+        toast("Permiso de micrófono denegado — actívalo en el navegador.", "error");
+      } else if (event.error !== "aborted" && event.error !== "no-speech") {
+        toast("Error de micrófono: " + event.error, "error");
+      }
+    };
+
+    recognition.start();
+  });
+})();
 
 // ── Prices editor ─────────────────────────────────────────────────────────
 document.getElementById("savePricesBtn")?.addEventListener("click", async () => {
