@@ -442,7 +442,30 @@ async function handleGenerateImage(req, res) {
 
   const imgPrompt = `${prompt.slice(0, 700)}, photorealistic interior design render, high quality, 4k, soft lighting`;
 
-  // 1. Together.ai — FLUX.1-schnell-Free (gratis, rápido, ~5-10 seg)
+  // 1. Cloudflare Workers AI — FLUX.1-schnell (gratis, ~15 imgs/día, sin tarjeta)
+  if (process.env.CF_ACCOUNT_ID && process.env.CF_API_TOKEN) {
+    try {
+      console.log("[CF] trying FLUX.1-schnell...");
+      const cfRes = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${process.env.CF_ACCOUNT_ID}/ai/run/@cf/black-forest-labs/flux-1-schnell`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${process.env.CF_API_TOKEN}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: imgPrompt, num_steps: 4 }),
+          signal: AbortSignal.timeout(60000)
+        }
+      );
+      const cfData = await cfRes.json();
+      console.log(`[CF] status=${cfRes.status} success=${cfData.success} err="${cfData.errors?.[0]?.message || "ok"}"`);
+      if (cfRes.ok && cfData.result?.image) {
+        console.log("[CF] success!");
+        sendJson(res, 200, { imageUrl: `data:image/jpeg;base64,${cfData.result.image}`, source: "cloudflare-flux" });
+        return;
+      }
+    } catch (e) { console.log(`[CF] exception: ${e.message}`); }
+  }
+
+  // 2. Together.ai — FLUX.1-schnell-Free
   if (process.env.TOGETHER_API_KEY) {
     try {
       console.log("[Together] trying FLUX.1-schnell-Free...");
@@ -462,7 +485,7 @@ async function handleGenerateImage(req, res) {
     } catch (e) { console.log(`[Together] exception: ${e.message}`); }
   }
 
-  // 2. DALL-E (si la cuenta tiene acceso a imagen)
+  // 3. DALL-E (si la cuenta tiene acceso a imagen)
   if (process.env.OPENAI_API_KEY) {
     for (const cfg of [{ model: "dall-e-3", size: "1024x1024" }, { model: "dall-e-2", size: "512x512" }]) {
       try {
@@ -483,7 +506,7 @@ async function handleGenerateImage(req, res) {
     }
   }
 
-  // 3. Fallback: Pollinations desde el navegador del cliente (diferente IP)
+  // 4. Fallback: Pollinations desde el navegador del cliente (diferente IP)
   sendJson(res, 503, { error: "Servidor de renders ocupado.", pollinations: true });
 }
 
@@ -654,7 +677,7 @@ const server = http.createServer(async (req, res) => {
         adminPasswordSet: ADMIN_PASSWORD !== "admin1234",
         tenantsCount: tenants.length,
         apiEndpoint: "chat/completions",
-        build: "2026-06-03-v12"
+        build: "2026-06-03-v13"
       });
       return;
     }
