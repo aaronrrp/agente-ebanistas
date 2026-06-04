@@ -360,11 +360,8 @@ async function callOpenAI(sysPrompt, userContent) {
   const inputMessages = [{
     role: "user",
     content: userContent.map(c => {
-      if (c.type === "input_text") return { type: "text", text: c.text };
-      if (c.type === "input_image") return {
-        type: "image_url",
-        image_url: { url: c.image_url, detail: c.detail || "high" }
-      };
+      if (c.type === "input_text") return { type: "input_text", text: c.text };
+      if (c.type === "input_image") return { type: "input_image", image_url: c.image_url };
       return c;
     })
   }];
@@ -698,7 +695,7 @@ const server = http.createServer(async (req, res) => {
         adminPasswordSet: ADMIN_PASSWORD !== "admin1234",
         tenantsCount: tenants.length,
         apiEndpoint: "chat/completions",
-        build: "2026-06-04-v18"
+        build: "2026-06-04-v18b"
       });
       return;
     }
