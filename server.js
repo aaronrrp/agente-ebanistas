@@ -444,20 +444,23 @@ async function handleGenerateImage(req, res) {
   if (process.env.OPENAI_API_KEY) {
     for (const cfg of [{ model: "dall-e-3", size: "1024x1024" }, { model: "dall-e-2", size: "512x512" }]) {
       try {
+        console.log(`[DALLE] trying ${cfg.model}...`);
         const apiRes = await fetch("https://api.openai.com/v1/images/generations", {
           method: "POST",
           headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
           body: JSON.stringify({ model: cfg.model, prompt: prompt.slice(0, 900), n: 1, size: cfg.size })
         });
         const data = await apiRes.json();
+        console.log(`[DALLE] ${cfg.model} → status=${apiRes.status} err="${data.error?.message || "ok"}"`);
         if (apiRes.ok && data.data?.[0]?.url) {
+          console.log(`[DALLE] success with ${cfg.model}`);
           sendJson(res, 200, { imageUrl: data.data[0].url, source: cfg.model });
           return;
         }
-        const err = data.error?.message || "";
-        if (err.includes("does not exist") || err.includes("billing") || err.includes("quota") || apiRes.status === 404) continue;
-        break;
-      } catch { /* try next */ }
+        // Always try next model on any error
+      } catch (e) {
+        console.log(`[DALLE] exception: ${e.message}`);
+      }
     }
   }
 
@@ -685,7 +688,7 @@ const server = http.createServer(async (req, res) => {
         adminPasswordSet: ADMIN_PASSWORD !== "admin1234",
         tenantsCount: tenants.length,
         apiEndpoint: "chat/completions",
-        build: "2026-06-03-v10"
+        build: "2026-06-03-v11"
       });
       return;
     }
