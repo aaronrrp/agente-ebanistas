@@ -641,11 +641,12 @@ const server = http.createServer(async (req, res) => {
       console.log(`[health] openaiConfigured=${keySet}, model=${model}, tenants=${tenants.length}`);
       sendJson(res, 200, {
         openaiConfigured: keySet,
+        hfConfigured: Boolean(process.env.HF_TOKEN),
         model,
         adminPasswordSet: ADMIN_PASSWORD !== "admin1234",
         tenantsCount: tenants.length,
         apiEndpoint: "chat/completions",
-        build: "2026-06-03-v4"
+        build: "2026-06-03-v5"
       });
       return;
     }
