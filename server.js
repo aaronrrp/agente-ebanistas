@@ -239,30 +239,35 @@ IMPORTANTE sobre la hora: NO puedes saber la hora exacta actual — no tienes re
 RH01 Blanco Cotton | RH10 Gris Platino | RH15 Gris Marengo | RH20 Grafito |
 RH30 Nogal Natural | RH35 Roble Arena | RH40 Wengué | RH50 Cerezo.
 
+Si el usuario pide UN SOLO mueble → devuelve 1 objeto en el array "items".
+Si pide VARIOS muebles en el mismo mensaje → devuelve TODOS en el array "items", uno por cada mueble pedido. NUNCA omitas ninguno.
+
 Responde SOLO JSON válido:
 {
-  "assistantText": "2–3 oraciones directas en español, tono de WhatsApp entre ebanista y cliente. NUNCA uses 'Estimado', NUNCA firmes, NUNCA escribas como carta formal. Ejemplo: 'Te propongo un closet de melamina blanca 200×60×55 cm con 4 puertas de cierre suave Blum. Incluye 2 repisas internas y canto PVC. Precio aprox $480 USD.'",
+  "assistantText": "2–3 oraciones directas en español, tono de WhatsApp. Menciona cada mueble con sus medidas. NUNCA uses 'Estimado', NUNCA firmes.",
   "actions": ["fill_form"],
-  "item": {
-    "name": "Mueble propuesto",
-    "furnitureType": "Cocina|Closet|Vanity|Centro de entretenimiento|Mueble de lavandería|Escritorio|Otro",
-    "dimensionBasis": "external|internal",
-    "width": 0, "height": 0, "depth": 0,
-    "complexityKey": "low|medium|high|premium",
-    "doors": 2, "drawers": 0, "shelves": 1,
-    "shelfPlacement": "internal|external",
-    "doorPlacement": "overlay|inset|internal",
-    "drawerPlacement": "external_front|inset_front|internal_box",
-    "backPlacement": "external|internal|none",
-    "melamineThickness": "15 mm|18 mm|25 mm|36 mm doble laminado",
-    "edgeBanding": "No incluir canto|Solo frentes visibles|Frentes visibles y puertas|Todos los cantos expuestos|Canto premium en todo el mueble",
-    "hinges": "Blum CLIP top BLUMOTION 110° (cierre suave)|Blum CLIP top 165° apertura amplia|Blum CLIP top estándar 110°|Häfele cierre suave 35mm|Häfele estándar 35mm|No incluir bisagras",
-    "drawerSlides": "Blum LEGRABOX premium (70 kg)|Blum MOVENTO undermount (40 kg, cierre suave)|Blum TANDEMBOX antaro (30 kg)|Häfele Matrix cierre suave (45 kg)|Häfele telescópica estándar (25 kg)|No incluir correderas",
-    "handles": "Barra aluminio 320mm|Barra aluminio 128mm|Jalador integrado / embutido|Sin jalador (push-to-open)|Inox premium acero inoxidable|No incluir jaladores",
-    "color": "RH01|RH10|RH15|RH20|RH30|RH35|RH40|RH50",
-    "notes": "detalle técnico",
-    "manualPrice": 0
-  },
+  "items": [
+    {
+      "name": "Nombre descriptivo del mueble",
+      "furnitureType": "Cocina|Closet|Vanity|Centro de entretenimiento|Mueble de lavandería|Escritorio|Otro",
+      "dimensionBasis": "external|internal",
+      "width": 0, "height": 0, "depth": 0,
+      "complexityKey": "low|medium|high|premium",
+      "doors": 0, "drawers": 0, "shelves": 0,
+      "shelfPlacement": "internal|external",
+      "doorPlacement": "overlay|inset|internal",
+      "drawerPlacement": "external_front|inset_front|internal_box",
+      "backPlacement": "external|internal|none",
+      "melamineThickness": "15 mm|18 mm|25 mm|36 mm doble laminado",
+      "edgeBanding": "No incluir canto|Solo frentes visibles|Frentes visibles y puertas|Todos los cantos expuestos|Canto premium en todo el mueble",
+      "hinges": "Blum CLIP top BLUMOTION 110° (cierre suave)|Blum CLIP top 165° apertura amplia|Blum CLIP top estándar 110°|Häfele cierre suave 35mm|Häfele estándar 35mm|No incluir bisagras",
+      "drawerSlides": "Blum LEGRABOX premium (70 kg)|Blum MOVENTO undermount (40 kg, cierre suave)|Blum TANDEMBOX antaro (30 kg)|Häfele Matrix cierre suave (45 kg)|Häfele telescópica estándar (25 kg)|No incluir correderas",
+      "handles": "Barra aluminio 320mm|Barra aluminio 128mm|Jalador integrado / embutido|Sin jalador (push-to-open)|Inox premium acero inoxidable|No incluir jaladores",
+      "color": "RH01|RH10|RH15|RH20|RH30|RH35|RH40|RH50",
+      "notes": "detalle técnico",
+      "manualPrice": 0
+    }
+  ],
   "designPrompt": null
 }
 `.trim();
@@ -285,11 +290,19 @@ function normalizeAi(payload, fallback) {
   const actions = Array.isArray(payload?.actions)
     ? payload.actions.filter(a => allowedActions.includes(a))
     : ["fill_form"];
+  // Support both items[] (new) and single item (legacy)
+  let items = null;
+  if (Array.isArray(payload?.items) && payload.items.length > 0) {
+    items = payload.items;
+  } else if (payload?.item) {
+    items = [payload.item];
+  }
   return {
     source: "openai",
     assistantText: payload?.assistantText || fallback || "Propuesta generada.",
     actions: actions.length ? actions : ["fill_form"],
-    item: payload?.item || null,
+    items,
+    item: items ? items[0] : null,
     designPrompt: payload?.designPrompt || null
   };
 }
@@ -707,7 +720,7 @@ const server = http.createServer(async (req, res) => {
         adminPasswordSet: ADMIN_PASSWORD !== "admin1234",
         tenantsCount: tenants.length,
         apiEndpoint: "chat/completions",
-        build: "2026-06-04-v21"
+        build: "2026-06-04-v22"
       });
       return;
     }

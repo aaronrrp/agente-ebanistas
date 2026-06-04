@@ -202,10 +202,6 @@ const els = {
   quoteWorkspace: document.getElementById("quoteWorkspace"),
   quoteForm: document.getElementById("quoteForm"),
   quoteItemsList: document.getElementById("quoteItemsList"),
-  furnitureBrief: document.getElementById("furnitureBrief"),
-  interpretFurnitureBtn: document.getElementById("interpretFurnitureBtn"),
-  aiAddFurnitureBtn: document.getElementById("aiAddFurnitureBtn"),
-  aiAddAndCutsBtn: document.getElementById("aiAddAndCutsBtn"),
   manualPiecesInput: document.getElementById("manualPiecesInput"),
   addManualPiecesBtn: document.getElementById("addManualPiecesBtn"),
   manualPiecesList: document.getElementById("manualPiecesList"),
@@ -2092,18 +2088,7 @@ els.chatInput.addEventListener("keydown", event => {
   if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) sendToAI();
 });
 // sendDesignToQuoteBtn removed — now inline "📋 Enviar a cotización" button in chat
-
-els.interpretFurnitureBtn.addEventListener("click", () => {
-  applyFurnitureBrief(els.furnitureBrief.value);
-});
-
-els.aiAddFurnitureBtn.addEventListener("click", () => {
-  applyFurnitureBrief(els.furnitureBrief.value, { addToQuote: true });
-});
-
-els.aiAddAndCutsBtn.addEventListener("click", () => {
-  applyFurnitureBrief(els.furnitureBrief.value, { addToQuote: true, calculateCuts: true });
-});
+// furnitureBrief / interpretFurnitureBtn / aiAddFurnitureBtn / aiAddAndCutsBtn removed v22
 
 document.getElementById("addQuoteItemBtn").addEventListener("click", () => {
   const item = readItemFromForm();
