@@ -1820,20 +1820,34 @@ els.designImage.addEventListener("change", (event) => {
   }
   const reader = new FileReader();
   reader.onload = () => {
-    state.currentImageData = reader.result;
-    const thumb = document.getElementById("imgThumb");
-    if (thumb) {
-      thumb.style.display = "";
-      let img = thumb.querySelector("img.thumb-img");
-      if (!img) {
-        img = document.createElement("img");
-        img.className = "thumb-img";
-        img.alt = "foto";
-        img.style.cssText = "width:100%;height:100%;object-fit:cover;border-radius:6px";
-        thumb.insertBefore(img, thumb.firstChild);
+    // Convert to JPEG via canvas — fixes HEIC/HEIF/BMP/TIFF and limits size
+    const tmpImg = new Image();
+    tmpImg.onload = () => {
+      const MAX = 1200;
+      const scale = tmpImg.width > MAX ? MAX / tmpImg.width : 1;
+      const canvas = document.createElement("canvas");
+      canvas.width  = Math.round(tmpImg.width  * scale);
+      canvas.height = Math.round(tmpImg.height * scale);
+      canvas.getContext("2d").drawImage(tmpImg, 0, 0, canvas.width, canvas.height);
+      const jpeg = canvas.toDataURL("image/jpeg", 0.88);
+      state.currentImageData = jpeg;
+
+      const thumb = document.getElementById("imgThumb");
+      if (thumb) {
+        thumb.style.display = "";
+        let thumbImg = thumb.querySelector("img.thumb-img");
+        if (!thumbImg) {
+          thumbImg = document.createElement("img");
+          thumbImg.className = "thumb-img";
+          thumbImg.alt = "foto";
+          thumbImg.style.cssText = "width:100%;height:100%;object-fit:cover;border-radius:6px";
+          thumb.insertBefore(thumbImg, thumb.firstChild);
+        }
+        thumbImg.src = jpeg;
       }
-      img.src = reader.result;
-    }
+    };
+    tmpImg.onerror = () => appendChat("assistant", "⚠️ No se pudo leer la imagen. Prueba con un archivo .jpg o .png.");
+    tmpImg.src = reader.result;
   };
   reader.readAsDataURL(file);
 });
