@@ -1455,7 +1455,7 @@ function buildLocalAssistantPlan(message) {
 async function generateConceptImage(designPrompt, parentEl) {
   const wrap = document.createElement("div");
   wrap.className = "chat-render";
-  wrap.innerHTML = `<div class="render-loading">🎨 Generando render visual… puede tardar hasta 45 seg</div>`;
+  wrap.innerHTML = `<div class="render-loading">🎨 Generando render… puede tardar 1–2 min la primera vez</div>`;
   if (parentEl) { parentEl.appendChild(wrap); els.chatMessages.scrollTop = els.chatMessages.scrollHeight; }
 
   try {
