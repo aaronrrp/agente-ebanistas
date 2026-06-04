@@ -1469,7 +1469,12 @@ async function generateConceptImage(designPrompt, parentEl) {
         <img src="${data.imageUrl}" alt="Render conceptual"
              style="width:100%;border-radius:8px;cursor:zoom-in;display:block"
              onclick="window.open(this.src,'_blank')" title="Clic para ampliar">
-        <p style="font-size:0.7rem;color:#888;margin:4px 0 0">✨ Render conceptual · clic para ampliar</p>`;
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <a href="${data.imageUrl}" target="_blank"
+             style="font-size:0.75rem;color:#7c3aed;text-decoration:none">🔍 Ver ampliada</a>
+          <button onclick="downloadRender('${data.imageUrl}')"
+             style="font-size:0.75rem;background:none;border:none;color:#059669;cursor:pointer;padding:0">⬇ Descargar</button>
+        </div>`;
     } else {
       wrap.innerHTML = `<p style="color:#991b1b;font-size:0.8rem">⚠ ${data.error || "No se pudo generar render"}</p>`;
     }
@@ -1489,6 +1494,20 @@ function clearImageState() {
   }
   const inp = document.getElementById("designImage");
   if (inp) inp.value = "";
+}
+
+async function downloadRender(url) {
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `diseno-ebanista-${Date.now()}.jpg`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch {
+    window.open(url, "_blank");
+  }
 }
 
 function normalizeBackendPlan(data, message) {

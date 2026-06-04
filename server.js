@@ -215,7 +215,7 @@ RH30 Nogal Natural | RH35 Roble Arena | RH40 Wengué | RH50 Cerezo.
 
 Responde SOLO JSON válido:
 {
-  "assistantText": "2–4 oraciones en español natural y amigable: describe el mueble propuesto como lo haría un experto ebanista al cliente, menciona dimensiones, color y precio estimado aproximado",
+  "assistantText": "2–3 oraciones directas en español, tono de WhatsApp entre ebanista y cliente. NUNCA uses 'Estimado', NUNCA firmes, NUNCA escribas como carta formal. Ejemplo: 'Te propongo un closet de melamina blanca 200×60×55 cm con 4 puertas de cierre suave Blum. Incluye 2 repisas internas y canto PVC. Precio aprox $480 USD.'",
   "actions": ["fill_form"],
   "item": {
     "name": "Mueble propuesto",
@@ -427,27 +427,36 @@ async function handleGenerateImage(req, res) {
   const { prompt } = body ? JSON.parse(body) : {};
   if (!prompt) { sendJson(res, 400, { error: "Se requiere prompt." }); return; }
 
-  try {
-    const apiRes = await fetch("https://api.openai.com/v1/images/generations", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "dall-e-3",
-        prompt: prompt.slice(0, 900),
-        n: 1,
-        size: "1024x1024",
-        quality: "standard"
-      })
-    });
-    const data = await apiRes.json();
-    if (!apiRes.ok) throw new Error(data.error?.message || `OpenAI ${apiRes.status}`);
-    sendJson(res, 200, {
-      imageUrl: data.data?.[0]?.url || null,
-      revisedPrompt: data.data?.[0]?.revised_prompt || null
-    });
-  } catch (e) {
-    sendJson(res, 500, { error: e.message });
+  const attempts = [
+    { model: "dall-e-3", size: "1024x1024", quality: "standard" },
+    { model: "dall-e-2", size: "512x512" }
+  ];
+  for (const cfg of attempts) {
+    try {
+      const body = { model: cfg.model, prompt: prompt.slice(0, cfg.model === "dall-e-2" ? 1000 : 900), n: 1, size: cfg.size };
+      if (cfg.quality) body.quality = cfg.quality;
+      const apiRes = await fetch("https://api.openai.com/v1/images/generations", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      const data = await apiRes.json();
+      if (apiRes.ok) {
+        sendJson(res, 200, { imageUrl: data.data?.[0]?.url || null, model: cfg.model });
+        return;
+      }
+      const errMsg = data.error?.message || "";
+      // If model not available, try next
+      if (errMsg.includes("does not exist") || errMsg.includes("model_not_found") || apiRes.status === 404) continue;
+      sendJson(res, 500, { error: errMsg || `OpenAI ${apiRes.status}` });
+      return;
+    } catch (e) {
+      if (attempts.indexOf(cfg) < attempts.length - 1) continue;
+      sendJson(res, 500, { error: e.message });
+      return;
+    }
   }
+  sendJson(res, 500, { error: "Generación de imágenes no disponible en este plan de OpenAI." });
 }
 
 async function handleAuthAdmin(req, res) {
