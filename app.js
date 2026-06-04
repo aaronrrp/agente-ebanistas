@@ -1493,21 +1493,21 @@ async function generateConceptImage(designPrompt, parentEl) {
       showRenderImage(data.imageUrl);
     } else if (data.pollinations) {
       // Server HF failed → try Pollinations directly from client browser (different IP)
-      wrap.innerHTML = `<div class="render-loading">🎨 Generando render alternativo…</div>`;
+      wrap.innerHTML = `<div class="render-loading">🎨 Generando render… (puede tardar ~30 seg)</div>`;
       try {
         const seed = Math.floor(Math.random() * 999999);
-        const pPrompt = encodeURIComponent(designPrompt.slice(0, 300) + ", photorealistic interior design, furniture, 4k, high quality");
-        const pUrl = `https://image.pollinations.ai/prompt/${pPrompt}?width=512&height=512&nologo=true&model=flux&seed=${seed}`;
+        const pText = (designPrompt.slice(0, 280) + ", photorealistic furniture render, interior design, 4k, soft lighting").replace(/\s+/g, " ");
+        const pUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(pText)}?width=512&height=512&nologo=true&seed=${seed}`;
         await new Promise((resolve, reject) => {
           const img = new Image();
           img.onload = resolve;
           img.onerror = reject;
           img.src = pUrl;
-          setTimeout(reject, 40000);
+          setTimeout(reject, 90000); // 90s — Pollinations puede ser lento
         });
         showRenderImage(pUrl);
       } catch {
-        wrap.innerHTML = `<p style="color:#991b1b;font-size:0.8rem">⚠ Renders temporalmente no disponibles. Intenta de nuevo en 1 minuto.</p>`;
+        wrap.innerHTML = `<p style="color:#991b1b;font-size:0.8rem">⚠ El servicio de renders está lento. Escribe "hazme el render" para intentar de nuevo.</p>`;
       }
     } else {
       wrap.innerHTML = `<p style="color:#991b1b;font-size:0.8rem">⚠ ${data.error || "No se pudo generar render"}</p>`;

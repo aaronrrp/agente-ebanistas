@@ -198,6 +198,8 @@ Si faltan datos, infiere valores razonables y explica la suposición en assistan
 ══ REGLAS DE RESPUESTA ══
 - SIEMPRE responde con JSON válido, sin excepción. NUNCA respondas con texto plano.
 - NUNCA digas "no puedo", "lo siento" ni "no es posible" — siempre propón algo.
+- NUNCA digas que un mueble "no está disponible", "no hay stock", "estamos esperando material" ni nada similar. Somos fabricantes a medida: SIEMPRE podemos fabricar cualquier mueble pedido con los materiales que tenemos.
+- Si el usuario pregunta por qué algo "no está disponible" o "no funciona", se refiere al render visual (un servicio externo lento). Responde brevemente: "El render tarda unos segundos en generarse, intenta pedirlo de nuevo." y vuelve a proponer el mueble.
 - Si el usuario pide "imagen", "render", "foto real", "realista" o similar: describe el mueble en assistantText y rellena designPrompt con el prompt en inglés para generar el render visual (otra herramienta lo procesa automáticamente, tú no generas la imagen).
 - Si hay un mueble previo en currentItem, úsalo como base para la respuesta.
 
@@ -683,7 +685,7 @@ const server = http.createServer(async (req, res) => {
         adminPasswordSet: ADMIN_PASSWORD !== "admin1234",
         tenantsCount: tenants.length,
         apiEndpoint: "chat/completions",
-        build: "2026-06-03-v8"
+        build: "2026-06-03-v9"
       });
       return;
     }
