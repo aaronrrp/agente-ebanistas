@@ -1497,3 +1497,9 @@ textarea {
 .item-spec { font-size: 0.78rem; color: #6B7280; margin: 3px 0 0; }
 .tiny-btn.danger { color: #DC2626; border-color: #FECACA; background: #FEF2F2; }
 .tiny-btn.danger:hover { background: #FEE2E2; }
+
+/* ── Editable cuts table — visual cues ───────────────────────────────── */
+.cuts-editable td { padding: 3px 4px; }
+.cuts-editable td:hover .cut-input,
+.cuts-editable .cut-input:focus { background: #FFFBEB; border-color: #F59E0B; }
+.cut-input { transition: background .15s, border-color .15s; }

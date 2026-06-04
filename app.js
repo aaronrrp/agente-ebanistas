@@ -1144,83 +1144,147 @@ function renderCutsPiecesTable() {
     </tr>`).join('');
 
   els.cutsOutput.innerHTML = `
+    <p style="font-size:.8rem;color:#6B7280;margin:0 0 8px">
+      ✏️ Haz clic en cualquier celda para editar. Los cambios se reflejan en el cálculo de láminas al instante.
+    </p>
     <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
       <button id="addCutPieceBtn" class="secondary-btn" type="button">＋ Agregar pieza</button>
       <button id="regenCutPiecesBtn" class="secondary-btn" type="button">↻ Regenerar desde módulos</button>
     </div>
     <div style="overflow-x:auto">
-      <table class="quote-table">
+      <table class="quote-table cuts-editable">
         <thead><tr><th>Mueble</th><th>Pieza</th><th>Ancho cm</th><th>Alto cm</th><th>Grosor</th><th>Canto</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
 }
 
+// ── FFDH 2D bin packing (First Fit Decreasing Height) by thickness ──────────
+function packPiecesFFDH(pieces, sheetW, sheetH, wastePct) {
+  const kerf = 0.3; // 3 mm saw kerf per cut (in cm)
+  const marginX = 2, marginY = 2; // sheet margin cm
+  const usableW = sheetW - marginX * 2;
+  const usableH = sheetH - marginY * 2;
+
+  // Sort by height desc, then width desc
+  const sorted = [...pieces].sort((a, b) => {
+    const dh = (Number(b.height)||1) - (Number(a.height)||1);
+    return dh !== 0 ? dh : (Number(b.width)||1) - (Number(a.width)||1);
+  });
+
+  const sheets = []; // { placements: [{piece,x,y,w,h}], shelves: [{y,h,usedW}] }
+
+  const tryPlace = (sheet, pw, ph) => {
+    for (const shelf of sheet.shelves) {
+      const remaining = usableW - shelf.usedW;
+      if (remaining >= pw + kerf && shelf.h >= ph) {
+        const x = marginX + shelf.usedW;
+        const y = marginY + shelf.y;
+        shelf.usedW += pw + kerf;
+        return { x, y };
+      }
+    }
+    // Try new shelf on this sheet
+    const nextY = sheet.shelves.reduce((s, sh) => s + sh.h + kerf, 0);
+    if (nextY + ph <= usableH && pw <= usableW) {
+      sheet.shelves.push({ y: nextY, h: ph, usedW: pw + kerf });
+      return { x: marginX, y: marginY + nextY };
+    }
+    return null;
+  };
+
+  sorted.forEach((piece, pi) => {
+    const pw = Math.max(1, Number(piece.width)  || 1);
+    const ph = Math.max(1, Number(piece.height) || 1);
+    let placed = false;
+    for (const sheet of sheets) {
+      const pos = tryPlace(sheet, pw, ph);
+      if (pos) { sheet.placements.push({ piece, ...pos, w: pw, h: ph }); placed = true; break; }
+    }
+    if (!placed) {
+      const sheet = { number: sheets.length + 1, shelves: [], placements: [] };
+      const pos = tryPlace(sheet, pw, ph);
+      if (pos) sheet.placements.push({ piece, ...pos, w: pw, h: ph });
+      sheets.push(sheet);
+    }
+  });
+  return sheets;
+}
+
 function recalcCutsLayout() {
   if (!els.cutsLayoutOutput) return;
   if (!state.editablePieces.length) { els.cutsLayoutOutput.innerHTML = ""; return; }
 
-  const sheetW    = Number(document.getElementById("sheetWidth")?.value  || 244);
-  const sheetH    = Number(document.getElementById("sheetHeight")?.value || 122);
-  const wastePct  = Number(document.getElementById("wastePercent")?.value || 12) / 100;
-  const usable    = sheetW * sheetH * (1 - wastePct);
+  const sheetW   = Number(document.getElementById("sheetWidth")?.value  || 244);
+  const sheetH   = Number(document.getElementById("sheetHeight")?.value || 122);
+  const wastePct = Number(document.getElementById("wastePercent")?.value || 12) / 100;
   const totalArea = state.editablePieces.reduce((s, p) => s + (Number(p.width)||0)*(Number(p.height)||0), 0);
 
-  // Simple first-fit bin packing
-  const sheets = [];
-  let cur = { number: 1, pieces: [], used: 0 };
+  // Group by thickness for separate sheet stacks
+  const byThickness = {};
   state.editablePieces.forEach(p => {
-    const area = (Number(p.width)||1) * (Number(p.height)||1);
-    if (cur.used + area > usable && cur.pieces.length) {
-      sheets.push(cur);
-      cur = { number: sheets.length + 1, pieces: [], used: 0 };
-    }
-    cur.pieces.push(p); cur.used += area;
+    const t = p.thickness || "18 mm";
+    if (!byThickness[t]) byThickness[t] = [];
+    byThickness[t].push(p);
   });
-  if (cur.pieces.length) sheets.push(cur);
 
-  const sheetCards = sheets.map(sh => {
-    const pct = Math.min(100, Math.round((sh.used / usable) * 100));
-    const cls = pct > 90 ? "full" : pct > 75 ? "warn" : "";
-    return `<div class="sheet-card">
-      <strong>Lámina ${sh.number}</strong>
-      <div class="util-bar-wrap"><div class="util-bar ${cls}" style="width:${pct}%"></div></div>
-      <span>${pct}% · ${sh.pieces.length} piezas · ${(sh.used/10000).toFixed(2)} m²</span>
-    </div>`;
-  }).join('');
+  const allSheetGroups = Object.entries(byThickness).map(([thickness, pieces]) => {
+    const sheets = packPiecesFFDH(pieces, sheetW, sheetH, wastePct);
+    return { thickness, sheets };
+  });
 
-  // SVG visual
-  const SW = 360, SH = 180;
-  const colors = ["#DBEAFE","#FEF3C7","#D1FAE5","#FCE7F3","#EDE9FE","#FEE2E2"];
-  const svgs = sheets.map(sh => {
-    let cx=5, cy=5, rowH=0;
-    const rects = sh.pieces.map((p, pi) => {
-      const pw = Math.max(24, Math.min(160, (Number(p.width)/sheetW)*(SW-10)));
-      const ph = Math.max(12, Math.min(70,  (Number(p.height)/sheetH)*(SH-10)));
-      if (cx+pw > SW-5) { cx=5; cy+=rowH+2; rowH=0; }
-      if (cy+ph > SH-5) return "";
-      rowH = Math.max(rowH, ph);
-      const r = `<rect x="${cx}" y="${cy}" width="${pw}" height="${ph}" fill="${colors[pi%colors.length]}" stroke="#9CA3AF" stroke-width="0.5" rx="2"/>
-        <text x="${cx+pw/2}" y="${cy+ph/2+4}" text-anchor="middle" font-size="6.5" fill="#374151">${(p.name||'').slice(0,13)}</text>`;
-      cx += pw+2; return r;
+  const totalSheets = allSheetGroups.reduce((s, g) => s + g.sheets.length, 0);
+
+  // Build cards + SVG per thickness group
+  const colors = ["#DBEAFE","#FEF3C7","#D1FAE5","#FCE7F3","#EDE9FE","#FEE2E2","#DCFCE7","#FFF7ED"];
+  const SW = 380, SH = 190;
+  const scale = x => (x / sheetW) * (SW - 4);
+  const scaleH = y => (y / sheetH) * (SH - 4);
+
+  const groupsHtml = allSheetGroups.map(({ thickness, sheets }) => {
+    const sheetCards = sheets.map((sh, si) => {
+      const usedArea = sh.placements.reduce((s, p) => s + p.w * p.h, 0);
+      const pct = Math.min(100, Math.round(usedArea / (sheetW * sheetH * (1 - wastePct)) * 100));
+      const cls = pct > 90 ? "full" : pct > 75 ? "warn" : "";
+      return `<div class="sheet-card">
+        <strong>Lámina ${sh.number} (${thickness})</strong>
+        <div class="util-bar-wrap"><div class="util-bar ${cls}" style="width:${pct}%"></div></div>
+        <span>${pct}% · ${sh.placements.length} piezas</span>
+      </div>`;
     }).join('');
-    return `<div style="display:inline-block;margin:.4rem">
-      <p style="font-size:.75rem;font-weight:600;margin:0 0 4px">Lámina ${sh.number}</p>
-      <svg width="${SW}" height="${SH}" style="border:1px solid #E5E7EB;border-radius:6px;background:#FAFAFA">${rects}</svg>
-    </div>`;
-  }).join('');
+
+    const svgs = sheets.map((sh, si) => {
+      const rects = sh.placements.map((pl, pi) => {
+        const rx = 2 + scale(pl.x);
+        const ry = 2 + scaleH(pl.y);
+        const rw = Math.max(8, scale(pl.w));
+        const rh = Math.max(5, scaleH(pl.h));
+        const label = (pl.piece.name || '').slice(0, 12);
+        return `<rect x="${rx.toFixed(1)}" y="${ry.toFixed(1)}" width="${rw.toFixed(1)}" height="${rh.toFixed(1)}"
+          fill="${colors[pi % colors.length]}" stroke="#6B7280" stroke-width="0.4" rx="1"/>
+          <text x="${(rx+rw/2).toFixed(1)}" y="${(ry+rh/2+3).toFixed(1)}" text-anchor="middle"
+            font-size="6" fill="#1F2937" overflow="hidden">${label}</text>`;
+      }).join('');
+      return `<div style="display:inline-block;margin:.3rem;vertical-align:top">
+        <p style="font-size:.72rem;font-weight:600;margin:0 0 3px">Lámina ${sh.number} — ${thickness}</p>
+        <svg width="${SW}" height="${SH}" style="border:1px solid #D1D5DB;border-radius:5px;background:#F9FAFB">${rects}</svg>
+      </div>`;
+    }).join('');
+
+    return `<h5 style="margin:10px 0 4px;color:#374151">Grosor: ${thickness} — ${sheets.length} lámina(s)</h5>
+      <div class="sheet-list">${sheetCards}</div>
+      <div style="overflow-x:auto;margin-top:6px">${svgs}</div>`;
+  }).join('<hr style="margin:12px 0;border-color:#E5E7EB">');
 
   els.cutsLayoutOutput.innerHTML = `
     <div class="cuts-summary" style="margin-top:14px">
       <article><span>Piezas</span><strong>${state.editablePieces.length}</strong></article>
-      <article><span>Láminas est.</span><strong>${sheets.length}</strong></article>
+      <article><span>Láminas totales</span><strong>${totalSheets}</strong></article>
       <article><span>Área total</span><strong>${(totalArea/10000).toFixed(2)} m²</strong></article>
       <article><span>Lámina</span><strong>${sheetW}×${sheetH} cm</strong></article>
     </div>
-    <h4 style="margin:12px 0 6px">Uso por lámina</h4>
-    <div class="sheet-list">${sheetCards}</div>
-    <h4 style="margin:12px 0 6px">Distribución visual</h4>
-    <div style="overflow-x:auto">${svgs}</div>`;
+    <h4 style="margin:14px 0 6px">Distribución por grosor</h4>
+    ${groupsHtml}`;
 }
 
 function exportCutsCSV() {
@@ -2104,10 +2168,16 @@ els.assistantOutput?.addEventListener("click", (event) => {
 
 els.addManualPiecesBtn.addEventListener("click", () => {
   const pieces = parseManualPieces(els.manualPiecesInput.value);
-  if (!pieces.length) return;
+  if (!pieces.length) { toast("Escribe al menos: nombre, ancho, alto (separados por coma)", "error"); return; }
   state.manualPieces = [...state.manualPieces, ...pieces];
   els.manualPiecesInput.value = "";
   renderManualPieces();
+  // Add directly to editable cuts table (no need to press "Calcular cortes")
+  const added = pieces.map(p => ({ ...p, id: p.id || crypto.randomUUID() }));
+  state.editablePieces = [...state.editablePieces, ...added];
+  renderCutsPiecesTable();
+  recalcCutsLayout();
+  toast(`${added.length} pieza(s) agregada(s) a la tabla ✓`);
 });
 
 els.manualPiecesList.addEventListener("click", (event) => {

@@ -189,26 +189,28 @@ function readBody(req) {
 
 // ── AI system prompt ────────────────────────────────────────────────────────
 const systemPrompt = `
-Eres un agente ebanista experto para empresas de muebles a la medida en América Latina.
-Especialidad: melamina hidrófuga, muebles de cocina, closets, vanities, centros de entretenimiento, cortes, cantos, bisagras, correderas y jaladores.
+Eres un asistente de inteligencia artificial de uso general, con especialización profunda en ebanistería y fabricación de muebles a la medida en América Latina.
+Puedes responder CUALQUIER pregunta: historia, ciencias, matemáticas, recetas, noticias, clima, consejos, programación, idiomas, negocios — lo que sea.
+Tienes acceso a búsqueda web para información actualizada. Úsala cuando el usuario pregunte algo que requiera datos recientes.
 
-Debes convertir instrucciones, fotos o bocetos en una propuesta técnica editable.
-Si faltan datos, infiere valores razonables y explica la suposición en assistantText.
+══ MODO DE RESPUESTA ══
 
-══ REGLAS DE RESPUESTA ══
-- SIEMPRE responde con JSON válido, sin excepción. NUNCA respondas con texto plano.
-- NUNCA digas "no puedo", "lo siento" ni "no es posible" — siempre propón algo.
-- NUNCA digas que un mueble "no está disponible", "no hay stock", "estamos esperando material" ni nada similar. Somos fabricantes a medida: SIEMPRE podemos fabricar cualquier mueble pedido con los materiales que tenemos.
-- Si el usuario pregunta por qué algo "no está disponible" o "no funciona", se refiere al render visual (un servicio externo lento). Responde brevemente: "El render tarda unos segundos en generarse, intenta pedirlo de nuevo." y vuelve a proponer el mueble.
-- Si el usuario pide "imagen", "render" o "foto": explica en assistantText que los renders visuales no están disponibles en este momento, pero ofrece la propuesta técnica completa del mueble.
-- Si hay un mueble previo en currentItem, úsalo como base para la respuesta.
-- En el campo "item", usa SIEMPRE las medidas exactas que pidió el cliente. NUNCA uses 120/90/55 si el cliente pidió otras medidas. Los valores del JSON schema son ejemplos, no valores por defecto.
+• Si el mensaje es sobre MUEBLES, cotización, cortes, materiales o ebanistería → responde en JSON con el schema de abajo.
+• Si el mensaje es CUALQUIER OTRA COSA (preguntas generales, curiosidades, la hora, noticias, etc.) → responde en texto natural en español, SIN JSON.
 
-══ ACCIONES (campo "actions") ══
-- Propuesta normal / primer contacto → ["fill_form"]
-- Usuario pide cotizar, precio, presupuesto, "agregar a cotización", "cuánto cuesta", "dame el precio" → ["fill_form", "add_to_quote"]
-- Usuario pide cortes, lista de cortes, "calcula los cortes", "necesito los cortes", "genera cortes", "tabla de cortes" → ["fill_form", "add_to_quote", "calculate_cuts"]
-- Siempre incluye "fill_form". Nunca uses acciones que no estén en esta lista.
+Para preguntas generales: sé conversacional, útil y directo. Responde completo. No digas que "no puedes" buscar información — tienes web search. Si no sabes algo exacto, dilo honestamente pero siempre intenta ayudar.
+
+══ CUANDO ES PREGUNTA DE MUEBLES — REGLAS ══
+- Responde con JSON válido usando el schema de abajo.
+- NUNCA digas que un mueble "no está disponible". Somos fabricantes a medida.
+- Usa las medidas EXACTAS que pidió el cliente. NUNCA uses 120/90/55 como default.
+- Si hay un mueble previo en currentItem, úsalo como base.
+- Si pide "imagen" o "render": di que los renders no están disponibles, pero da la propuesta técnica completa.
+
+══ ACCIONES (solo en respuestas de muebles) ══
+- Propuesta normal → ["fill_form"]
+- Pide cotizar, precio, presupuesto → ["fill_form", "add_to_quote"]
+- Pide cortes, despiece, tabla de cortes → ["fill_form", "add_to_quote", "calculate_cuts"]
 
 ══ REGLAS TÉCNICAS ══
 - Fondo interno/embutido: resta grosor melamina a profundidad de repisas y gavetas internas.
@@ -354,30 +356,42 @@ Responde SOLO JSON válido:
 // ── Route handlers ──────────────────────────────────────────────────────────
 
 async function callOpenAI(sysPrompt, userContent) {
-  // Convert from internal input_text/input_image format to Chat Completions format
-  const messages = [
-    { role: "system", content: sysPrompt },
-    { role: "user", content: userContent.map(c => {
+  // Use Responses API with web_search_preview for real-time web access
+  const inputMessages = [{
+    role: "user",
+    content: userContent.map(c => {
       if (c.type === "input_text") return { type: "text", text: c.text };
       if (c.type === "input_image") return {
         type: "image_url",
         image_url: { url: c.image_url, detail: c.detail || "high" }
       };
       return c;
-    })}
-  ];
+    })
+  }];
 
-  const apiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+  const apiRes = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model, messages, max_tokens: 2000 })
+    body: JSON.stringify({
+      model,
+      instructions: sysPrompt,
+      tools: [{ type: "web_search_preview" }],
+      input: inputMessages,
+      max_output_tokens: 2000
+    })
   });
   const data = await apiRes.json();
   if (!apiRes.ok) {
     console.error("[callOpenAI] error response:", JSON.stringify(data));
     throw new Error(data.error?.message || `OpenAI ${apiRes.status}`);
   }
-  const text = data.choices?.[0]?.message?.content || "";
+  // Extract text from Responses API output array
+  const text = (data.output || [])
+    .filter(o => o.type === "message")
+    .flatMap(o => o.content || [])
+    .filter(c => c.type === "output_text")
+    .map(c => c.text || "")
+    .join("").trim();
   return parseJson(text) || { assistantText: text };
 }
 
@@ -684,7 +698,7 @@ const server = http.createServer(async (req, res) => {
         adminPasswordSet: ADMIN_PASSWORD !== "admin1234",
         tenantsCount: tenants.length,
         apiEndpoint: "chat/completions",
-        build: "2026-06-04-v17"
+        build: "2026-06-04-v18"
       });
       return;
     }
