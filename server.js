@@ -90,6 +90,40 @@ function saveTenants(list) {
 
 let tenants = loadTenants();
 
+// ── Prices ──────────────────────────────────────────────────────────────────
+const PRICES_FILE = path.join(__dirname, "prices.json");
+
+function defaultPrices() {
+  return {
+    melamina_std: 45,     // Lámina estándar 2440×1220mm
+    melamina_lg: 85,      // Lámina grande 2750×1830mm
+    canto_pvc: 0.80,      // Canto PVC 22mm por metro lineal
+    canto_grueso: 2.20,   // Canto PVC grueso 2mm por metro
+    backing_m2: 12,       // Fondo/backing por m²
+    bisagra_std: 3.50,    // Bisagra estándar por unidad
+    bisagra_sc: 7.00,     // Bisagra cierre suave por unidad
+    corredera_std: 18,    // Corredera telescópica estándar por par
+    corredera_sc: 32,     // Corredera cierre suave por par
+    jalador_chico: 7,     // Jalador 128mm por unidad
+    jalador_grande: 14,   // Jalador 320mm por unidad
+    jalador_premium: 26,  // Jalador inox premium por unidad
+    install_hour: 25,     // Mano de obra instalación por hora
+    transport_base: 30,   // Transporte base (primer viaje)
+    transport_km: 0.50    // Transporte por km adicional
+  };
+}
+
+function loadPrices() {
+  try { return { ...defaultPrices(), ...JSON.parse(fs.readFileSync(PRICES_FILE, "utf-8")) }; }
+  catch { return defaultPrices(); }
+}
+
+function savePrices(p) {
+  try { fs.writeFileSync(PRICES_FILE, JSON.stringify(p, null, 2)); } catch {}
+}
+
+let prices = loadPrices();
+
 // ── Admin sessions ──────────────────────────────────────────────────────────
 const adminSessions = new Map();
 const SESSION_TTL = 8 * 60 * 60 * 1000; // 8 hours
@@ -329,6 +363,7 @@ async function handleAi(req, res) {
   }
   const body = await readBody(req);
   const payload = body ? JSON.parse(body) : {};
+  const pricesBlock = `\n══ PRECIOS ACTUALES (en USD) ══\nLámina melamina estándar 2440×1220: $${prices.melamina_std}\nLámina melamina grande 2750×1830: $${prices.melamina_lg}\nCanto PVC 22mm/metro: $${prices.canto_pvc}\nCanto grueso 2mm/metro: $${prices.canto_grueso}\nFondo/backing por m²: $${prices.backing_m2}\nBisagra estándar: $${prices.bisagra_std}/un\nBisagra cierre suave: $${prices.bisagra_sc}/un\nCorredera estándar: $${prices.corredera_std}/par\nCorredera cierre suave: $${prices.corredera_sc}/par\nJalador 128mm: $${prices.jalador_chico}/un\nJalador 320mm: $${prices.jalador_grande}/un\nJalador premium inox: $${prices.jalador_premium}/un\nInstalación: $${prices.install_hour}/hora\nTransporte base: $${prices.transport_base}`;
   const content = [{
     type: "input_text",
     text: JSON.stringify({ message: payload.message || "", tenant: payload.tenant || {}, currentItem: payload.currentItem || null })
@@ -337,7 +372,7 @@ async function handleAi(req, res) {
     content.push({ type: "input_image", image_url: payload.imageData, detail: "high" });
   }
   try {
-    const parsed = await callOpenAI(systemPrompt, content);
+    const parsed = await callOpenAI(systemPrompt + pricesBlock, content);
     sendJson(res, 200, normalizeAi(parsed, parsed?.assistantText));
   } catch (e) {
     sendJson(res, 500, { error: e.message });
@@ -594,6 +629,18 @@ const server = http.createServer(async (req, res) => {
     if (method === "POST" && p === "/api/auth/admin")  { await handleAuthAdmin(req, res); return; }
     if (method === "GET"  && p === "/api/auth/check")  { handleAuthCheck(req, res); return; }
     if (method === "POST" && p === "/api/auth/logout") { await handleAuthLogout(req, res); return; }
+
+    // Prices (GET public, PUT admin)
+    if (method === "GET" && p === "/api/prices") { sendJson(res, 200, prices); return; }
+    if (method === "PUT" && p === "/api/admin/prices") {
+      if (!requireAdmin(req, res)) return;
+      const body = await readBody(req);
+      const incoming = body ? JSON.parse(body) : {};
+      prices = { ...defaultPrices(), ...incoming };
+      savePrices(prices);
+      sendJson(res, 200, prices);
+      return;
+    }
 
     // Tenant by code (public)
     if (method === "GET" && p === "/api/tenant-by-code") { handleTenantByCode(req, res); return; }

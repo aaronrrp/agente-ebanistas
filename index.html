@@ -102,6 +102,51 @@
             <div id="tenantList" class="tenant-list"></div>
           </section>
         </div>
+        <!-- Prices section -->
+        <section class="panel" style="margin-top:1.5rem">
+          <details>
+            <summary style="cursor:pointer;font-weight:600;font-size:1rem;padding:.5rem 0;list-style:none;display:flex;align-items:center;gap:.5rem">
+              <span>💲</span> Precios de mercado
+              <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:.5rem">El IA usa estos valores al cotizar</span>
+            </summary>
+            <div style="padding-top:1rem">
+              <div class="prices-grid">
+                <div class="price-group">
+                  <h4 class="price-group-title">🪵 Melamina y cantos</h4>
+                  <label class="price-row"><span>Lámina 2440×1220mm</span><span class="price-input-wrap">$<input id="price_melamina_std" type="number" step="0.01" min="0" class="price-input"></span></label>
+                  <label class="price-row"><span>Lámina 2750×1830mm</span><span class="price-input-wrap">$<input id="price_melamina_lg" type="number" step="0.01" min="0" class="price-input"></span></label>
+                  <label class="price-row"><span>Canto PVC 22mm /metro</span><span class="price-input-wrap">$<input id="price_canto_pvc" type="number" step="0.01" min="0" class="price-input"></span></label>
+                  <label class="price-row"><span>Canto grueso 2mm /metro</span><span class="price-input-wrap">$<input id="price_canto_grueso" type="number" step="0.01" min="0" class="price-input"></span></label>
+                  <label class="price-row"><span>Fondo/backing /m²</span><span class="price-input-wrap">$<input id="price_backing_m2" type="number" step="0.01" min="0" class="price-input"></span></label>
+                </div>
+                <div class="price-group">
+                  <h4 class="price-group-title">🔩 Bisagras y correderas</h4>
+                  <label class="price-row"><span>Bisagra estándar /un</span><span class="price-input-wrap">$<input id="price_bisagra_std" type="number" step="0.01" min="0" class="price-input"></span></label>
+                  <label class="price-row"><span>Bisagra cierre suave /un</span><span class="price-input-wrap">$<input id="price_bisagra_sc" type="number" step="0.01" min="0" class="price-input"></span></label>
+                  <label class="price-row"><span>Corredera estándar /par</span><span class="price-input-wrap">$<input id="price_corredera_std" type="number" step="0.01" min="0" class="price-input"></span></label>
+                  <label class="price-row"><span>Corredera cierre suave /par</span><span class="price-input-wrap">$<input id="price_corredera_sc" type="number" step="0.01" min="0" class="price-input"></span></label>
+                </div>
+                <div class="price-group">
+                  <h4 class="price-group-title">🪝 Jaladores</h4>
+                  <label class="price-row"><span>Jalador 128mm /un</span><span class="price-input-wrap">$<input id="price_jalador_chico" type="number" step="0.01" min="0" class="price-input"></span></label>
+                  <label class="price-row"><span>Jalador 320mm /un</span><span class="price-input-wrap">$<input id="price_jalador_grande" type="number" step="0.01" min="0" class="price-input"></span></label>
+                  <label class="price-row"><span>Jalador inox premium /un</span><span class="price-input-wrap">$<input id="price_jalador_premium" type="number" step="0.01" min="0" class="price-input"></span></label>
+                </div>
+                <div class="price-group">
+                  <h4 class="price-group-title">🚚 Mano de obra y transporte</h4>
+                  <label class="price-row"><span>Instalación /hora</span><span class="price-input-wrap">$<input id="price_install_hour" type="number" step="0.01" min="0" class="price-input"></span></label>
+                  <label class="price-row"><span>Transporte base</span><span class="price-input-wrap">$<input id="price_transport_base" type="number" step="0.01" min="0" class="price-input"></span></label>
+                  <label class="price-row"><span>Transporte /km adicional</span><span class="price-input-wrap">$<input id="price_transport_km" type="number" step="0.01" min="0" class="price-input"></span></label>
+                </div>
+              </div>
+              <div style="display:flex;gap:.75rem;margin-top:1rem">
+                <button id="savePricesBtn" class="primary-btn" type="button">Guardar precios</button>
+                <button id="resetPricesBtn" class="secondary-btn" type="button">Restaurar defecto</button>
+              </div>
+            </div>
+          </details>
+        </section>
+
         <!-- Hidden form elements kept for compatibility with renderTenantForm -->
         <form id="tenantForm" style="display:none">
           <input type="hidden" id="tenantId">

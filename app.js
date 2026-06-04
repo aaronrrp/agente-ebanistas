@@ -126,6 +126,15 @@ const edgeFactor = {
   "Canto premium en todo el mueble": 1.25
 };
 
+const defaultGlobalPrices = {
+  melamina_std: 45, melamina_lg: 85,
+  canto_pvc: 0.80, canto_grueso: 2.20, backing_m2: 12,
+  bisagra_std: 3.50, bisagra_sc: 7.00,
+  corredera_std: 18, corredera_sc: 32,
+  jalador_chico: 7, jalador_grande: 14, jalador_premium: 26,
+  install_hour: 25, transport_base: 30, transport_km: 0.50
+};
+
 const state = {
   tenants: load("tm_tenants", defaultTenants),
   quotes: load("tm_quotes", []),
@@ -135,7 +144,8 @@ const state = {
   currentImageData: null,
   lastDesignItems: [],
   editingItemId: null,
-  aiBackendAvailable: false
+  aiBackendAvailable: false,
+  globalPrices: load("tm_global_prices", defaultGlobalPrices)
 };
 
 if (!state.selectedTenantId || !state.tenants.some((tenant) => tenant.id === state.selectedTenantId)) {
@@ -224,6 +234,52 @@ function save() {
   localStorage.setItem("tm_tenants", JSON.stringify(state.tenants));
   localStorage.setItem("tm_quotes", JSON.stringify(state.quotes));
   localStorage.setItem("tm_selected_tenant", state.selectedTenantId);
+}
+
+// ── Global prices ────────────────────────────────────────────────────────────
+async function loadGlobalPrices() {
+  try {
+    const res = await fetch("/api/prices");
+    if (res.ok) {
+      const data = await res.json();
+      state.globalPrices = { ...defaultGlobalPrices, ...data };
+      localStorage.setItem("tm_global_prices", JSON.stringify(state.globalPrices));
+      renderPricesForm();
+    }
+  } catch {}
+}
+
+async function saveGlobalPrices() {
+  localStorage.setItem("tm_global_prices", JSON.stringify(state.globalPrices));
+  if (!AUTH.token) return;
+  try {
+    await fetch("/api/admin/prices", {
+      method: "PUT",
+      headers: adminApiHeader(),
+      body: JSON.stringify(state.globalPrices)
+    });
+  } catch {}
+}
+
+function renderPricesForm() {
+  const fields = [
+    ["melamina_std","melamina_lg","canto_pvc","canto_grueso","backing_m2"],
+    ["bisagra_std","bisagra_sc","corredera_std","corredera_sc"],
+    ["jalador_chico","jalador_grande","jalador_premium"],
+    ["install_hour","transport_base","transport_km"]
+  ].flat();
+  fields.forEach(k => {
+    const el = document.getElementById(`price_${k}`);
+    if (el) el.value = state.globalPrices[k] ?? defaultGlobalPrices[k];
+  });
+}
+
+function collectPricesFromForm() {
+  const keys = Object.keys(defaultGlobalPrices);
+  keys.forEach(k => {
+    const el = document.getElementById(`price_${k}`);
+    if (el) state.globalPrices[k] = parseFloat(el.value) || defaultGlobalPrices[k];
+  });
 }
 
 function money(value) {
@@ -469,7 +525,9 @@ function getTenantLink(tenant) {
     installBase: tenant.installBase || 75, transportBase: tenant.transportBase || 30,
     materials: tenant.materials || "", terms: tenant.terms || "", accessCode: tenant.accessCode
   };
-  const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(minimal))));
+  // URL-safe base64: + → - / → _ remove = padding (avoids corruption when pasted in URLs)
+  const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(minimal))))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
   return `${window.location.origin}/?code=${tenant.accessCode}&d=${encoded}`;
 }
 
@@ -2025,8 +2083,9 @@ document.getElementById("loginAdminBtn")?.addEventListener("click", async () => 
   showApp();
   showView("adminView");
 
-  // Sync tenants from server
+  // Sync tenants and prices from server
   syncTenantsFromServer();
+  loadGlobalPrices();
 });
 
 // ── Logout ─────────────────────────────────────────────────────────────────
@@ -2144,7 +2203,10 @@ async function tryAutoLogin() {
     const urlData = params.get("d");
     if (urlData) {
       try {
-        const decoded = JSON.parse(decodeURIComponent(escape(atob(urlData))));
+        // Restore URL-safe base64 back to standard base64 before decoding
+        const b64std = urlData.replace(/-/g, '+').replace(/_/g, '/');
+        const padded = b64std + '=='.slice(0, (4 - b64std.length % 4) % 4);
+        const decoded = JSON.parse(decodeURIComponent(escape(atob(padded))));
         const today = new Date().toISOString().slice(0, 10);
         if (decoded.accessCode === urlCode) {
           if (decoded.status !== "active" || decoded.expiresAt < today) {
@@ -2199,6 +2261,7 @@ async function tryAutoLogin() {
           showApp();
           showView("adminView");
           syncTenantsFromServer();
+          loadGlobalPrices();
           return;
         }
       } catch {}
@@ -2226,6 +2289,19 @@ async function tryAutoLogin() {
   // 3. No valid session → show login
   showLogin();
 }
+
+// ── Prices editor ─────────────────────────────────────────────────────────
+document.getElementById("savePricesBtn")?.addEventListener("click", async () => {
+  collectPricesFromForm();
+  await saveGlobalPrices();
+  toast("Precios guardados ✓");
+});
+
+document.getElementById("resetPricesBtn")?.addEventListener("click", () => {
+  state.globalPrices = { ...defaultGlobalPrices };
+  renderPricesForm();
+  toast("Precios restablecidos a valores por defecto");
+});
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────
 tryAutoLogin();
