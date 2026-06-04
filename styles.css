@@ -736,10 +736,16 @@ textarea {
   border: 1px solid #fca5a5;
 }
 
+.ai-stage-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .image-preview,
-.mock-3d {
+.dalle-preview {
   display: grid;
-  min-height: 240px;
+  min-height: 220px;
   place-items: center;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -747,7 +753,27 @@ textarea {
   background: var(--surface-soft);
   color: var(--muted);
   text-align: center;
+  font-size: 0.85rem;
+  padding: 8px;
 }
+
+.dalle-preview {
+  background: linear-gradient(135deg, #f3f0ff, #faf5ff);
+  border-color: #c4b5fd;
+  color: #7c3aed;
+}
+
+.clear-img-btn {
+  align-self: flex-end;
+  padding: 3px 10px;
+  font-size: 0.75rem;
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.clear-img-btn:hover { background: #fca5a5; }
 
 .image-preview img {
   width: 100%;

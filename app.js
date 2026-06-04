@@ -1449,11 +1449,8 @@ function buildLocalAssistantPlan(message) {
 
 // ── Generate concept image with DALL-E 3 ────────────────────────────────────
 async function generateConceptImage(designPrompt) {
-  const outputEl = document.getElementById("assistantOutput");
-  const imgWrap = document.createElement("div");
-  imgWrap.className = "concept-image-wrap";
-  imgWrap.innerHTML = `<div class="concept-img-loading">🎨 Generando render del diseño con DALL-E… (15–25 seg)</div>`;
-  if (outputEl) outputEl.prepend(imgWrap);
+  const dalleBox = document.getElementById("dallePreview");
+  if (dalleBox) dalleBox.innerHTML = `<div class="concept-img-loading">🎨 Generando render… 15–25 seg</div>`;
 
   try {
     const res = await fetch("/api/generate-image", {
@@ -1463,17 +1460,16 @@ async function generateConceptImage(designPrompt) {
     });
     const data = await res.json();
     if (data.imageUrl) {
-      imgWrap.innerHTML = `
-        <p class="concept-img-label">✨ Imagen conceptual generada por IA</p>
-        <img src="${data.imageUrl}" alt="Diseño conceptual" class="concept-img"
+      if (dalleBox) dalleBox.innerHTML = `
+        <img src="${data.imageUrl}" alt="Diseño conceptual" style="width:100%;border-radius:8px;cursor:zoom-in"
              onclick="window.open(this.src,'_blank')" title="Clic para ampliar">
-        <p class="concept-img-hint">Clic en la imagen para verla completa · Esto es un render conceptual, no la foto real del espacio</p>
+        <p style="font-size:0.7rem;color:#888;margin:4px 0 0">✨ Render conceptual · clic para ampliar</p>
       `;
     } else {
-      imgWrap.innerHTML = `<p class="muted small">⚠ No se pudo generar imagen visual: ${data.error || "verifica tu OPENAI_API_KEY en Render"}</p>`;
+      if (dalleBox) dalleBox.innerHTML = `<p class="muted small">⚠ ${data.error || "No se pudo generar render"}</p>`;
     }
   } catch {
-    imgWrap.innerHTML = `<p class="muted small">⚠ No se pudo generar imagen conceptual.</p>`;
+    if (dalleBox) dalleBox.innerHTML = `<p class="muted small">⚠ No se pudo generar render.</p>`;
   }
 }
 
@@ -1791,6 +1787,8 @@ els.designImage.addEventListener("change", (event) => {
   reader.onload = () => {
     state.currentImageData = reader.result;
     els.imagePreview.innerHTML = `<img src="${reader.result}" alt="Foto del espacio" style="width:100%;border-radius:8px;cursor:zoom-in" onclick="this.style.maxHeight=this.style.maxHeight?'':'none'">`;
+    const clearBtn = document.getElementById("clearImageBtn");
+    if (clearBtn) clearBtn.style.display = "";
 
     // Show the analyze button prominently
     const analyzeBtn = document.getElementById("analyzeSpaceBtn");
@@ -1802,6 +1800,15 @@ els.designImage.addEventListener("change", (event) => {
     appendChat("assistant", "📸 Foto cargada. Presiona \"🔍 Analizar espacio\" para que detecte qué muebles quedarían bien aquí, o escríbeme lo que necesitas.");
   };
   reader.readAsDataURL(file);
+});
+
+document.getElementById("clearImageBtn")?.addEventListener("click", () => {
+  state.currentImageData = null;
+  els.imagePreview.innerHTML = "📷 Sube una foto del espacio";
+  const clearBtn = document.getElementById("clearImageBtn");
+  if (clearBtn) clearBtn.style.display = "none";
+  const analyzeBtn = document.getElementById("analyzeSpaceBtn");
+  if (analyzeBtn) { analyzeBtn.classList.add("hidden"); analyzeBtn.classList.remove("pulse"); }
 });
 
 document.getElementById("analyzeSpaceBtn")?.addEventListener("click", () => sendToAI());

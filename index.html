@@ -239,14 +239,12 @@
           <section class="panel">
             <h3>Imagen y propuesta</h3>
             <div class="ai-stage">
-              <div id="imagePreview" class="image-preview">Sube una foto o boceto</div>
-              <div class="mock-3d" aria-label="Vista 3D demo">
-                <div class="cabinet-3d">
-                  <span class="door-a"></span>
-                  <span class="door-b"></span>
-                  <span class="drawer-a"></span>
-                  <span class="shelf-a"></span>
-                </div>
+              <div class="ai-stage-box">
+                <div id="imagePreview" class="image-preview">📷 Sube una foto del espacio</div>
+                <button id="clearImageBtn" class="clear-img-btn" style="display:none" title="Limpiar imagen">✕ Limpiar</button>
+              </div>
+              <div class="ai-stage-box">
+                <div id="dallePreview" class="image-preview dalle-preview">🎨 Aquí aparecerá el render IA</div>
               </div>
             </div>
             <div id="assistantOutput" class="design-output">

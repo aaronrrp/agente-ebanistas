@@ -236,7 +236,8 @@ Responde SOLO JSON válido:
     "color": "RH01|RH10|RH15|RH20|RH30|RH35|RH40|RH50",
     "notes": "detalle técnico",
     "manualPrice": 0
-  }
+  },
+  "designPrompt": "English DALL-E 3 prompt under 900 chars for a photorealistic interior design render of this specific furniture inside a beautiful room. Include: furniture type, melamine color and finish, approximate dimensions, room context (kitchen/bedroom/etc), lighting style. Example: 'Photorealistic modern kitchen, white melamine base cabinets 240cm wide x 90cm tall, soft-close doors, polished concrete countertop, warm pendant lighting, high quality interior design render'"
 }
 `.trim();
 
@@ -262,7 +263,8 @@ function normalizeAi(payload, fallback) {
     source: "openai",
     assistantText: payload?.assistantText || fallback || "Propuesta generada.",
     actions: actions.length ? actions : ["fill_form"],
-    item: payload?.item || null
+    item: payload?.item || null,
+    designPrompt: payload?.designPrompt || null
   };
 }
 
