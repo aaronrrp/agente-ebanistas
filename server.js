@@ -199,6 +199,7 @@ Tienes acceso a búsqueda web para información actualizada. Úsala cuando el us
 • Si el mensaje es CUALQUIER OTRA COSA (preguntas generales, curiosidades, la hora, noticias, etc.) → responde en texto natural en español, SIN JSON.
 
 Para preguntas generales: sé conversacional, útil y directo. Responde completo. No digas que "no puedes" buscar información — tienes web search. Si no sabes algo exacto, dilo honestamente pero siempre intenta ayudar.
+IMPORTANTE sobre la hora: NO puedes saber la hora exacta actual — no tienes reloj en tiempo real. Si te preguntan "qué hora es", responde honestamente: "No tengo acceso a la hora en tiempo real — consulta el reloj de tu dispositivo. Lo que sí puedo decirte es que Panamá usa UTC-5 todo el año (sin horario de verano)."
 
 ══ CUANDO ES PREGUNTA DE MUEBLES — REGLAS ══
 - Responde con JSON válido usando el schema de abajo.
@@ -400,15 +401,26 @@ async function handleAi(req, res) {
   const body = await readBody(req);
   const payload = body ? JSON.parse(body) : {};
   const pricesBlock = `\n══ PRECIOS ACTUALES (en USD) ══\nLámina melamina estándar 2440×1220: $${prices.melamina_std}\nLámina melamina grande 2750×1830: $${prices.melamina_lg}\nCanto PVC 22mm/metro: $${prices.canto_pvc}\nCanto grueso 2mm/metro: $${prices.canto_grueso}\nFondo/backing por m²: $${prices.backing_m2}\nBisagra estándar: $${prices.bisagra_std}/un\nBisagra cierre suave: $${prices.bisagra_sc}/un\nCorredera estándar: $${prices.corredera_std}/par\nCorredera cierre suave: $${prices.corredera_sc}/par\nJalador 128mm: $${prices.jalador_chico}/un\nJalador 320mm: $${prices.jalador_grande}/un\nJalador premium inox: $${prices.jalador_premium}/un\nInstalación: $${prices.install_hour}/hora\nTransporte base: $${prices.transport_base}`;
+
+  // Build conversation history context block
+  const history = Array.isArray(payload.history) ? payload.history.slice(-12) : [];
+  let historyBlock = "";
+  if (history.length > 0) {
+    const lines = history.map(h =>
+      `${h.role === "user" ? "Usuario" : "Asistente"}: ${String(h.text || "").slice(0, 500)}`
+    ).join("\n");
+    historyBlock = `\n\n══ CONVERSACIÓN ANTERIOR (contexto) ══\n${lines}\n══ FIN CONTEXTO ══`;
+  }
+
   const content = [{
     type: "input_text",
     text: JSON.stringify({ message: payload.message || "", tenant: payload.tenant || {}, currentItem: payload.currentItem || null })
   }];
   if (typeof payload.imageData === "string" && payload.imageData.startsWith("data:image/")) {
-    content.push({ type: "input_image", image_url: payload.imageData, detail: "high" });
+    content.push({ type: "input_image", image_url: payload.imageData });
   }
   try {
-    const parsed = await callOpenAI(systemPrompt + pricesBlock, content);
+    const parsed = await callOpenAI(systemPrompt + pricesBlock + historyBlock, content);
     sendJson(res, 200, normalizeAi(parsed, parsed?.assistantText));
   } catch (e) {
     sendJson(res, 500, { error: e.message });
@@ -695,7 +707,7 @@ const server = http.createServer(async (req, res) => {
         adminPasswordSet: ADMIN_PASSWORD !== "admin1234",
         tenantsCount: tenants.length,
         apiEndpoint: "chat/completions",
-        build: "2026-06-04-v18b"
+        build: "2026-06-04-v19"
       });
       return;
     }

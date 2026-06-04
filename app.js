@@ -146,7 +146,8 @@ const state = {
   lastDesignItems: [],
   editingItemId: null,
   aiBackendAvailable: false,
-  globalPrices: load("tm_global_prices", defaultGlobalPrices)
+  globalPrices: load("tm_global_prices", defaultGlobalPrices),
+  chatHistory: []           // conversation memory — last N turns for AI context
 };
 
 if (!state.selectedTenantId || !state.tenants.some((tenant) => tenant.id === state.selectedTenantId)) {
@@ -1349,9 +1350,11 @@ async function sendToAI() {
 
   try {
     const endpoint = hasImage ? "/api/analyze-space" : "/api/ebanista-ai";
+    // Send last 6 turns (12 messages) as conversation context
+    const recentHistory = state.chatHistory.slice(-12);
     const body = hasImage
       ? { message: message || "Analiza este espacio y propón muebles de melamina.", imageData: imgDataForRequest }
-      : { message, tenant: currentTenant(), currentItem: state.lastDesignItems[0] || null };
+      : { message, tenant: currentTenant(), currentItem: state.lastDesignItems[0] || null, history: recentHistory };
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 55000);
@@ -1370,7 +1373,15 @@ async function sendToAI() {
       return;
     }
 
-    pending.textContent = data.assistantText || "Propuesta generada.";
+    const assistantReply = data.assistantText || "Propuesta generada.";
+    pending.textContent = assistantReply;
+
+    // Update conversation memory (max 20 entries = 10 turns)
+    if (!hasImage && message) {
+      state.chatHistory.push({ role: "user", text: message });
+      state.chatHistory.push({ role: "assistant", text: assistantReply });
+      if (state.chatHistory.length > 20) state.chatHistory = state.chatHistory.slice(-20);
+    }
 
     const items = data.items?.length ? data.items : (data.item ? [data.item] : []);
     if (items.length > 0) {
