@@ -200,10 +200,9 @@
       <section id="designerView" class="view">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">ChatGPT ebanista</p>
-            <h2>Mini chat para diseño, imagen, bocetos y propuesta técnica</h2>
+            <p class="eyebrow">Diseñador IA</p>
+            <h2>Diseña tu mueble con inteligencia artificial</h2>
           </div>
-          <button id="sendDesignToQuoteBtn" class="secondary-btn" type="button">Enviar desglose a cotización</button>
         </div>
 
         <div id="designerLock" class="lock-panel hidden">
@@ -211,46 +210,24 @@
           <p>La suscripción de esta empresa no está activa. Reactiva la cuenta para usar diseño IA.</p>
         </div>
 
-        <div id="designerWorkspace" class="content-grid designer-grid">
-          <section class="panel">
-            <h3>Asistente ebanista</h3>
-            <div id="aiConnectionStatus" class="ai-status local">Modo local activo</div>
-            <label>Imagen de referencia
-              <input id="designImage" type="file" accept="image/*">
+        <div id="designerWorkspace" class="designer-chat-wrap">
+          <div id="aiConnectionStatus" class="ai-status local">Verificando conexión…</div>
+          <div id="chatMessages" class="chat-thread">
+            <div class="chat-bubble assistant">
+              👋 ¡Hola! Cuéntame qué mueble necesitas — tipo, medidas, color y cuarto. Te preparo el diseño técnico con render visual.
+            </div>
+          </div>
+          <div class="chat-input-bar">
+            <label class="img-attach-btn" title="Subir foto del espacio">
+              📷
+              <input id="designImage" type="file" accept="image/*" style="display:none">
             </label>
-            <button id="analyzeSpaceBtn" class="primary-btn analyze-space-btn hidden" type="button">
-              🔍 Analizar espacio y proponer muebles
-            </button>
-            <div id="chatMessages" class="chat-messages">
-              <div class="chat-bubble assistant">
-                Dame una foto, boceto o medidas y preparo diseño técnico, cotización y cortes editables.
-              </div>
+            <div id="imgThumb" class="img-thumb" style="display:none">
+              <button id="clearImageBtn" class="img-thumb-remove" title="Quitar foto">✕</button>
             </div>
-            <label>Mensaje
-              <textarea id="chatInput" rows="5" placeholder="Ejemplo: crea un mueble de 30 ancho, 90 alto, 55 profundidad, 2 puertas externas, 1 repisa interna, fondo interno, sin jaladores, cotiza y calcula cortes."></textarea>
-            </label>
-            <div class="button-row">
-              <button id="sendChatBtn" class="primary-btn" type="button">Generar con IA</button>
-              <button id="enhanceImageBtn" class="secondary-btn" type="button">Mejorar imagen</button>
-              <button id="mock3dBtn" class="secondary-btn" type="button">Crear 3D conceptual</button>
-            </div>
-          </section>
-
-          <section class="panel">
-            <h3>Imagen y propuesta</h3>
-            <div class="ai-stage">
-              <div class="ai-stage-box">
-                <div id="imagePreview" class="image-preview">📷 Sube una foto del espacio</div>
-                <button id="clearImageBtn" class="clear-img-btn" style="display:none" title="Limpiar imagen">✕ Limpiar</button>
-              </div>
-              <div class="ai-stage-box">
-                <div id="dallePreview" class="image-preview dalle-preview">🎨 Aquí aparecerá el render IA</div>
-              </div>
-            </div>
-            <div id="assistantOutput" class="design-output">
-              <p class="muted">Aquí aparecerán mejoras de imagen, propuestas técnicas y muebles listos para enviar a cotización.</p>
-            </div>
-          </section>
+            <textarea id="chatInput" rows="2" placeholder="Ej: closet 200×60×55 cm, melamina blanca, 4 puertas con cierre suave…"></textarea>
+            <button id="sendChatBtn" class="chat-send-btn" type="button">↑</button>
+          </div>
         </div>
       </section>
 

@@ -215,7 +215,7 @@ RH30 Nogal Natural | RH35 Roble Arena | RH40 Wengué | RH50 Cerezo.
 
 Responde SOLO JSON válido:
 {
-  "assistantText": "respuesta corta en español",
+  "assistantText": "2–4 oraciones en español natural y amigable: describe el mueble propuesto como lo haría un experto ebanista al cliente, menciona dimensiones, color y precio estimado aproximado",
   "actions": ["fill_form"],
   "item": {
     "name": "Mueble propuesto",
@@ -436,8 +436,7 @@ async function handleGenerateImage(req, res) {
         prompt: prompt.slice(0, 900),
         n: 1,
         size: "1024x1024",
-        quality: "standard",
-        response_format: "url"
+        quality: "standard"
       })
     });
     const data = await apiRes.json();

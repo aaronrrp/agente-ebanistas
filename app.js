@@ -192,11 +192,11 @@ const els = {
   chatMessages: document.getElementById("chatMessages"),
   chatInput: document.getElementById("chatInput"),
   sendChatBtn: document.getElementById("sendChatBtn"),
-  enhanceImageBtn: document.getElementById("enhanceImageBtn"),
-  mock3dBtn: document.getElementById("mock3dBtn"),
-  imagePreview: document.getElementById("imagePreview"),
-  assistantOutput: document.getElementById("assistantOutput"),
-  sendDesignToQuoteBtn: document.getElementById("sendDesignToQuoteBtn"),
+  enhanceImageBtn: null,
+  mock3dBtn: null,
+  imagePreview: null,
+  assistantOutput: null,
+  sendDesignToQuoteBtn: null,
   quoteLock: document.getElementById("quoteLock"),
   quoteWorkspace: document.getElementById("quoteWorkspace"),
   quoteForm: document.getElementById("quoteForm"),
@@ -1209,76 +1209,80 @@ async function sendToAI() {
   const hasImage = Boolean(state.currentImageData);
 
   if (!message && !hasImage) {
-    appendChat("assistant", "⚠️ Escribe un mensaje o sube una imagen primero.");
+    appendChat("assistant", "⚠️ Escribe un mensaje o sube una foto primero.");
     return;
   }
 
-  if (message) appendChat("user", message);
-  if (hasImage && !message) appendChat("user", "📷 (imagen enviada)");
+  // User bubble — show thumbnail if image attached
+  if (hasImage) {
+    const userBubble = document.createElement("div");
+    userBubble.className = "chat-bubble user";
+    if (message) { const t = document.createElement("span"); t.textContent = message; userBubble.appendChild(t); }
+    const img = document.createElement("img");
+    img.src = state.currentImageData;
+    img.style.cssText = "display:block;max-width:180px;border-radius:8px;margin-top:6px";
+    userBubble.appendChild(img);
+    els.chatMessages.appendChild(userBubble);
+  } else {
+    appendChat("user", message);
+  }
+
   els.chatInput.value = "";
+  const imgDataForRequest = state.currentImageData;
+  clearImageState();
 
   const pending = appendChat("assistant", hasImage
-    ? "🔍 Analizando imagen y espacio… esto tarda 15–30 segundos."
-    : "⚙️ Procesando solicitud…");
+    ? "🔍 Analizando imagen… 15–30 seg"
+    : "⚙️ Diseñando…");
   els.sendChatBtn.disabled = true;
-  document.getElementById("analyzeSpaceBtn")?.setAttribute("disabled", "true");
+  els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
 
   try {
     const endpoint = hasImage ? "/api/analyze-space" : "/api/ebanista-ai";
     const body = hasImage
-      ? { message: message || "Analiza este espacio y propón muebles de melamina.", imageData: state.currentImageData }
+      ? { message: message || "Analiza este espacio y propón muebles de melamina.", imageData: imgDataForRequest }
       : { message, tenant: currentTenant(), currentItem: state.lastDesignItems[0] || null };
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 55000);
-
     const res = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: controller.signal
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body), signal: controller.signal
     });
     clearTimeout(timer);
 
     const data = await res.json();
 
     if (!res.ok) {
-      if (res.status === 503) {
-        pending.textContent = "⚠️ Sin clave de OpenAI. El diseño IA requiere OPENAI_API_KEY configurada en Render.";
-      } else {
-        pending.textContent = `❌ Error ${res.status}: ${data.error || "Error desconocido"}`;
-      }
+      pending.textContent = res.status === 503
+        ? "⚠️ Sin clave de OpenAI. Configura OPENAI_API_KEY en Render."
+        : `❌ Error ${res.status}: ${data.error || "Error desconocido"}`;
       return;
     }
 
-    pending.textContent = data.assistantText || "Respuesta recibida.";
+    pending.textContent = data.assistantText || "Propuesta generada.";
 
     const items = data.items?.length ? data.items : (data.item ? [data.item] : []);
     if (items.length > 0) {
       const normalized = items.map(it => normalizeAssistantItem(it, message));
       state.lastDesignItems = normalized;
-      fillFormFromItem(normalized[0], message);
-      renderAssistantOutput(normalized[0], message, { source: "openai", actions: data.actions || ["fill_form"] });
-      if (normalized.length > 1) {
-        appendChat("assistant", `Propuse ${normalized.length} muebles. El primero está en el formulario.`);
-      }
+      const btn = document.createElement("button");
+      btn.className = "chat-quote-btn";
+      btn.textContent = "📋 Enviar a cotización";
+      btn.onclick = () => { fillFormFromItem(normalized[0], message); showView("quoteView"); };
+      pending.appendChild(document.createElement("br"));
+      pending.appendChild(btn);
     }
 
-    if (data.designPrompt) {
-      generateConceptImage(data.designPrompt);
-    }
+    if (data.designPrompt) generateConceptImage(data.designPrompt, pending);
 
   } catch (e) {
-    if (e.name === "AbortError") {
-      pending.textContent = "⏱ Tiempo agotado (55s). Intenta con imagen más pequeña o verifica OPENAI_API_KEY.";
-    } else if (e.message?.includes("fetch")) {
-      pending.textContent = "❌ No se pudo conectar. El servidor puede estar iniciando (espera 30s y reintenta).";
-    } else {
-      pending.textContent = `❌ Error: ${e.message}`;
-    }
+    pending.textContent = e.name === "AbortError"
+      ? "⏱ Tiempo agotado (55s). Intenta con imagen más pequeña."
+      : `❌ Error: ${e.message}`;
   } finally {
     els.sendChatBtn.disabled = false;
-    document.getElementById("analyzeSpaceBtn")?.removeAttribute("disabled");
+    els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
   }
 }
 
@@ -1448,29 +1452,43 @@ function buildLocalAssistantPlan(message) {
 
 
 // ── Generate concept image with DALL-E 3 ────────────────────────────────────
-async function generateConceptImage(designPrompt) {
-  const dalleBox = document.getElementById("dallePreview");
-  if (dalleBox) dalleBox.innerHTML = `<div class="concept-img-loading">🎨 Generando render… 15–25 seg</div>`;
+async function generateConceptImage(designPrompt, parentEl) {
+  const wrap = document.createElement("div");
+  wrap.className = "chat-render";
+  wrap.innerHTML = `<div class="render-loading">🎨 Generando render visual… 15–25 seg</div>`;
+  if (parentEl) { parentEl.appendChild(wrap); els.chatMessages.scrollTop = els.chatMessages.scrollHeight; }
 
   try {
     const res = await fetch("/api/generate-image", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt: designPrompt })
     });
     const data = await res.json();
     if (data.imageUrl) {
-      if (dalleBox) dalleBox.innerHTML = `
-        <img src="${data.imageUrl}" alt="Diseño conceptual" style="width:100%;border-radius:8px;cursor:zoom-in"
+      wrap.innerHTML = `
+        <img src="${data.imageUrl}" alt="Render conceptual"
+             style="width:100%;border-radius:8px;cursor:zoom-in;display:block"
              onclick="window.open(this.src,'_blank')" title="Clic para ampliar">
-        <p style="font-size:0.7rem;color:#888;margin:4px 0 0">✨ Render conceptual · clic para ampliar</p>
-      `;
+        <p style="font-size:0.7rem;color:#888;margin:4px 0 0">✨ Render conceptual · clic para ampliar</p>`;
     } else {
-      if (dalleBox) dalleBox.innerHTML = `<p class="muted small">⚠ ${data.error || "No se pudo generar render"}</p>`;
+      wrap.innerHTML = `<p style="color:#991b1b;font-size:0.8rem">⚠ ${data.error || "No se pudo generar render"}</p>`;
     }
   } catch {
-    if (dalleBox) dalleBox.innerHTML = `<p class="muted small">⚠ No se pudo generar render.</p>`;
+    wrap.innerHTML = `<p style="color:#991b1b;font-size:0.8rem">⚠ No se pudo generar render.</p>`;
   }
+  els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+}
+
+function clearImageState() {
+  state.currentImageData = null;
+  const thumb = document.getElementById("imgThumb");
+  if (thumb) {
+    thumb.style.display = "none";
+    const img = thumb.querySelector("img");
+    if (img) img.remove();
+  }
+  const inp = document.getElementById("designImage");
+  if (inp) inp.value = "";
 }
 
 function normalizeBackendPlan(data, message) {
@@ -1559,6 +1577,7 @@ function escapeHtml(value) {
 }
 
 function renderAssistantOutput(item, prompt, plan = {}) {
+  if (!els.assistantOutput) return;
   const pieces = generatePiecesForItem(item);
   const pieceRows = pieces.slice(0, 12).map((pieceItem) => `
     <tr>
@@ -1777,55 +1796,36 @@ els.resetDemoBtn.addEventListener("click", () => {
 els.designImage.addEventListener("change", (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
-
-  // Warn if image is very large (> 4 MB)
   if (file.size > 4 * 1024 * 1024) {
-    appendChat("assistant", "⚠️ La imagen es grande (>4 MB). Funcionará pero puede tardar más. Considera reducirla si la IA no responde.");
+    appendChat("assistant", "⚠️ Imagen grande (>4 MB). Puede tardar más.");
   }
-
   const reader = new FileReader();
   reader.onload = () => {
     state.currentImageData = reader.result;
-    els.imagePreview.innerHTML = `<img src="${reader.result}" alt="Foto del espacio" style="width:100%;border-radius:8px;cursor:zoom-in" onclick="this.style.maxHeight=this.style.maxHeight?'':'none'">`;
-    const clearBtn = document.getElementById("clearImageBtn");
-    if (clearBtn) clearBtn.style.display = "";
-
-    // Show the analyze button prominently
-    const analyzeBtn = document.getElementById("analyzeSpaceBtn");
-    if (analyzeBtn) {
-      analyzeBtn.classList.remove("hidden");
-      analyzeBtn.classList.add("pulse");
+    const thumb = document.getElementById("imgThumb");
+    if (thumb) {
+      thumb.style.display = "";
+      let img = thumb.querySelector("img.thumb-img");
+      if (!img) {
+        img = document.createElement("img");
+        img.className = "thumb-img";
+        img.alt = "foto";
+        img.style.cssText = "width:100%;height:100%;object-fit:cover;border-radius:6px";
+        thumb.insertBefore(img, thumb.firstChild);
+      }
+      img.src = reader.result;
     }
-
-    appendChat("assistant", "📸 Foto cargada. Presiona \"🔍 Analizar espacio\" para que detecte qué muebles quedarían bien aquí, o escríbeme lo que necesitas.");
   };
   reader.readAsDataURL(file);
 });
 
-document.getElementById("clearImageBtn")?.addEventListener("click", () => {
-  state.currentImageData = null;
-  els.imagePreview.innerHTML = "📷 Sube una foto del espacio";
-  const clearBtn = document.getElementById("clearImageBtn");
-  if (clearBtn) clearBtn.style.display = "none";
-  const analyzeBtn = document.getElementById("analyzeSpaceBtn");
-  if (analyzeBtn) { analyzeBtn.classList.add("hidden"); analyzeBtn.classList.remove("pulse"); }
-});
-
-document.getElementById("analyzeSpaceBtn")?.addEventListener("click", () => sendToAI());
+document.getElementById("clearImageBtn")?.addEventListener("click", clearImageState);
 
 els.sendChatBtn.addEventListener("click", sendToAI);
-els.enhanceImageBtn.addEventListener("click", () => {
-  els.chatInput.value = "Mejora esta imagen del mueble y resalta los detalles del diseño";
-  sendToAI();
-});
-els.mock3dBtn.addEventListener("click", () => {
-  els.chatInput.value = "Crea una propuesta 3D conceptual del mueble de la imagen";
-  sendToAI();
-});
 els.chatInput.addEventListener("keydown", event => {
   if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) sendToAI();
 });
-els.sendDesignToQuoteBtn.addEventListener("click", sendDesignToQuote);
+// sendDesignToQuoteBtn removed — now inline "📋 Enviar a cotización" button in chat
 
 els.interpretFurnitureBtn.addEventListener("click", () => {
   applyFurnitureBrief(els.furnitureBrief.value);
@@ -1874,7 +1874,7 @@ els.quoteItemsList.addEventListener("click", (event) => {
   renderDraftItems();
 });
 
-els.assistantOutput.addEventListener("click", (event) => {
+els.assistantOutput?.addEventListener("click", (event) => {
   const action = event.target.dataset.aiAction;
   const item = state.lastDesignItems[0];
   if (!action || !item) return;
