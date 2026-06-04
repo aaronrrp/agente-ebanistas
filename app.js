@@ -1274,7 +1274,7 @@ async function sendToAI() {
       pending.appendChild(btn);
     }
 
-    if (data.designPrompt) generateConceptImage(data.designPrompt, pending);
+    // Image renders removed — generateConceptImage disabled
 
   } catch (e) {
     pending.textContent = e.name === "AbortError"
