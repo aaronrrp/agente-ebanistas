@@ -452,20 +452,11 @@ async function handleGenerateImage(req, res) {
     }
   }
 
-  // 2. Fallback gratuito: Pollinations.ai (sin API key)
-  try {
-    const encoded = encodeURIComponent(prompt.slice(0, 500));
-    const seed = Math.floor(Math.random() * 9999);
-    const imageUrl = `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=1024&seed=${seed}&nologo=true&enhance=true`;
-    // Verify the URL resolves (HEAD request)
-    const check = await fetch(imageUrl, { method: "HEAD", signal: AbortSignal.timeout(5000) });
-    if (check.ok || check.status === 200) {
-      sendJson(res, 200, { imageUrl, source: "pollinations" });
-      return;
-    }
-  } catch { /* fall through */ }
-
-  sendJson(res, 500, { error: "No se pudo generar imagen. Intenta de nuevo." });
+  // 2. Fallback gratuito: Pollinations.ai — URL directa, el navegador la carga
+  const encoded = encodeURIComponent(prompt.slice(0, 500));
+  const seed = Math.floor(Math.random() * 99999);
+  const imageUrl = `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=1024&seed=${seed}&nologo=true&model=flux`;
+  sendJson(res, 200, { imageUrl, source: "pollinations" });
 }
 
 async function handleAuthAdmin(req, res) {
