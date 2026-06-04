@@ -255,117 +255,123 @@
 
         <div id="quoteWorkspace" class="content-grid quote-grid">
           <section class="panel">
-            <h3>Datos generales</h3>
             <form id="quoteForm" class="form-grid">
+
+              <div class="span-2">
+                <h3 style="margin:0 0 8px">Módulos en cotización <button id="clearDraftBtn" class="tiny-btn" type="button" style="float:right;margin-top:2px">Limpiar todo</button></h3>
+                <div id="quoteItemsList" class="quote-items-list"></div>
+              </div>
+
+              <button id="toggleModuleFormBtn" class="secondary-btn span-2" type="button" style="margin-bottom:8px">＋ Agregar módulo</button>
+
+              <div id="moduleFormPanel" class="hidden span-2">
+                <div class="subsection">
+                  <h4>Asistente rápido del mueble</h4>
+                  <p class="form-help">Escribe lo que pidió el cliente; la IA puede crear el mueble editable, agregarlo a la cotización y calcular cortes.</p>
+                  <textarea id="furnitureBrief" rows="4" placeholder="Ejemplo: mueble de 30 cm de ancho, 90 alto y 55 fondo, 2 puertas externas, 1 repisa interna, fondo interno, sin jaladores."></textarea>
+                  <div class="button-row">
+                    <button id="interpretFurnitureBtn" class="secondary-btn" type="button">Crear editable</button>
+                    <button id="aiAddFurnitureBtn" class="secondary-btn" type="button">Agregar a cotización</button>
+                    <button id="aiAddAndCutsBtn" class="primary-btn" type="button">Agregar y calcular cortes</button>
+                  </div>
+                </div>
+
+                <div class="subsection">
+                  <h4>Agregar mueble</h4>
+                  <div class="form-grid compact-grid">
+                    <label>Nombre del mueble<input id="itemName" placeholder="Ejemplo: Mueble inferior cocina"></label>
+                    <label>Tipo de mueble<select id="furnitureType"></select></label>
+                    <label>Medidas capturadas
+                      <select id="dimensionBasis">
+                        <option value="external" selected>Medidas exteriores del mueble</option>
+                        <option value="internal">Medidas internas del hueco</option>
+                      </select>
+                    </label>
+                    <label>Ancho cm<input id="widthCm" type="number" min="1" step="1" placeholder="Ej: 120"></label>
+                    <label>Alto cm<input id="heightCm" type="number" min="1" step="1" placeholder="Ej: 90"></label>
+                    <label>Profundidad cm<input id="depthCm" type="number" min="1" step="1" placeholder="Ej: 55"></label>
+                    <label>Complejidad
+                      <select id="complexity">
+                        <option value="low">Baja</option>
+                        <option value="medium">Media</option>
+                        <option value="high">Alta</option>
+                        <option value="premium">Premium / especial</option>
+                      </select>
+                    </label>
+                    <label>Puertas<input id="doors" type="number" min="0" step="1" value="0"></label>
+                    <label>Gavetas<input id="drawers" type="number" min="0" step="1" value="0"></label>
+                    <label>Repisas/divisiones<input id="shelves" type="number" min="0" step="1" value="0"></label>
+                    <label>Ubicación repisas
+                      <select id="shelfPlacement">
+                        <option value="internal" selected>Internas</option>
+                        <option value="external">Externas / vistas</option>
+                      </select>
+                    </label>
+                    <label>Tipo de puerta
+                      <select id="doorPlacement">
+                        <option value="overlay" selected>Sobrepuesta exterior</option>
+                        <option value="inset">Embutida / a ras</option>
+                        <option value="internal">Interna</option>
+                      </select>
+                    </label>
+                    <label>Tipo de gaveta
+                      <select id="drawerPlacement">
+                        <option value="external_front" selected>Frente exterior</option>
+                        <option value="inset_front">Frente embutido</option>
+                        <option value="internal_box">Caja interna solamente</option>
+                      </select>
+                    </label>
+                    <label>Tipo de fondo
+                      <select id="backPlacement">
+                        <option value="external" selected>Fondo exterior / sobrepuesto</option>
+                        <option value="internal">Fondo interno / embutido</option>
+                        <option value="none">Sin fondo</option>
+                      </select>
+                    </label>
+                    <label>Grosor melamina
+                      <select id="melamineThickness">
+                        <option>15 mm</option>
+                        <option selected>18 mm</option>
+                        <option>25 mm</option>
+                        <option>36 mm doble laminado</option>
+                      </select>
+                    </label>
+                    <label>Frentes con canto
+                      <select id="edgeBanding"></select>
+                    </label>
+                    <label>Tipo de bisagras
+                      <select id="hinges"></select>
+                      <span class="hw-info" aria-label="Información bisagras">ⓘ
+                        <span class="hw-tooltip">Blum/Häfele: copa 35mm estándar industria.<br>BLUMOTION = cierre suave integrado.<br>165° = apertura amplia para esquinas.</span>
+                      </span>
+                    </label>
+                    <label>Tipo de correderas
+                      <select id="drawerSlides"></select>
+                      <span class="hw-info" aria-label="Información correderas">ⓘ
+                        <span class="hw-tooltip">LEGRABOX: 70kg (premium).<br>MOVENTO: 40kg (undermount).<br>TANDEM: 30kg (lateral estándar).</span>
+                      </span>
+                    </label>
+                    <label>Tipo de jaladores
+                      <select id="handles"></select>
+                    </label>
+                    <div class="span-2">
+                      <label style="display:block;margin-bottom:.25rem;font-size:.875rem;font-weight:500">Color de melamina</label>
+                      <div id="colorPicker" class="color-picker-row"></div>
+                      <input type="hidden" id="selectedColor" value="RH01">
+                    </div>
+                    <label>Precio manual del mueble USD<input id="itemManualPrice" type="number" min="0" step="1" placeholder="Opcional"></label>
+                    <label class="span-2">Especificaciones del mueble<textarea id="itemNotes" rows="3" placeholder="Ejemplo: lleva espacio para fregador, puerta abatible izquierda, canto grueso en laterales visibles."></textarea></label>
+                    <button id="addQuoteItemBtn" class="secondary-btn span-2" type="button">Agregar módulo</button>
+                  </div>
+                </div>
+              </div>
+
+              <h3 class="span-2" style="margin:8px 0 4px">Datos generales</h3>
               <label>Cliente final<input id="finalClient" required></label>
               <label>Ubicación<input id="projectLocation" placeholder="Casa, local, zona o ciudad"></label>
               <label>Validez de oferta días<input id="quoteValidity" type="number" min="1" value="15"></label>
               <label>Precio final manual USD<input id="manualTotal" type="number" min="0" step="1" placeholder="Opcional"></label>
               <label class="span-2">Notas generales<textarea id="clientNotes" rows="3" placeholder="Condiciones del espacio, color preferido, detalles del cliente o exclusiones."></textarea></label>
-              <div class="subsection span-2">
-                <h4>Asistente rápido del mueble</h4>
-                <p class="form-help">Escribe lo que pidió el cliente; la IA puede crear el mueble editable, agregarlo a la cotización y calcular cortes.</p>
-                <textarea id="furnitureBrief" rows="4" placeholder="Ejemplo: mueble de 30 cm de ancho, 90 alto y 55 fondo, 2 puertas externas, 1 repisa interna, fondo interno, sin jaladores."></textarea>
-                <div class="button-row">
-                  <button id="interpretFurnitureBtn" class="secondary-btn" type="button">Crear editable</button>
-                  <button id="aiAddFurnitureBtn" class="secondary-btn" type="button">Agregar a cotización</button>
-                  <button id="aiAddAndCutsBtn" class="primary-btn" type="button">Agregar y calcular cortes</button>
-                </div>
-              </div>
-
-              <div class="subsection span-2">
-                <h4>Agregar mueble</h4>
-                <div class="form-grid compact-grid">
-                  <label>Nombre del mueble<input id="itemName" placeholder="Ejemplo: Mueble inferior cocina"></label>
-                  <label>Tipo de mueble<select id="furnitureType"></select></label>
-                  <label>Medidas capturadas
-                    <select id="dimensionBasis">
-                      <option value="external" selected>Medidas exteriores del mueble</option>
-                      <option value="internal">Medidas internas del hueco</option>
-                    </select>
-                  </label>
-                  <label>Ancho cm<input id="widthCm" type="number" min="1" step="1" value="120"></label>
-                  <label>Alto cm<input id="heightCm" type="number" min="1" step="1" value="90"></label>
-                  <label>Profundidad cm<input id="depthCm" type="number" min="1" step="1" value="55"></label>
-                  <label>Complejidad
-                    <select id="complexity">
-                      <option value="low">Baja</option>
-                      <option value="medium">Media</option>
-                      <option value="high">Alta</option>
-                      <option value="premium">Premium / especial</option>
-                    </select>
-                  </label>
-                  <label>Puertas<input id="doors" type="number" min="0" step="1" value="2"></label>
-                  <label>Gavetas<input id="drawers" type="number" min="0" step="1" value="0"></label>
-                  <label>Repisas/divisiones<input id="shelves" type="number" min="0" step="1" value="2"></label>
-                  <label>Ubicación repisas
-                    <select id="shelfPlacement">
-                      <option value="internal" selected>Internas</option>
-                      <option value="external">Externas / vistas</option>
-                    </select>
-                  </label>
-                  <label>Tipo de puerta
-                    <select id="doorPlacement">
-                      <option value="overlay" selected>Sobrepuesta exterior</option>
-                      <option value="inset">Embutida / a ras</option>
-                      <option value="internal">Interna</option>
-                    </select>
-                  </label>
-                  <label>Tipo de gaveta
-                    <select id="drawerPlacement">
-                      <option value="external_front" selected>Frente exterior</option>
-                      <option value="inset_front">Frente embutido</option>
-                      <option value="internal_box">Caja interna solamente</option>
-                    </select>
-                  </label>
-                  <label>Tipo de fondo
-                    <select id="backPlacement">
-                      <option value="external" selected>Fondo exterior / sobrepuesto</option>
-                      <option value="internal">Fondo interno / embutido</option>
-                      <option value="none">Sin fondo</option>
-                    </select>
-                  </label>
-                  <label>Grosor melamina
-                    <select id="melamineThickness">
-                      <option>15 mm</option>
-                      <option selected>18 mm</option>
-                      <option>25 mm</option>
-                      <option>36 mm doble laminado</option>
-                    </select>
-                  </label>
-                  <label>Frentes con canto
-                    <select id="edgeBanding"></select>
-                  </label>
-                  <label>Tipo de bisagras
-                    <select id="hinges"></select>
-                    <span class="hw-info" aria-label="Información bisagras">ⓘ
-                      <span class="hw-tooltip">Blum/Häfele: copa 35mm estándar industria.<br>BLUMOTION = cierre suave integrado.<br>165° = apertura amplia para esquinas.</span>
-                    </span>
-                  </label>
-                  <label>Tipo de correderas
-                    <select id="drawerSlides"></select>
-                    <span class="hw-info" aria-label="Información correderas">ⓘ
-                      <span class="hw-tooltip">LEGRABOX: 70kg (premium).<br>MOVENTO: 40kg (undermount).<br>TANDEM: 30kg (lateral estándar).</span>
-                    </span>
-                  </label>
-                  <label>Tipo de jaladores
-                    <select id="handles"></select>
-                  </label>
-                  <div class="span-2">
-                    <label style="display:block;margin-bottom:.25rem;font-size:.875rem;font-weight:500">Color de melamina</label>
-                    <div id="colorPicker" class="color-picker-row"></div>
-                    <input type="hidden" id="selectedColor" value="RH01">
-                  </div>
-                  <label>Precio manual del mueble USD<input id="itemManualPrice" type="number" min="0" step="1" placeholder="Opcional"></label>
-                  <label class="span-2">Especificaciones del mueble<textarea id="itemNotes" rows="3" placeholder="Ejemplo: lleva espacio para fregador, puerta abatible izquierda, canto grueso en laterales visibles."></textarea></label>
-                  <button id="addQuoteItemBtn" class="secondary-btn span-2" type="button">Agregar mueble</button>
-                </div>
-              </div>
-
-              <div class="span-2">
-                <h4>Muebles agregados</h4>
-                <div id="quoteItemsList" class="quote-items-list"></div>
-              </div>
 
               <label class="check-row">
                 <input id="includeInstall" type="checkbox" checked>
@@ -451,6 +457,7 @@ Tapa superior, 120, 55, 1, 18 mm, sin canto"></textarea>
             <div id="cutsOutput" class="cuts-output">
               <p class="muted">Agrega muebles en la sección Cotizar y luego presiona Calcular cortes.</p>
             </div>
+            <div id="cutsLayoutOutput" class="cuts-layout-output"></div>
             <div id="cutsVisual" class="cuts-visual"></div>
           </section>
         </div>

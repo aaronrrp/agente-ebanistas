@@ -1462,3 +1462,38 @@ textarea {
   background: #f5f3ff;
   border-radius: 8px;
 }
+
+/* ── Editable cuts table ───────────────────────────────────────────────── */
+.cut-input {
+  width: 100%;
+  min-width: 46px;
+  padding: 3px 5px;
+  border: 1px solid #E5E7EB;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-family: inherit;
+  background: #fff;
+  box-sizing: border-box;
+}
+.cut-input:focus { outline: 2px solid #6366F1; border-color: #6366F1; }
+.cut-num { width: 70px; }
+.cuts-layout-output { margin-top: 14px; }
+
+/* ── Quote module list ─────────────────────────────────────────────────── */
+.draft-subtotal {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #F0FDF4;
+  border: 1px solid #BBF7D0;
+  border-radius: 8px;
+  margin-top: 8px;
+  font-size: 0.875rem;
+}
+.draft-subtotal strong { font-size: 1rem; color: #15803D; }
+.item-btns { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.item-price { font-weight: 700; color: #1D4ED8; white-space: nowrap; }
+.item-spec { font-size: 0.78rem; color: #6B7280; margin: 3px 0 0; }
+.tiny-btn.danger { color: #DC2626; border-color: #FECACA; background: #FEF2F2; }
+.tiny-btn.danger:hover { background: #FEE2E2; }

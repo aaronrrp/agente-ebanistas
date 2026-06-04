@@ -141,6 +141,7 @@ const state = {
   selectedTenantId: localStorage.getItem("tm_selected_tenant") || null,
   draftItems: [],
   manualPieces: [],
+  editablePieces: [],       // editable cuts table — regenerated per session
   currentImageData: null,
   lastDesignItems: [],
   editingItemId: null,
@@ -218,7 +219,9 @@ const els = {
   wastePercent: document.getElementById("wastePercent"),
   applySheetPresetBtn: document.getElementById("applySheetPresetBtn"),
   generateCutsBtn: document.getElementById("generateCutsBtn"),
-  cutsOutput: document.getElementById("cutsOutput")
+  cutsOutput: document.getElementById("cutsOutput"),
+  cutsLayoutOutput: document.getElementById("cutsLayoutOutput"),
+  exportCutsBtn: document.getElementById("exportCutsBtn")
 };
 
 function load(key, fallback) {
@@ -722,25 +725,36 @@ function placementLabel(value) {
 function renderDraftItems() {
   if (!els.quoteItemsList) return;
   if (!state.draftItems.length) {
-    els.quoteItemsList.innerHTML = `<p class="muted">No hay muebles agregados. Agrega un mueble para cotizar.</p>`;
+    els.quoteItemsList.innerHTML = `<p class="muted">Sin módulos. Usa el chat de IA o el formulario para agregar.</p>`;
     return;
   }
 
-  els.quoteItemsList.innerHTML = state.draftItems.map((item, index) => `
+  const subtotal = state.draftItems.reduce((s, it) => s + it.finalPrice, 0);
+  const cards = state.draftItems.map((item, index) => `
     <article class="quote-item-card ${state.editingItemId === item.id ? "editing" : ""}">
       <header>
         <div>
-          <strong>${index + 1}. ${item.name}</strong>
-          <p>${item.width} x ${item.height} x ${item.depth} cm · ${item.complexityLabel}</p>
+          <strong>${index + 1}. ${escapeHtml(item.name)}</strong>
+          <p>${item.width} × ${item.height} × ${item.depth} cm · ${item.complexityLabel}</p>
         </div>
-        <span>${money(item.finalPrice)}</span>
+        <span class="item-price">${money(item.finalPrice)}</span>
       </header>
-      <p>${item.melamineThickness} · medidas ${placementLabel(item.dimensionBasis)} · repisas ${placementLabel(item.shelfPlacement)} · puertas ${placementLabel(item.doorPlacement)} · fondo ${placementLabel(item.backPlacement)} · ${item.edgeBanding} · ${item.hinges} · ${item.drawerSlides} · ${item.handles}</p>
-      ${item.manualPrice > 0 ? `<p class="manual-note">Precio manual aplicado. Calculado: ${money(item.calculated)}</p>` : ""}
-      <button class="tiny-btn" type="button" data-edit-item="${item.id}">Editar</button>
-      <button class="tiny-btn" type="button" data-remove-item="${item.id}">Quitar</button>
+      <p class="item-spec">${item.melamineThickness} · puertas ${placementLabel(item.doorPlacement)} · fondo ${placementLabel(item.backPlacement)} · ${item.edgeBanding}</p>
+      ${item.manualPrice > 0 ? `<p class="manual-note">Precio manual. Calculado: ${money(item.calculated)}</p>` : ""}
+      <div class="item-btns">
+        <button class="tiny-btn" type="button" data-edit-item="${item.id}">✏ Editar</button>
+        <button class="tiny-btn" type="button" data-duplicate-item="${item.id}">⧉ Duplicar</button>
+        <button class="tiny-btn danger" type="button" data-remove-item="${item.id}">× Quitar</button>
+      </div>
     </article>
   `).join("");
+
+  els.quoteItemsList.innerHTML = cards + `
+    <div class="draft-subtotal">
+      <span>${state.draftItems.length} módulo(s) · Subtotal estimado:</span>
+      <strong>${money(subtotal)}</strong>
+    </div>
+  `;
 }
 
 function fillFormFromItem(item, sourceText = "") {
@@ -1098,96 +1112,130 @@ function packPiecesByArea(pieces, usableArea) {
 }
 
 function renderCuts() {
-  if (!state.draftItems.length && !state.manualPieces.length) {
-    els.cutsOutput.innerHTML = `<p class="muted">No hay muebles ni piezas manuales. Primero agrega muebles en Cotizar o pega piezas manuales.</p>`;
+  if (!state.draftItems.length && !state.manualPieces.length && !state.editablePieces.length) {
+    els.cutsOutput.innerHTML = `<p class="muted">Agrega módulos en Cotizar y presiona Calcular cortes.</p>`;
+    if (els.cutsLayoutOutput) els.cutsLayoutOutput.innerHTML = "";
     return;
   }
-
-  const result = calculateCuts();
-
-  // Group by thickness
-  const byThickness = {};
-  result.pieces.forEach(p => {
-    const key = p.thickness || "18 mm";
-    if (!byThickness[key]) byThickness[key] = [];
-    byThickness[key].push(p);
+  // Generate fresh pieces from draftItems + manualPieces
+  const fresh = [];
+  state.draftItems.forEach(item => {
+    generatePiecesForItem(item).forEach(p => fresh.push({ ...p, id: crypto.randomUUID() }));
   });
-
-  const thicknessTablesHtml = Object.entries(byThickness).map(([thickness, pieces]) => `
-    <h4>Cortes — ${thickness}</h4>
-    <table class="quote-table cuts-table">
-      <thead><tr><th>Lámina</th><th>Mueble</th><th>Pieza</th><th>Medida</th><th>Canto</th></tr></thead>
-      <tbody>${pieces.map(p => {
-        const sheetNum = result.sheets.find(s => s.pieces.some(sp => sp.id === p.id))?.number || "?";
-        return `<tr><td>Lámina ${sheetNum}</td><td>${p.furniture}</td><td>${p.name}</td><td>${p.width} x ${p.height} cm</td><td>${p.edge}</td></tr>`;
-      }).join("")}</tbody>
-    </table>
-  `).join("");
-
-  els.cutsOutput.innerHTML = `
-    <div class="cuts-summary">
-      <article><span>Piezas</span><strong>${result.pieces.length}</strong></article>
-      <article><span>Láminas estimadas</span><strong>${result.sheets.length}</strong></article>
-      <article><span>Área total</span><strong>${(result.totalArea / 10000).toFixed(2)} m²</strong></article>
-      <article><span>Lámina</span><strong>${result.sheetWidth} x ${result.sheetHeight} cm</strong></article>
-    </div>
-
-    ${thicknessTablesHtml}
-
-    <h4>Uso por lámina</h4>
-    <div class="sheet-list">
-      ${result.sheets.map((sheet) => {
-        const utilPct = Math.min(100, Math.round((sheet.used / result.usableArea) * 100));
-        const barClass = utilPct > 90 ? "full" : utilPct > 75 ? "warn" : "";
-        return `
-          <div class="sheet-card">
-            <strong>Lámina ${sheet.number}</strong>
-            <div class="util-bar-wrap"><div class="util-bar ${barClass}" style="width:${utilPct}%"></div></div>
-            <span>${utilPct}% utilizado · ${(sheet.used / 10000).toFixed(2)} m² de ${(result.usableArea / 10000).toFixed(2)} m² útiles</span>
-          </div>
-        `;
-      }).join("")}
-    </div>
-  `;
-
-  renderCutsVisual(result);
+  state.manualPieces.forEach(p => fresh.push({ ...p, id: p.id || crypto.randomUUID() }));
+  state.editablePieces = fresh;
+  renderCutsPiecesTable();
+  recalcCutsLayout();
 }
 
-function renderCutsVisual(result) {
-  const container = document.getElementById("cutsVisual");
-  if (!container || !result.sheets.length) return;
-  const SW = 400, SH = 200;
+function renderCutsPiecesTable() {
+  if (!state.editablePieces.length) {
+    els.cutsOutput.innerHTML = `<p class="muted">No hay piezas. Usa "Regenerar desde módulos".</p>`;
+    return;
+  }
+  const thick = ["15 mm","18 mm","25 mm","36 mm doble laminado"];
+  const rows = state.editablePieces.map(p => `
+    <tr data-piece-id="${p.id}">
+      <td><input class="cut-input" data-field="furniture" value="${escapeHtml(p.furniture||'')}" placeholder="Mueble"></td>
+      <td><input class="cut-input" data-field="name" value="${escapeHtml(p.name||'')}" placeholder="Pieza"></td>
+      <td><input class="cut-input cut-num" data-field="width" type="number" min="1" step="0.5" value="${p.width||''}"></td>
+      <td><input class="cut-input cut-num" data-field="height" type="number" min="1" step="0.5" value="${p.height||''}"></td>
+      <td><select class="cut-input" data-field="thickness">${thick.map(t=>`<option${p.thickness===t?' selected':''}>${t}</option>`).join('')}</select></td>
+      <td><input class="cut-input" data-field="edge" value="${escapeHtml(p.edge||'')}" placeholder="Canto"></td>
+      <td><button class="tiny-btn danger" data-rm-cut="${p.id}" type="button">×</button></td>
+    </tr>`).join('');
+
+  els.cutsOutput.innerHTML = `
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <button id="addCutPieceBtn" class="secondary-btn" type="button">＋ Agregar pieza</button>
+      <button id="regenCutPiecesBtn" class="secondary-btn" type="button">↻ Regenerar desde módulos</button>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="quote-table">
+        <thead><tr><th>Mueble</th><th>Pieza</th><th>Ancho cm</th><th>Alto cm</th><th>Grosor</th><th>Canto</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+function recalcCutsLayout() {
+  if (!els.cutsLayoutOutput) return;
+  if (!state.editablePieces.length) { els.cutsLayoutOutput.innerHTML = ""; return; }
+
+  const sheetW    = Number(document.getElementById("sheetWidth")?.value  || 244);
+  const sheetH    = Number(document.getElementById("sheetHeight")?.value || 122);
+  const wastePct  = Number(document.getElementById("wastePercent")?.value || 12) / 100;
+  const usable    = sheetW * sheetH * (1 - wastePct);
+  const totalArea = state.editablePieces.reduce((s, p) => s + (Number(p.width)||0)*(Number(p.height)||0), 0);
+
+  // Simple first-fit bin packing
+  const sheets = [];
+  let cur = { number: 1, pieces: [], used: 0 };
+  state.editablePieces.forEach(p => {
+    const area = (Number(p.width)||1) * (Number(p.height)||1);
+    if (cur.used + area > usable && cur.pieces.length) {
+      sheets.push(cur);
+      cur = { number: sheets.length + 1, pieces: [], used: 0 };
+    }
+    cur.pieces.push(p); cur.used += area;
+  });
+  if (cur.pieces.length) sheets.push(cur);
+
+  const sheetCards = sheets.map(sh => {
+    const pct = Math.min(100, Math.round((sh.used / usable) * 100));
+    const cls = pct > 90 ? "full" : pct > 75 ? "warn" : "";
+    return `<div class="sheet-card">
+      <strong>Lámina ${sh.number}</strong>
+      <div class="util-bar-wrap"><div class="util-bar ${cls}" style="width:${pct}%"></div></div>
+      <span>${pct}% · ${sh.pieces.length} piezas · ${(sh.used/10000).toFixed(2)} m²</span>
+    </div>`;
+  }).join('');
+
+  // SVG visual
+  const SW = 360, SH = 180;
   const colors = ["#DBEAFE","#FEF3C7","#D1FAE5","#FCE7F3","#EDE9FE","#FEE2E2"];
-  const svgs = result.sheets.map((sheet) => {
-    let cx = 5, cy = 5, rowH = 0;
-    const rects = sheet.pieces.map((p, pi) => {
-      const pw = Math.max(30, Math.min(180, (p.width / result.sheetWidth) * (SW - 10)));
-      const ph = Math.max(14, Math.min(80, (p.height / result.sheetHeight) * (SH - 10)));
-      if (cx + pw > SW - 5) { cx = 5; cy += rowH + 2; rowH = 0; }
-      if (cy + ph > SH - 5) return "";
+  const svgs = sheets.map(sh => {
+    let cx=5, cy=5, rowH=0;
+    const rects = sh.pieces.map((p, pi) => {
+      const pw = Math.max(24, Math.min(160, (Number(p.width)/sheetW)*(SW-10)));
+      const ph = Math.max(12, Math.min(70,  (Number(p.height)/sheetH)*(SH-10)));
+      if (cx+pw > SW-5) { cx=5; cy+=rowH+2; rowH=0; }
+      if (cy+ph > SH-5) return "";
       rowH = Math.max(rowH, ph);
-      const r = `<rect x="${cx}" y="${cy}" width="${pw}" height="${ph}" fill="${colors[pi % colors.length]}" stroke="#9CA3AF" stroke-width="0.5" rx="2"/>
-        <text x="${cx+pw/2}" y="${cy+ph/2+4}" text-anchor="middle" font-size="7" fill="#374151" overflow="hidden">${p.name.slice(0,14)}</text>`;
-      cx += pw + 2;
-      return r;
-    }).join("");
-    return `<div style="display:inline-block;margin:.5rem">
-      <p style="font-size:.75rem;font-weight:600;margin:0 0 4px">Lámina ${sheet.number}</p>
+      const r = `<rect x="${cx}" y="${cy}" width="${pw}" height="${ph}" fill="${colors[pi%colors.length]}" stroke="#9CA3AF" stroke-width="0.5" rx="2"/>
+        <text x="${cx+pw/2}" y="${cy+ph/2+4}" text-anchor="middle" font-size="6.5" fill="#374151">${(p.name||'').slice(0,13)}</text>`;
+      cx += pw+2; return r;
+    }).join('');
+    return `<div style="display:inline-block;margin:.4rem">
+      <p style="font-size:.75rem;font-weight:600;margin:0 0 4px">Lámina ${sh.number}</p>
       <svg width="${SW}" height="${SH}" style="border:1px solid #E5E7EB;border-radius:6px;background:#FAFAFA">${rects}</svg>
     </div>`;
-  });
-  container.innerHTML = `<h4>Distribución visual de láminas</h4><div style="overflow-x:auto">${svgs.join("")}</div>`;
+  }).join('');
+
+  els.cutsLayoutOutput.innerHTML = `
+    <div class="cuts-summary" style="margin-top:14px">
+      <article><span>Piezas</span><strong>${state.editablePieces.length}</strong></article>
+      <article><span>Láminas est.</span><strong>${sheets.length}</strong></article>
+      <article><span>Área total</span><strong>${(totalArea/10000).toFixed(2)} m²</strong></article>
+      <article><span>Lámina</span><strong>${sheetW}×${sheetH} cm</strong></article>
+    </div>
+    <h4 style="margin:12px 0 6px">Uso por lámina</h4>
+    <div class="sheet-list">${sheetCards}</div>
+    <h4 style="margin:12px 0 6px">Distribución visual</h4>
+    <div style="overflow-x:auto">${svgs}</div>`;
 }
 
 function exportCutsCSV() {
-  if (!state.draftItems.length && !state.manualPieces.length) return;
-  const result = calculateCuts();
-  const rows = [["Lámina","Mueble","Pieza","Ancho cm","Alto cm","Grosor","Canto"]];
-  result.sheets.forEach(sheet => {
-    sheet.pieces.forEach(p => {
-      rows.push([sheet.number, p.furniture, p.name, p.width, p.height, p.thickness, p.edge]);
-    });
-  });
+  const pieces = state.editablePieces.length ? state.editablePieces : (() => {
+    if (!state.draftItems.length && !state.manualPieces.length) return [];
+    const all = [];
+    state.draftItems.forEach(item => generatePiecesForItem(item).forEach(p => all.push(p)));
+    state.manualPieces.forEach(p => all.push(p));
+    return all;
+  })();
+  if (!pieces.length) { toast("Calcula los cortes primero.", "error"); return; }
+  const rows = [["Mueble","Pieza","Ancho cm","Alto cm","Grosor","Canto"]];
+  pieces.forEach(p => rows.push([p.furniture||'', p.name, p.width, p.height, p.thickness||'18 mm', p.edge||'']));
   const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
   const blob = new Blob(["﻿"+csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
@@ -1610,13 +1658,13 @@ function normalizeAssistantItem(input, message) {
   const catalog = ensureCatalog(currentTenant());
   const item = { ...base, ...input, id: crypto.randomUUID() };
   item.furnitureType = catalog.furnitureTypes.includes(item.furnitureType) ? item.furnitureType : "Otro";
-  item.width = Number(item.width || base.width);
-  item.height = Number(item.height || base.height);
-  item.depth = Number(item.depth || base.depth);
-  item.doors = Number(item.doors || 0);
-  item.drawers = Number(item.drawers || 0);
-  item.shelves = Number(item.shelves || 0);
-  item.manualPrice = Number(item.manualPrice || 0);
+  item.width  = (Number(input.width)  > 0) ? Number(input.width)  : Number(base.width)  || 120;
+  item.height = (Number(input.height) > 0) ? Number(input.height) : Number(base.height) || 90;
+  item.depth  = (Number(input.depth)  > 0) ? Number(input.depth)  : Number(base.depth)  || 55;
+  item.doors    = Number(input.doors    ?? base.doors    ?? 0);
+  item.drawers  = Number(input.drawers  ?? base.drawers  ?? 0);
+  item.shelves  = Number(input.shelves  ?? base.shelves  ?? 0);
+  item.manualPrice = Number(input.manualPrice ?? 0);
   return calculateItem(item);
 }
 
@@ -1773,12 +1821,10 @@ function itemSignature(item) {
 function addItemsToQuote(items) {
   const additions = items
     .filter(Boolean)
-    .filter((item) => !state.draftItems.some((draft) => itemSignature(draft) === itemSignature(item)))
     .map((item) => calculateItem({ ...item, id: crypto.randomUUID() }));
-
   state.draftItems = [...state.draftItems, ...additions];
   renderDraftItems();
-  if (additions.length > 0) toast("Mueble agregado a cotización ✓");
+  if (additions.length > 0) toast(`${additions.length} módulo(s) agregado(s) ✓`);
   return additions.length;
 }
 
@@ -1958,27 +2004,58 @@ els.aiAddAndCutsBtn.addEventListener("click", () => {
 
 document.getElementById("addQuoteItemBtn").addEventListener("click", () => {
   const item = readItemFromForm();
-  if (!item.width || !item.height || !item.depth) return;
+  if (!item.width || !item.height || !item.depth) {
+    toast("Ingresa al menos ancho, alto y profundidad.", "error");
+    return;
+  }
   if (state.editingItemId) {
-    state.draftItems = state.draftItems.map((draft) => draft.id === state.editingItemId ? { ...item, id: state.editingItemId } : draft);
-    state.editingItemId = null;
-    document.getElementById("addQuoteItemBtn").textContent = "Agregar mueble";
+    state.draftItems = state.draftItems.map((d) => d.id === state.editingItemId ? { ...item, id: state.editingItemId } : d);
   } else {
     state.draftItems.push(item);
   }
+  state.editingItemId = null;
   renderDraftItems();
+  // Clear form for next module
+  ["itemName","widthCm","heightCm","depthCm","itemManualPrice","itemNotes"].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = "";
+  });
+  ["doors","drawers","shelves"].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = "0";
+  });
+  document.getElementById("addQuoteItemBtn").textContent = "Agregar módulo";
+  // Collapse the panel
+  const panel = document.getElementById("moduleFormPanel");
+  const btn   = document.getElementById("toggleModuleFormBtn");
+  if (panel && btn) { panel.classList.add("hidden"); btn.textContent = "＋ Agregar módulo"; }
 });
 
 els.quoteItemsList.addEventListener("click", (event) => {
-  const removeId = event.target.dataset.removeItem;
-  const editId = event.target.dataset.editItem;
+  const removeId    = event.target.dataset.removeItem;
+  const editId      = event.target.dataset.editItem;
+  const duplicateId = event.target.dataset.duplicateItem;
 
   if (editId) {
-    const item = state.draftItems.find((draft) => draft.id === editId);
+    const item = state.draftItems.find((d) => d.id === editId);
     if (!item) return;
     state.editingItemId = editId;
     fillFormFromItem(item);
     renderDraftItems();
+    // Expand the form panel
+    const panel = document.getElementById("moduleFormPanel");
+    const btn   = document.getElementById("toggleModuleFormBtn");
+    if (panel && btn) { panel.classList.remove("hidden"); btn.textContent = "▲ Cerrar formulario"; }
+    document.getElementById("addQuoteItemBtn").textContent = "Guardar cambios del módulo";
+    document.getElementById("itemName")?.focus();
+    return;
+  }
+
+  if (duplicateId) {
+    const item = state.draftItems.find((d) => d.id === duplicateId);
+    if (!item) return;
+    const copy = calculateItem({ ...item, id: crypto.randomUUID(), name: item.name + " (copia)" });
+    state.draftItems.push(copy);
+    renderDraftItems();
+    toast("Módulo duplicado ✓");
     return;
   }
 
@@ -1986,7 +2063,7 @@ els.quoteItemsList.addEventListener("click", (event) => {
   state.draftItems = state.draftItems.filter((item) => item.id !== removeId);
   if (state.editingItemId === removeId) {
     state.editingItemId = null;
-    document.getElementById("addQuoteItemBtn").textContent = "Agregar mueble";
+    document.getElementById("addQuoteItemBtn").textContent = "Agregar módulo";
   }
   renderDraftItems();
 });
@@ -2029,6 +2106,53 @@ els.manualPiecesList.addEventListener("click", (event) => {
   renderManualPieces();
 });
 
+// ── Editable cuts table — inline editing ──────────────────────────────────
+els.cutsOutput.addEventListener("input", (e) => {
+  const field = e.target.dataset.field;
+  if (!field) return;
+  const row = e.target.closest("[data-piece-id]");
+  if (!row) return;
+  const piece = state.editablePieces.find(p => p.id === row.dataset.pieceId);
+  if (!piece) return;
+  piece[field] = e.target.type === "number" ? Number(e.target.value) : e.target.value;
+  if (field === "width" || field === "height") {
+    piece.area = (Number(piece.width)||1) * (Number(piece.height)||1);
+    recalcCutsLayout();
+  }
+});
+
+els.cutsOutput.addEventListener("change", (e) => {
+  // Handle <select> changes (thickness field)
+  const field = e.target.dataset.field;
+  if (field !== "thickness") return;
+  const row = e.target.closest("[data-piece-id]");
+  if (!row) return;
+  const piece = state.editablePieces.find(p => p.id === row.dataset.pieceId);
+  if (piece) { piece.thickness = e.target.value; recalcCutsLayout(); }
+});
+
+els.cutsOutput.addEventListener("click", (e) => {
+  if (e.target.dataset.rmCut) {
+    state.editablePieces = state.editablePieces.filter(p => p.id !== e.target.dataset.rmCut);
+    renderCutsPiecesTable();
+    recalcCutsLayout();
+    return;
+  }
+  if (e.target.id === "addCutPieceBtn") {
+    state.editablePieces.push({
+      id: crypto.randomUUID(), furniture: "", name: "Pieza nueva",
+      width: 60, height: 60, thickness: "18 mm", edge: "Sin canto", area: 3600
+    });
+    renderCutsPiecesTable();
+    recalcCutsLayout();
+    return;
+  }
+  if (e.target.id === "regenCutPiecesBtn") {
+    state.editablePieces = [];
+    renderCuts();
+  }
+});
+
 els.quoteForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const tenant = currentTenant();
@@ -2054,6 +2178,26 @@ document.getElementById("colorPicker")?.addEventListener("click", (e) => {
   document.querySelectorAll(".color-swatch").forEach(s => s.classList.remove("selected"));
   swatch.classList.add("selected");
   document.getElementById("selectedColor").value = swatch.dataset.colorCode;
+});
+
+// ── Toggle module form ────────────────────────────────────────────────────
+document.getElementById("toggleModuleFormBtn")?.addEventListener("click", () => {
+  const panel = document.getElementById("moduleFormPanel");
+  const btn   = document.getElementById("toggleModuleFormBtn");
+  if (!panel) return;
+  const opening = panel.classList.contains("hidden");
+  panel.classList.toggle("hidden");
+  btn.textContent = opening ? "▲ Cerrar formulario" : "＋ Agregar módulo";
+  if (opening) document.getElementById("itemName")?.focus();
+});
+
+// ── Clear all draft modules ───────────────────────────────────────────────
+document.getElementById("clearDraftBtn")?.addEventListener("click", () => {
+  if (!state.draftItems.length) return;
+  if (!confirm("¿Limpiar todos los módulos de esta cotización?")) return;
+  state.draftItems = [];
+  state.editingItemId = null;
+  renderDraftItems();
 });
 
 // CSV export

@@ -202,6 +202,7 @@ Si faltan datos, infiere valores razonables y explica la suposición en assistan
 - Si el usuario pregunta por qué algo "no está disponible" o "no funciona", se refiere al render visual (un servicio externo lento). Responde brevemente: "El render tarda unos segundos en generarse, intenta pedirlo de nuevo." y vuelve a proponer el mueble.
 - Si el usuario pide "imagen", "render" o "foto": explica en assistantText que los renders visuales no están disponibles en este momento, pero ofrece la propuesta técnica completa del mueble.
 - Si hay un mueble previo en currentItem, úsalo como base para la respuesta.
+- En el campo "item", usa SIEMPRE las medidas exactas que pidió el cliente. NUNCA uses 120/90/55 si el cliente pidió otras medidas. Los valores del JSON schema son ejemplos, no valores por defecto.
 
 ══ ACCIONES (campo "actions") ══
 - Propuesta normal / primer contacto → ["fill_form"]
@@ -243,7 +244,7 @@ Responde SOLO JSON válido:
     "name": "Mueble propuesto",
     "furnitureType": "Cocina|Closet|Vanity|Centro de entretenimiento|Mueble de lavandería|Escritorio|Otro",
     "dimensionBasis": "external|internal",
-    "width": 120, "height": 90, "depth": 55,
+    "width": 0, "height": 0, "depth": 0,
     "complexityKey": "low|medium|high|premium",
     "doors": 2, "drawers": 0, "shelves": 1,
     "shelfPlacement": "internal|external",
@@ -683,7 +684,7 @@ const server = http.createServer(async (req, res) => {
         adminPasswordSet: ADMIN_PASSWORD !== "admin1234",
         tenantsCount: tenants.length,
         apiEndpoint: "chat/completions",
-        build: "2026-06-04-v15"
+        build: "2026-06-04-v16"
       });
       return;
     }
