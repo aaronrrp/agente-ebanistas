@@ -525,9 +525,8 @@ function getTenantLink(tenant) {
     installBase: tenant.installBase || 75, transportBase: tenant.transportBase || 30,
     materials: tenant.materials || "", terms: tenant.terms || "", accessCode: tenant.accessCode
   };
-  // URL-safe base64: + → - / → _ remove = padding (avoids corruption when pasted in URLs)
-  const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(minimal))))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+  // URL-encode the JSON directly — no base64, no + / = corruption
+  const encoded = encodeURIComponent(JSON.stringify(minimal));
   return `${window.location.origin}/?code=${tenant.accessCode}&d=${encoded}`;
 }
 
@@ -2203,10 +2202,18 @@ async function tryAutoLogin() {
     const urlData = params.get("d");
     if (urlData) {
       try {
-        // Restore URL-safe base64 back to standard base64 before decoding
-        const b64std = urlData.replace(/-/g, '+').replace(/_/g, '/');
-        const padded = b64std + '=='.slice(0, (4 - b64std.length % 4) % 4);
-        const decoded = JSON.parse(decodeURIComponent(escape(atob(padded))));
+        // Try as plain JSON first (new format, URLSearchParams already decoded it)
+        // Fall back to base64 variants for older links
+        let decoded;
+        try {
+          decoded = JSON.parse(urlData);
+        } catch {
+          // Old base64 link — handle spaces (+ decoded as space) and URL-safe chars
+          const b64 = urlData.replace(/ /g, '+').replace(/-/g, '+').replace(/_/g, '/');
+          const mod4 = b64.length % 4;
+          const padded = mod4 ? b64 + '='.repeat(4 - mod4) : b64;
+          decoded = JSON.parse(decodeURIComponent(escape(atob(padded))));
+        }
         const today = new Date().toISOString().slice(0, 10);
         if (decoded.accessCode === urlCode) {
           if (decoded.status !== "active" || decoded.expiresAt < today) {
