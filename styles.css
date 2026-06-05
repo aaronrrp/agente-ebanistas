@@ -1235,14 +1235,16 @@ textarea {
 ══════════════════════════════════════════════════════ */
 .modal-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,.55);
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: flex-start; justify-content: center;
   z-index: 9000; padding: 1rem;
+  overflow-y: auto;
 }
 .modal-overlay.hidden { display: none; }
 .modal-card {
   background: #fff; border-radius: 16px; padding: 2rem;
   width: 100%; max-width: 480px; position: relative;
   box-shadow: 0 20px 50px rgba(0,0,0,.3);
+  margin: auto;
 }
 .modal-card h3 { margin: 0 0 .5rem; font-size: 1.1rem; color: #0f172a; }
 .modal-close {
