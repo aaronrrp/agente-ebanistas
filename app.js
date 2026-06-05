@@ -610,6 +610,20 @@ function applyTenantTheme(tenant) {
   }
 }
 
+function resetTheme() {
+  const root = document.documentElement;
+  root.style.removeProperty("--accent");
+  root.style.removeProperty("--accent-dark");
+  root.style.removeProperty("--sidebar-bg");
+  root.style.removeProperty("--sidebar-text");
+  root.style.removeProperty("--chat-bubble-assistant-bg");
+  document.body.style.fontFamily = "";
+  const brandMark = document.querySelector(".brand-mark");
+  if (brandMark) brandMark.innerHTML = "TM";
+  const taglineEl = document.getElementById("tenantTagline");
+  if (taglineEl) taglineEl.textContent = "";
+}
+
 function renderClient() {
   const tenant = currentTenant();
   if (!tenant) return;
@@ -619,8 +633,12 @@ function renderClient() {
   const switcher = document.getElementById("tenantSwitcher");
   if (switcher) switcher.style.display = AUTH.mode === "ebanista" ? "none" : "";
 
-  // Apply tenant theme (colors, logo, greeting)
-  applyTenantTheme(tenant);
+  // Apply tenant theme only in ebanista mode — admin UI must not change when switching profiles
+  if (AUTH.mode === "ebanista") {
+    applyTenantTheme(tenant);
+  } else {
+    resetTheme();
+  }
 
   // Show logo if available (from theme or legacy logoBase64)
   const logoSrc = tenant.theme?.logoBase64 || tenant.logoBase64;
@@ -3063,7 +3081,7 @@ document.getElementById("resetPricesBtn")?.addEventListener("click", () => {
 document.getElementById("em_logoFile")?.addEventListener("change", (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
-  if (file.size > 350_000) { toast("El logo debe ser menor a 300 KB.", "error"); e.target.value = ""; return; }
+  if (file.size > 2_000_000) { toast("El logo debe ser menor a 2 MB.", "error"); e.target.value = ""; return; }
   const reader = new FileReader();
   reader.onload = (ev) => {
     const b64 = ev.target.result;
