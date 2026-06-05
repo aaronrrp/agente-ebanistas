@@ -79,6 +79,7 @@
         <div>
           <p class="eyebrow">Plataforma SaaS</p>
           <h1>Agente IA para ebanistas</h1>
+          <div id="tenantTagline" class="tenant-tagline"></div>
         </div>
         <div class="tenant-switcher" id="tenantSwitcher">
           <label for="tenantSelect">Cuenta activa</label>
@@ -118,48 +119,26 @@
               <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:.5rem">El IA usa estos valores al cotizar</span>
             </summary>
             <div style="padding-top:1rem">
-              <div class="prices-grid">
-                <div class="price-group">
-                  <h4 class="price-group-title">🪵 Madera / Melamina</h4>
-                  <label class="price-row"><span>Lámina 2440×1220mm</span><span class="price-input-wrap">$<input id="price_melamina_std" type="number" step="0.01" min="0" class="price-input"></span></label>
-                  <label class="price-row"><span>Lámina 2750×1830mm</span><span class="price-input-wrap">$<input id="price_melamina_lg" type="number" step="0.01" min="0" class="price-input"></span></label>
-                  <label class="price-row"><span>Fondo/backing /m²</span><span class="price-input-wrap">$<input id="price_backing_m2" type="number" step="0.01" min="0" class="price-input"></span></label>
-                </div>
-                <div class="price-group">
-                  <h4 class="price-group-title">🔄 Canto PVC</h4>
-                  <label class="price-row"><span>Canto PVC 22mm /metro</span><span class="price-input-wrap">$<input id="price_canto_pvc" type="number" step="0.01" min="0" class="price-input"></span></label>
-                  <label class="price-row"><span>Canto grueso 2mm /metro</span><span class="price-input-wrap">$<input id="price_canto_grueso" type="number" step="0.01" min="0" class="price-input"></span></label>
-                </div>
-                <div class="price-group">
-                  <h4 class="price-group-title">🔩 Bisagras y correderas</h4>
-                  <label class="price-row"><span>Bisagra estándar /un</span><span class="price-input-wrap">$<input id="price_bisagra_std" type="number" step="0.01" min="0" class="price-input"></span></label>
-                  <label class="price-row"><span>Bisagra cierre suave /un</span><span class="price-input-wrap">$<input id="price_bisagra_sc" type="number" step="0.01" min="0" class="price-input"></span></label>
-                  <label class="price-row"><span>Corredera estándar /par</span><span class="price-input-wrap">$<input id="price_corredera_std" type="number" step="0.01" min="0" class="price-input"></span></label>
-                  <label class="price-row"><span>Corredera cierre suave /par</span><span class="price-input-wrap">$<input id="price_corredera_sc" type="number" step="0.01" min="0" class="price-input"></span></label>
-                </div>
-                <div class="price-group">
-                  <h4 class="price-group-title">🪝 Jaladores</h4>
-                  <label class="price-row"><span>Jalador 128mm /un</span><span class="price-input-wrap">$<input id="price_jalador_chico" type="number" step="0.01" min="0" class="price-input"></span></label>
-                  <label class="price-row"><span>Jalador 320mm /un</span><span class="price-input-wrap">$<input id="price_jalador_grande" type="number" step="0.01" min="0" class="price-input"></span></label>
-                  <label class="price-row"><span>Jalador inox premium /un</span><span class="price-input-wrap">$<input id="price_jalador_premium" type="number" step="0.01" min="0" class="price-input"></span></label>
-                </div>
-                <div class="price-group">
-                  <h4 class="price-group-title">🚚 Mano de obra y transporte</h4>
-                  <label class="price-row"><span>Instalación /hora</span><span class="price-input-wrap">$<input id="price_install_hour" type="number" step="0.01" min="0" class="price-input"></span></label>
-                  <label class="price-row"><span>Transporte base</span><span class="price-input-wrap">$<input id="price_transport_base" type="number" step="0.01" min="0" class="price-input"></span></label>
-                  <label class="price-row"><span>Transporte /km adicional</span><span class="price-input-wrap">$<input id="price_transport_km" type="number" step="0.01" min="0" class="price-input"></span></label>
-                </div>
-              </div>
-              <!-- Custom price items — dynamic rows added by admin -->
-              <div class="price-group" style="grid-column:1/-1;border-top:1px solid #E5E7EB;padding-top:1rem;margin-top:.5rem">
-                <h4 class="price-group-title">➕ Precios personalizados</h4>
-                <div id="customPricesList"></div>
-                <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
-                  <input id="newPriceName" placeholder="Nombre del ítem (ej: Bisagra especial 95°)" style="flex:2;min-width:160px;padding:.35rem .5rem;border:1px solid #D1D5DB;border-radius:6px;font-size:.85rem">
+              <!-- All price groups rendered dynamically by renderPricesForm() -->
+              <div id="pricesGrid" class="prices-grid"></div>
+
+              <!-- Add custom price item form -->
+              <div style="border-top:1px solid #E5E7EB;padding-top:1rem;margin-top:.75rem">
+                <h4 class="price-group-title" style="margin-bottom:.6rem">➕ Agregar precio personalizado</h4>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                  <input id="newPriceName" placeholder="Nombre del ítem (ej: Bisagra especial 95°)" style="flex:3;min-width:160px;padding:.35rem .5rem;border:1px solid #D1D5DB;border-radius:6px;font-size:.85rem">
                   <input id="newPriceValue" type="number" placeholder="$ Precio" min="0" step="0.01" style="flex:0 0 90px;padding:.35rem .5rem;border:1px solid #D1D5DB;border-radius:6px;font-size:.85rem">
+                  <select id="newPriceCategory" style="flex:2;min-width:150px;padding:.35rem .5rem;border:1px solid #D1D5DB;border-radius:6px;font-size:.85rem;background:#fff">
+                    <option value="madera">🪵 Madera / Melamina</option>
+                    <option value="canto">🔄 Canto PVC</option>
+                    <option value="bisagras">🔩 Bisagras y correderas</option>
+                    <option value="jaladores">🪝 Jaladores</option>
+                    <option value="mano">🚚 Mano de obra</option>
+                  </select>
                   <button id="addCustomPriceBtn" class="secondary-btn" type="button" style="font-size:.85rem">+ Agregar</button>
                 </div>
               </div>
+
               <div style="display:flex;gap:.75rem;margin-top:1rem">
                 <button id="savePricesBtn" class="primary-btn" type="button">Guardar precios</button>
                 <button id="resetPricesBtn" class="secondary-btn" type="button">Restaurar defecto</button>
@@ -510,15 +489,33 @@ Tapa superior, 120, 55, 1, 18 mm, sin canto"></textarea>
       </div>
 
       <!-- Theme customization -->
-      <details style="margin-top:1rem">
-        <summary style="cursor:pointer;font-weight:600;font-size:.9rem;padding:.4rem 0;list-style:none;display:flex;align-items:center;gap:.5rem">🎨 Personalización de interfaz <span style="font-size:.75rem;font-weight:400;color:#6B7280">(colores, logo, mensaje)</span></summary>
+      <details style="margin-top:1rem" open>
+        <summary style="cursor:pointer;font-weight:600;font-size:.9rem;padding:.4rem 0;list-style:none;display:flex;align-items:center;gap:.5rem">🎨 Personalización de interfaz <span style="font-size:.75rem;font-weight:400;color:#6B7280">(colores, logo, fuente, secciones…)</span></summary>
         <div class="form-grid" style="margin-top:.75rem">
+
+          <!-- Colors -->
           <label>Color principal
             <input id="em_accentColor" type="color" value="#6366F1" style="height:38px;cursor:pointer;width:100%">
           </label>
           <label>Color de fondo del encabezado
             <input id="em_headerBg" type="color" value="#1E1B4B" style="height:38px;cursor:pointer;width:100%">
           </label>
+          <label>Color de burbujas IA (chat)
+            <input id="em_chatBubbleColor" type="color" value="#f3f4f6" style="height:38px;cursor:pointer;width:100%">
+          </label>
+
+          <!-- Font -->
+          <label>Tipografía de la interfaz
+            <select id="em_fontFamily" style="width:100%;padding:.35rem .5rem;border:1px solid #D1D5DB;border-radius:6px;font-size:.85rem">
+              <option value="">Por defecto (sistema)</option>
+              <option value="'Georgia', serif">Georgia — clásico elegante</option>
+              <option value="'Arial', sans-serif">Arial — limpio moderno</option>
+              <option value="'Trebuchet MS', sans-serif">Trebuchet — contemporáneo</option>
+              <option value="'Courier New', monospace">Courier — técnico</option>
+            </select>
+          </label>
+
+          <!-- Logo -->
           <label class="span-2">Logo de la empresa (JPG / PNG — máx 300 KB)
             <input id="em_logoFile" type="file" accept="image/jpeg,image/png,image/webp" style="font-size:.82rem">
           </label>
@@ -526,9 +523,33 @@ Tapa superior, 120, 55, 1, 18 mm, sin canto"></textarea>
             <img id="em_logoImg" alt="Logo" style="max-height:48px;max-width:160px;border-radius:4px;border:1px solid #E5E7EB">
             <button id="em_removeLogoBtn" class="tiny-btn danger" type="button" style="margin-left:8px;font-size:.75rem">Quitar logo</button>
           </div>
+
+          <!-- Tagline -->
+          <label class="span-2">Eslogan de la empresa (bajo el título)
+            <input id="em_tagline" placeholder="Ej: Muebles a la medida, con calidad y estilo">
+          </label>
+
+          <!-- Greeting -->
           <label class="span-2">Mensaje de bienvenida del chat
             <textarea id="em_greeting" rows="2" placeholder="Ej: ¡Hola! Soy el asistente de Muebles Rivera. ¿Qué mueble necesitas hoy?"></textarea>
           </label>
+
+          <!-- Tab visibility -->
+          <div class="span-2">
+            <p style="font-size:.875rem;font-weight:500;margin:0 0 .4rem">Secciones visibles para el ebanista</p>
+            <div style="display:flex;gap:1.2rem;flex-wrap:wrap">
+              <label style="display:flex;gap:.4rem;align-items:center;font-weight:normal;font-size:.875rem">
+                <input id="em_showDesign" type="checkbox" checked> 🤖 Diseñar IA
+              </label>
+              <label style="display:flex;gap:.4rem;align-items:center;font-weight:normal;font-size:.875rem">
+                <input id="em_showQuote" type="checkbox" checked> 📋 Cotizar
+              </label>
+              <label style="display:flex;gap:.4rem;align-items:center;font-weight:normal;font-size:.875rem">
+                <input id="em_showCuts" type="checkbox" checked> ✂️ Cortes
+              </label>
+            </div>
+          </div>
+
         </div>
       </details>
 

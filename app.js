@@ -135,6 +135,34 @@ const defaultGlobalPrices = {
   install_hour: 25, transport_base: 30, transport_km: 0.50
 };
 
+// Default display names for each standard price key (editable by admin)
+const defaultPriceNames = {
+  melamina_std: "Lámina 2440×1220mm",
+  melamina_lg: "Lámina 2750×1830mm",
+  backing_m2: "Fondo/backing /m²",
+  canto_pvc: "Canto PVC 22mm /metro",
+  canto_grueso: "Canto grueso 2mm /metro",
+  bisagra_std: "Bisagra estándar /un",
+  bisagra_sc: "Bisagra cierre suave /un",
+  corredera_std: "Corredera estándar /par",
+  corredera_sc: "Corredera cierre suave /par",
+  jalador_chico: "Jalador 128mm /un",
+  jalador_grande: "Jalador 320mm /un",
+  jalador_premium: "Jalador inox premium /un",
+  install_hour: "Instalación /hora",
+  transport_base: "Transporte base",
+  transport_km: "Transporte /km adicional"
+};
+
+// Price groups — defines which keys belong to each group
+const priceGroups = [
+  { id: "madera",    icon: "🪵", title: "Madera / Melamina",        keys: ["melamina_std","melamina_lg","backing_m2"] },
+  { id: "canto",     icon: "🔄", title: "Canto PVC",                keys: ["canto_pvc","canto_grueso"] },
+  { id: "bisagras",  icon: "🔩", title: "Bisagras y correderas",    keys: ["bisagra_std","bisagra_sc","corredera_std","corredera_sc"] },
+  { id: "jaladores", icon: "🪝", title: "Jaladores",                keys: ["jalador_chico","jalador_grande","jalador_premium"] },
+  { id: "mano",      icon: "🚚", title: "Mano de obra y transporte",keys: ["install_hour","transport_base","transport_km"] }
+];
+
 const state = {
   tenants: load("tm_tenants", defaultTenants),
   quotes: load("tm_quotes", []),
@@ -263,25 +291,63 @@ async function saveGlobalPrices() {
 }
 
 function renderPricesForm() {
-  const fields = [
-    ["melamina_std","melamina_lg","canto_pvc","canto_grueso","backing_m2"],
-    ["bisagra_std","bisagra_sc","corredera_std","corredera_sc"],
-    ["jalador_chico","jalador_grande","jalador_premium"],
-    ["install_hour","transport_base","transport_km"]
-  ].flat();
-  fields.forEach(k => {
-    const el = document.getElementById(`price_${k}`);
-    if (el) el.value = state.globalPrices[k] ?? defaultGlobalPrices[k];
-  });
-  renderCustomPrices();
+  const grid = document.getElementById("pricesGrid");
+  if (!grid) return;
+  const names = state.globalPrices._names || {};
+  const customItems = state.globalPrices.customItems || [];
+
+  grid.innerHTML = priceGroups.map(group => {
+    // Standard rows for this group — name is editable, price is editable
+    const stdRows = group.keys.map(k => {
+      const label = escapeHtml(names[k] || defaultPriceNames[k]);
+      const price = state.globalPrices[k] ?? defaultGlobalPrices[k];
+      return `<label class="price-row">
+        <input class="price-name-input" data-name-key="${k}" type="text" value="${label}" aria-label="Nombre de ${label}">
+        <span class="price-input-wrap">$<input id="price_${k}" data-price-key="${k}" type="number" step="0.01" min="0" class="price-input" value="${price}" aria-label="Precio de ${label}"></span>
+      </label>`;
+    }).join("");
+
+    // Custom rows assigned to this group
+    const customRows = customItems
+      .map((item, i) => ({ item, i }))
+      .filter(({ item }) => (item.category || "madera") === group.id)
+      .map(({ item, i }) => `<label class="price-row">
+        <input class="price-name-input" data-custom-name="${i}" type="text" value="${escapeHtml(item.name)}" aria-label="Nombre del ítem personalizado">
+        <span class="price-input-wrap" style="gap:4px">$<input data-custom-idx="${i}" type="number" step="0.01" min="0" class="price-input" value="${item.price}" style="width:70px" aria-label="Precio del ítem personalizado">
+          <button data-rm-custom="${i}" class="tiny-btn danger" type="button" title="Eliminar ítem" style="font-size:.7rem;padding:2px 6px;line-height:1">✕</button>
+        </span>
+      </label>`).join("");
+
+    return `<div class="price-group" data-group="${group.id}">
+      <h4 class="price-group-title">${group.icon} ${group.title}</h4>
+      ${stdRows}${customRows}
+    </div>`;
+  }).join("");
 }
 
 function collectPricesFromForm() {
-  const keys = Object.keys(defaultGlobalPrices);
-  keys.forEach(k => {
-    const el = document.getElementById(`price_${k}`);
-    if (el) state.globalPrices[k] = parseFloat(el.value) || defaultGlobalPrices[k];
+  // Collect prices for standard keys from dynamic grid
+  const priceInputs = document.querySelectorAll("#pricesGrid [data-price-key]");
+  priceInputs.forEach(el => {
+    const k = el.dataset.priceKey;
+    if (k) state.globalPrices[k] = parseFloat(el.value) || defaultGlobalPrices[k];
   });
+  // Collect custom names from dynamic grid
+  const nameInputs = document.querySelectorAll("#pricesGrid [data-name-key]");
+  if (nameInputs.length) {
+    if (!state.globalPrices._names) state.globalPrices._names = {};
+    nameInputs.forEach(el => {
+      const k = el.dataset.nameKey;
+      const defaultName = defaultPriceNames[k];
+      const entered = el.value.trim();
+      // Only store if different from default to keep storage lean
+      if (entered && entered !== defaultName) {
+        state.globalPrices._names[k] = entered;
+      } else {
+        delete state.globalPrices._names[k];
+      }
+    });
+  }
 }
 
 function money(value) {
@@ -469,7 +535,8 @@ function renderTenantForm(tenant) {
 function applyTenantTheme(tenant) {
   const root = document.documentElement;
   const theme = tenant?.theme || {};
-  // Apply or reset CSS custom properties
+
+  // ── Accent color ──────────────────────────────────────────
   if (theme.accentColor) {
     root.style.setProperty("--accent", theme.accentColor);
     root.style.setProperty("--accent-dark", theme.accentColor);
@@ -477,17 +544,43 @@ function applyTenantTheme(tenant) {
     root.style.removeProperty("--accent");
     root.style.removeProperty("--accent-dark");
   }
+
+  // ── Sidebar/header background ─────────────────────────────
   if (theme.headerBg) {
     root.style.setProperty("--sidebar-bg", theme.headerBg);
   } else {
     root.style.removeProperty("--sidebar-bg");
   }
-  // Apply custom greeting to chat initial bubble
+
+  // ── Chat assistant bubble color ───────────────────────────
+  if (theme.chatBubbleColor) {
+    root.style.setProperty("--chat-bubble-assistant-bg", theme.chatBubbleColor);
+  } else {
+    root.style.removeProperty("--chat-bubble-assistant-bg");
+  }
+
+  // ── Font family ───────────────────────────────────────────
+  document.body.style.fontFamily = theme.fontFamily || "";
+
+  // ── Tagline ───────────────────────────────────────────────
+  const taglineEl = document.getElementById("tenantTagline");
+  if (taglineEl) taglineEl.textContent = theme.tagline || "";
+
+  // ── Chat greeting bubble ──────────────────────────────────
   const firstBubble = document.querySelector("#chatMessages .chat-bubble.assistant:first-child");
-  if (firstBubble && theme.greeting) {
-    firstBubble.textContent = theme.greeting;
-  } else if (firstBubble && !theme.greeting) {
-    firstBubble.textContent = "👋 ¡Hola! Cuéntame qué mueble necesitas — tipo, medidas, color y cuarto. Te preparo el diseño técnico con render visual.";
+  if (firstBubble) {
+    firstBubble.textContent = theme.greeting ||
+      "👋 ¡Hola! Cuéntame qué mueble necesitas — tipo, medidas, color y cuarto. Te preparo el diseño técnico con render visual.";
+  }
+
+  // ── Tab visibility (only in ebanista mode to avoid hiding admin tabs) ──
+  if (AUTH.mode === "ebanista") {
+    const navDesign = document.querySelector('[data-view="designerView"]');
+    const navQuote  = document.querySelector('[data-view="quoteView"]');
+    const navCuts   = document.querySelector('[data-view="cutsView"]');
+    if (navDesign) navDesign.style.display = theme.showDesign === false ? "none" : "";
+    if (navQuote)  navQuote.style.display  = theme.showQuote  === false ? "none" : "";
+    if (navCuts)   navCuts.style.display   = theme.showCuts   === false ? "none" : "";
   }
 }
 
@@ -593,9 +686,18 @@ function openEbanistaModal(editId) {
   document.getElementById("em_expires").value = t?.expiresAt || addDays(30);
   // Theme fields
   const theme = t?.theme || {};
-  document.getElementById("em_accentColor").value = theme.accentColor || "#6366F1";
-  document.getElementById("em_headerBg").value   = theme.headerBg    || "#1E1B4B";
-  document.getElementById("em_greeting").value   = theme.greeting    || "";
+  document.getElementById("em_accentColor").value    = theme.accentColor    || "#6366F1";
+  document.getElementById("em_headerBg").value       = theme.headerBg       || "#1E1B4B";
+  document.getElementById("em_chatBubbleColor").value= theme.chatBubbleColor|| "#f3f4f6";
+  document.getElementById("em_fontFamily").value     = theme.fontFamily     || "";
+  document.getElementById("em_tagline").value        = theme.tagline        || "";
+  document.getElementById("em_greeting").value       = theme.greeting       || "";
+  const cbShowDesign = document.getElementById("em_showDesign");
+  const cbShowQuote  = document.getElementById("em_showQuote");
+  const cbShowCuts   = document.getElementById("em_showCuts");
+  if (cbShowDesign) cbShowDesign.checked = theme.showDesign !== false;
+  if (cbShowQuote)  cbShowQuote.checked  = theme.showQuote  !== false;
+  if (cbShowCuts)   cbShowCuts.checked   = theme.showCuts   !== false;
   const preview = document.getElementById("em_logoPreview");
   const logoImg = document.getElementById("em_logoImg");
   if (preview && logoImg) {
@@ -646,10 +748,16 @@ async function saveEbanistaFromModal() {
     accessCode,
     catalog: existing?.catalog || cloneCatalog(),
     theme: {
-      accentColor: document.getElementById("em_accentColor")?.value || existing?.theme?.accentColor || "",
-      headerBg:    document.getElementById("em_headerBg")?.value    || existing?.theme?.headerBg    || "",
-      greeting:    document.getElementById("em_greeting")?.value?.trim() || existing?.theme?.greeting || "",
-      logoBase64:  document.getElementById("em_logoFile")?._pendingB64 || existing?.theme?.logoBase64 || ""
+      accentColor:    document.getElementById("em_accentColor")?.value     || existing?.theme?.accentColor    || "",
+      headerBg:       document.getElementById("em_headerBg")?.value        || existing?.theme?.headerBg       || "",
+      chatBubbleColor:document.getElementById("em_chatBubbleColor")?.value || existing?.theme?.chatBubbleColor|| "",
+      fontFamily:     document.getElementById("em_fontFamily")?.value      || existing?.theme?.fontFamily     || "",
+      tagline:        document.getElementById("em_tagline")?.value?.trim() || existing?.theme?.tagline        || "",
+      greeting:       document.getElementById("em_greeting")?.value?.trim()|| existing?.theme?.greeting       || "",
+      logoBase64:     document.getElementById("em_logoFile")?._pendingB64  || existing?.theme?.logoBase64     || "",
+      showDesign:     document.getElementById("em_showDesign")?.checked    ?? (existing?.theme?.showDesign ?? true),
+      showQuote:      document.getElementById("em_showQuote")?.checked     ?? (existing?.theme?.showQuote  ?? true),
+      showCuts:       document.getElementById("em_showCuts")?.checked      ?? (existing?.theme?.showCuts   ?? true)
     }
   };
 
@@ -2830,59 +2938,66 @@ els.marginPercent?.addEventListener("change", (e) => {
   });
 })();
 
-// ── Custom price items ─────────────────────────────────────────────────────
-function renderCustomPrices() {
-  const list = document.getElementById("customPricesList");
-  if (!list) return;
-  const items = state.globalPrices.customItems || [];
-  if (!items.length) { list.innerHTML = '<p style="font-size:.8rem;color:#9CA3AF;margin:4px 0">Sin ítems personalizados.</p>'; return; }
-  list.innerHTML = items.map((item, i) => `
-    <label class="price-row" style="align-items:center">
-      <span style="flex:2">${escapeHtml(item.name)}</span>
-      <span class="price-input-wrap" style="gap:4px">
-        $<input data-custom-idx="${i}" type="number" step="0.01" min="0" class="price-input" value="${item.price}" style="width:70px">
-        <button data-rm-custom="${i}" class="tiny-btn danger" type="button" style="font-size:.7rem;padding:2px 5px;line-height:1">✕</button>
-      </span>
-    </label>`).join("");
-}
+// ── Price grid event delegation (names + prices + remove custom) ───────────
+// renderCustomPrices kept as no-op alias for backward compat
+function renderCustomPrices() { renderPricesForm(); }
 
-document.getElementById("customPricesList")?.addEventListener("input", e => {
-  const idx = e.target.dataset.customIdx;
-  if (idx !== undefined && state.globalPrices.customItems) {
-    state.globalPrices.customItems[Number(idx)].price = parseFloat(e.target.value) || 0;
+document.getElementById("pricesGrid")?.addEventListener("input", e => {
+  const priceKey  = e.target.dataset.priceKey;
+  const nameKey   = e.target.dataset.nameKey;
+  const customIdx = e.target.dataset.customIdx;
+  const customName= e.target.dataset.customName;
+
+  if (priceKey) {
+    // Standard item price changed
+    state.globalPrices[priceKey] = parseFloat(e.target.value) || 0;
+  } else if (nameKey) {
+    // Standard item name changed — store in _names map
+    if (!state.globalPrices._names) state.globalPrices._names = {};
+    const defaultName = defaultPriceNames[nameKey] || "";
+    const entered = e.target.value.trim();
+    if (entered && entered !== defaultName) state.globalPrices._names[nameKey] = entered;
+    else delete state.globalPrices._names[nameKey];
+  } else if (customIdx !== undefined && state.globalPrices.customItems?.[Number(customIdx)] !== undefined) {
+    // Custom item price changed
+    state.globalPrices.customItems[Number(customIdx)].price = parseFloat(e.target.value) || 0;
+  } else if (customName !== undefined && state.globalPrices.customItems?.[Number(customName)] !== undefined) {
+    // Custom item name changed
+    state.globalPrices.customItems[Number(customName)].name = e.target.value;
   }
 });
-document.getElementById("customPricesList")?.addEventListener("click", e => {
+
+document.getElementById("pricesGrid")?.addEventListener("click", e => {
   const idx = e.target.dataset.rmCustom;
   if (idx !== undefined) {
     state.globalPrices.customItems = (state.globalPrices.customItems || []).filter((_, i) => i !== Number(idx));
-    renderCustomPrices();
+    renderPricesForm();
   }
 });
+
 document.getElementById("addCustomPriceBtn")?.addEventListener("click", () => {
-  const name  = document.getElementById("newPriceName")?.value.trim();
-  const price = parseFloat(document.getElementById("newPriceValue")?.value) || 0;
+  const name     = document.getElementById("newPriceName")?.value.trim();
+  const price    = parseFloat(document.getElementById("newPriceValue")?.value) || 0;
+  const category = document.getElementById("newPriceCategory")?.value || "madera";
   if (!name) { toast("Escribe el nombre del ítem.", "error"); return; }
   if (!state.globalPrices.customItems) state.globalPrices.customItems = [];
-  state.globalPrices.customItems.push({ name, price });
+  state.globalPrices.customItems.push({ name, price, category });
   document.getElementById("newPriceName").value  = "";
   document.getElementById("newPriceValue").value = "";
-  renderCustomPrices();
-  toast("Ítem agregado ✓");
+  renderPricesForm();
+  toast(`Ítem "${name}" agregado ✓`);
 });
 
 // ── Prices editor ─────────────────────────────────────────────────────────
 document.getElementById("savePricesBtn")?.addEventListener("click", async () => {
   collectPricesFromForm();
   await saveGlobalPrices();
-  renderCustomPrices();
   toast("Precios guardados ✓");
 });
 
 document.getElementById("resetPricesBtn")?.addEventListener("click", () => {
   state.globalPrices = { ...defaultGlobalPrices };
   renderPricesForm();
-  renderCustomPrices();
   toast("Precios restablecidos a valores por defecto");
 });
 
