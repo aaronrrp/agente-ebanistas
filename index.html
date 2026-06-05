@@ -194,6 +194,38 @@
             <div id="quoteHistory" class="quote-history"></div>
           </section>
         </div>
+
+        <!-- Per-ebanista market prices -->
+        <section class="panel" style="margin-top:1.5rem">
+          <details id="tenantPricesDetails">
+            <summary style="cursor:pointer;font-weight:600;font-size:1rem;padding:.5rem 0;list-style:none;display:flex;align-items:center;gap:.5rem">
+              <span>💲</span> Precios del mercado
+              <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:.5rem">El IA y el cotizador usan estos valores para tus cotizaciones</span>
+            </summary>
+            <div style="padding-top:1rem">
+              <div id="tenantPricesGrid" class="prices-grid"></div>
+              <div style="border-top:1px solid #E5E7EB;padding-top:1rem;margin-top:.75rem">
+                <h4 class="price-group-title" style="margin-bottom:.6rem">➕ Agregar precio personalizado</h4>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                  <input id="tenantNewPriceName" placeholder="Nombre del ítem" style="flex:3;min-width:160px;padding:.35rem .5rem;border:1px solid #D1D5DB;border-radius:6px;font-size:.85rem">
+                  <input id="tenantNewPriceValue" type="number" placeholder="$ Precio" min="0" step="0.01" style="flex:0 0 90px;padding:.35rem .5rem;border:1px solid #D1D5DB;border-radius:6px;font-size:.85rem">
+                  <select id="tenantNewPriceCategory" style="flex:2;min-width:150px;padding:.35rem .5rem;border:1px solid #D1D5DB;border-radius:6px;font-size:.85rem;background:#fff">
+                    <option value="madera">🪵 Madera / Melamina</option>
+                    <option value="canto">🔄 Canto PVC</option>
+                    <option value="bisagras">🔩 Bisagras y correderas</option>
+                    <option value="jaladores">🪝 Jaladores</option>
+                    <option value="mano">🚚 Mano de obra</option>
+                  </select>
+                  <button id="tenantAddPriceBtn" class="secondary-btn" type="button" style="font-size:.85rem">+ Agregar</button>
+                </div>
+              </div>
+              <div style="display:flex;gap:.75rem;margin-top:1rem">
+                <button id="saveTenantPricesBtn" class="primary-btn" type="button">Guardar mis precios</button>
+                <button id="resetTenantPricesBtn" class="secondary-btn" type="button">Restaurar globales</button>
+              </div>
+            </div>
+          </details>
+        </section>
       </section>
 
       <section id="designerView" class="view">
@@ -362,13 +394,11 @@
               <label>Precio final manual USD<input id="manualTotal" type="number" min="0" step="1" placeholder="Opcional"></label>
               <label class="span-2">Notas generales<textarea id="clientNotes" rows="3" placeholder="Condiciones del espacio, color preferido, detalles del cliente o exclusiones."></textarea></label>
 
-              <label class="check-row">
-                <input id="includeInstall" type="checkbox" checked>
-                Incluir instalación
+              <label>Mano de obra / instalación USD
+                <input id="manoObraField" type="number" min="0" step="1" placeholder="0 = no incluir">
               </label>
-              <label class="check-row">
-                <input id="includeTransport" type="checkbox" checked>
-                Incluir transporte
+              <label>Transporte USD
+                <input id="transportField" type="number" min="0" step="1" placeholder="0 = no incluir">
               </label>
               <button class="primary-btn span-2" type="submit">Generar cotización</button>
               <button class="secondary-btn span-2" data-view-jump="cutsView" type="button">Ir a cortes</button>
@@ -560,6 +590,15 @@ Tapa superior, 120, 55, 1, 18 mm, sin canto"></textarea>
             </div>
           </div>
 
+        </div>
+      </details>
+
+      <!-- Per-tenant prices override -->
+      <details style="margin-top:1rem">
+        <summary style="cursor:pointer;font-weight:600;font-size:.9rem;padding:.4rem 0;list-style:none;display:flex;align-items:center;gap:.5rem">💲 Precios del mercado para este ebanista <span style="font-size:.75rem;font-weight:400;color:#6B7280;margin-left:.25rem">(sobreescribe los globales)</span></summary>
+        <div style="padding-top:.75rem">
+          <p style="font-size:.8rem;color:#6B7280;margin:0 0 .5rem">Personaliza los precios de materiales y mano de obra para este ebanista específico. Deja en 0 para usar los valores globales.</p>
+          <div id="em_pricesGrid" class="prices-grid" style="font-size:.82rem"></div>
         </div>
       </details>
 

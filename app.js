@@ -121,6 +121,17 @@ const defaultPriceNames = {
   transport_km: "Transporte /km adicional"
 };
 
+function tenantPrices() {
+  const tenant = currentTenant();
+  if (!tenant?.prices) return state.globalPrices;
+  return {
+    ...state.globalPrices,
+    ...tenant.prices,
+    customItems: tenant.prices.customItems ?? state.globalPrices.customItems ?? [],
+    _names: { ...(state.globalPrices._names || {}), ...(tenant.prices._names || {}) }
+  };
+}
+
 // Price groups — defines which keys belong to each group
 const priceGroups = [
   { id: "madera",    icon: "🪵", title: "Madera / Melamina",        keys: ["melamina_std","melamina_lg","backing_m2"] },
@@ -148,6 +159,9 @@ const state = {
 if (!state.selectedTenantId || !state.tenants.some((tenant) => tenant.id === state.selectedTenantId)) {
   state.selectedTenantId = state.tenants[0]?.id || null;
 }
+
+let _tenantPrices = null; // working copy for ebanista editing their own prices
+let _modalPrices  = null; // working copy for admin modal per-tenant prices
 
 const els = {
   navItems: document.querySelectorAll(".nav-item"),
@@ -262,11 +276,12 @@ async function saveGlobalPrices() {
 // ── Return display label for a melamineSheet key ──────────────────────────
 function getMelamineSheetLabel(key) {
   if (!key) return "";
+  const tp = tenantPrices();
   if (key.startsWith("custom_")) {
-    const ci = (state.globalPrices.customItems || [])[ Number(key.slice(7)) ];
+    const ci = (tp.customItems || [])[ Number(key.slice(7)) ];
     return ci ? ci.name : key;
   }
-  const names = state.globalPrices._names || {};
+  const names = tp._names || {};
   return names[key] || defaultPriceNames[key] || key;
 }
 
@@ -274,18 +289,19 @@ function getMelamineSheetLabel(key) {
 function renderMelamineSheetOptions() {
   const sel = document.getElementById("melamineSheet");
   if (!sel) return;
-  const names = state.globalPrices._names || {};
+  const tp = tenantPrices();
+  const names = tp._names || {};
   const prev = sel.value;
 
   // Standard melamine sheets (exclude backing which is a different material)
   const stdOptions = ["melamina_std", "melamina_lg"].map(k => {
     const label = names[k] || defaultPriceNames[k];
-    const price = state.globalPrices[k] ?? defaultGlobalPrices[k];
+    const price = tp[k] ?? defaultGlobalPrices[k];
     return `<option value="${k}">${escapeHtml(label)} — $${price}</option>`;
   });
 
   // Custom items placed in the "madera" category (may be extra sheet sizes, etc.)
-  const customItems = state.globalPrices.customItems || [];
+  const customItems = tp.customItems || [];
   const customOptions = customItems
     .filter(item => (item.category || "madera") === "madera")
     .map((item, i) => `<option value="custom_${i}">${escapeHtml(item.name)} — $${item.price}</option>`);
@@ -297,41 +313,38 @@ function renderMelamineSheetOptions() {
   if (prev && sel.querySelector(`option[value="${CSS.escape(prev)}"]`)) sel.value = prev;
 }
 
-function renderPricesForm() {
-  const grid = document.getElementById("pricesGrid");
+function renderPricesFormFor(gridId, pricesObj) {
+  const grid = document.getElementById(gridId);
   if (!grid) return;
-  const names = state.globalPrices._names || {};
-  const customItems = state.globalPrices.customItems || [];
-
+  const names = pricesObj._names || {};
+  const customItems = pricesObj.customItems || [];
   grid.innerHTML = priceGroups.map(group => {
-    // Standard rows for this group — name is editable, price is editable
     const stdRows = group.keys.map(k => {
       const label = escapeHtml(names[k] || defaultPriceNames[k]);
-      const price = state.globalPrices[k] ?? defaultGlobalPrices[k];
+      const price = pricesObj[k] ?? defaultGlobalPrices[k];
       return `<label class="price-row">
         <input class="price-name-input" data-name-key="${k}" type="text" value="${label}" aria-label="Nombre de ${label}">
         <span class="price-input-wrap">$<input id="price_${k}" data-price-key="${k}" type="number" step="0.01" min="0" class="price-input" value="${price}" aria-label="Precio de ${label}"></span>
       </label>`;
     }).join("");
-
-    // Custom rows assigned to this group
     const customRows = customItems
       .map((item, i) => ({ item, i }))
       .filter(({ item }) => (item.category || "madera") === group.id)
       .map(({ item, i }) => `<label class="price-row">
-        <input class="price-name-input" data-custom-name="${i}" type="text" value="${escapeHtml(item.name)}" aria-label="Nombre del ítem personalizado">
-        <span class="price-input-wrap" style="gap:4px">$<input data-custom-idx="${i}" type="number" step="0.01" min="0" class="price-input" value="${item.price}" style="width:70px" aria-label="Precio del ítem personalizado">
-          <button data-rm-custom="${i}" class="tiny-btn danger" type="button" title="Eliminar ítem" style="font-size:.7rem;padding:2px 6px;line-height:1">✕</button>
+        <input class="price-name-input" data-custom-name="${i}" type="text" value="${escapeHtml(item.name)}" aria-label="Nombre ítem">
+        <span class="price-input-wrap" style="gap:4px">$<input data-custom-idx="${i}" type="number" step="0.01" min="0" class="price-input" value="${item.price}" style="width:70px" aria-label="Precio ítem">
+          <button data-rm-custom="${i}" class="tiny-btn danger" type="button" title="Eliminar" style="font-size:.7rem;padding:2px 6px;line-height:1">✕</button>
         </span>
       </label>`).join("");
-
     return `<div class="price-group" data-group="${group.id}">
       <h4 class="price-group-title">${group.icon} ${group.title}</h4>
       ${stdRows}${customRows}
     </div>`;
   }).join("");
+}
 
-  // Keep melamine sheet selector in sync with the prices catalog
+function renderPricesForm() {
+  renderPricesFormFor("pricesGrid", state.globalPrices);
   renderMelamineSheetOptions();
 }
 
@@ -653,11 +666,18 @@ function renderClient() {
     ? `Acceso activo hasta ${tenant.expiresAt}.`
     : "Acceso vencido. Contacta al administrador para renovar.";
 
-  els.clientSummary.innerHTML = summaryItem("Empresa", escapeHtml(tenant.companyName))
+  els.clientSummary.innerHTML = summaryItem("Ebanista", escapeHtml(tenant.contactName || tenant.companyName))
+    + summaryItem("Empresa", escapeHtml(tenant.companyName))
     + summaryItem("Estado", active ? "✅ Activo" : "⛔ Vencido")
     + summaryItem("Acceso hasta", tenant.expiresAt)
     + summaryItem("Margen", `${tenant.margin}%`)
     + summaryItem("Contacto", tenant.phone || "—");
+
+  // Populate per-tenant prices grid if present
+  if (document.getElementById("tenantPricesGrid")) {
+    _tenantPrices = { ...tenantPrices(), customItems: [...(tenantPrices().customItems || [])] };
+    renderPricesFormFor("tenantPricesGrid", _tenantPrices);
+  }
 
   const tenantQuotes = state.quotes.filter((quote) => quote.tenantId === tenant.id).slice(0, 6);
   els.quoteHistory.innerHTML = tenantQuotes.length ? tenantQuotes.map((quote) => `
@@ -746,6 +766,14 @@ function openEbanistaModal(editId) {
   if (btn) { btn.textContent = "Guardar y ver link →"; btn.disabled = false; }
   document.getElementById("ebanistaModal").classList.remove("hidden");
   setTimeout(() => document.getElementById("em_company").focus(), 80);
+
+  // Initialize per-tenant prices for this modal
+  const existingPrices = t?.prices || {};
+  _modalPrices = { ...state.globalPrices, ...existingPrices,
+    customItems: [...(existingPrices.customItems || state.globalPrices.customItems || [])],
+    _names: { ...(state.globalPrices._names || {}), ...(existingPrices._names || {}) }
+  };
+  renderPricesFormFor("em_pricesGrid", _modalPrices);
 }
 
 function closeEbanistaModal() {
@@ -783,6 +811,7 @@ async function saveEbanistaFromModal() {
     terms: existing?.terms || "60% para iniciar fabricación y 40% contra entrega.",
     accessCode,
     catalog: existing?.catalog || cloneCatalog(),
+    prices: _modalPrices ? { ..._modalPrices } : (existing?.prices || {}),
     theme: {
       accentColor:    document.getElementById("em_accentColor")?.value     || existing?.theme?.accentColor    || "",
       headerBg:       document.getElementById("em_headerBg")?.value        || existing?.theme?.headerBg       || "",
@@ -898,11 +927,12 @@ function calculateItem(item) {
   let sheetPrice = refSheetPrice;
   const sheetKey = item.melamineSheet;
   if (sheetKey) {
+    const tp = tenantPrices();
     if (sheetKey.startsWith("custom_")) {
-      const ci = (state.globalPrices.customItems || [])[ Number(sheetKey.slice(7)) ];
+      const ci = (tp.customItems || [])[ Number(sheetKey.slice(7)) ];
       if (ci?.price > 0) sheetPrice = ci.price;
-    } else if (state.globalPrices[sheetKey] > 0) {
-      sheetPrice = state.globalPrices[sheetKey];
+    } else if (tp[sheetKey] > 0) {
+      sheetPrice = tp[sheetKey];
     }
   }
   // Weighted factor: 40% fixed + 60% proportional to sheet price
@@ -980,6 +1010,21 @@ function renderDraftItems() {
       <strong>${money(subtotal)}</strong>
     </div>
   `;
+  autoFillCostFields();
+}
+
+function autoFillCostFields() {
+  const tenant = currentTenant();
+  if (!tenant) return;
+  const tp = tenantPrices();
+  const mField = document.getElementById("manoObraField");
+  if (mField && mField.value === "") {
+    mField.value = Math.ceil((tenant.installBase || 75) + (state.draftItems.length * 28));
+  }
+  const tField = document.getElementById("transportField");
+  if (tField && tField.value === "") {
+    tField.value = tp.transport_base ?? tenant.transportBase ?? 30;
+  }
 }
 
 function fillFormFromItem(item, sourceText = "") {
@@ -1070,13 +1115,13 @@ function renderManualPieces() {
 
 function buildQuote(form) {
   const tenant = currentTenant();
-  const installCost = form.includeInstall.checked ? tenant.installBase + (state.draftItems.length * 28) : 0;
-  const transportCost = form.includeTransport.checked ? tenant.transportBase : 0;
+  const manoObra  = Number(document.getElementById("manoObraField")?.value)  || 0;
+  const transport = Number(document.getElementById("transportField")?.value) || 0;
   const itemsSubtotal = state.draftItems.reduce((sum, item) => sum + item.finalPrice, 0);
   const marginPct = Number(els.marginPercent?.value) > 0 ? Number(els.marginPercent.value) : (tenant.margin ?? 30);
   const marginAmount = itemsSubtotal * (marginPct / 100);
   const contingency = itemsSubtotal * 0.08;
-  const calculatedTotal = Math.ceil((itemsSubtotal + installCost + transportCost + marginAmount + contingency) / 5) * 5;
+  const calculatedTotal = Math.ceil((itemsSubtotal + manoObra + transport + marginAmount + contingency) / 5) * 5;
   const manualTotal = Number(document.getElementById("manualTotal").value || 0);
   const total = manualTotal > 0 ? manualTotal : calculatedTotal;
   const maxDays = state.draftItems.some((item) => item.complexityKey === "premium")
@@ -1093,8 +1138,10 @@ function buildQuote(form) {
     validity: Number(document.getElementById("quoteValidity").value || 15),
     notes: document.getElementById("clientNotes").value.trim(),
     items: [...state.draftItems],
-    installCost,
-    transportCost,
+    manoObra,
+    transport,
+    installCost: manoObra,
+    transportCost: transport,
     itemsSubtotal,
     calculatedTotal,
     manualTotal,
@@ -1159,9 +1206,9 @@ function renderQuotePaper(quote) {
       <table class="quote-table">
         <tbody>
           <tr><th>Muebles cotizados</th><td>${money(quote.itemsSubtotal)}</td></tr>
-          <tr><th>Instalación</th><td>${quote.installCost ? money(quote.installCost) : "No incluida"}</td></tr>
-          <tr><th>Transporte</th><td>${quote.transportCost ? money(quote.transportCost) : "No incluido"}</td></tr>
-          <tr><th>Total calculado</th><td>${money(quote.calculatedTotal)}</td></tr>
+          <tr><th>Mano de obra</th><td>${quote.manoObra > 0 ? money(quote.manoObra) : "No incluida"}</td></tr>
+          <tr><th>Transporte</th><td>${quote.transport > 0 ? money(quote.transport) : "No incluido"}</td></tr>
+          <tr><th>Subtotal</th><td>${money(quote.calculatedTotal)}</td></tr>
           ${quote.manualTotal > 0 ? `<tr><th>Ajuste manual</th><td>Total final editado por el ebanista</td></tr>` : ""}
         </tbody>
       </table>
@@ -1598,7 +1645,7 @@ async function sendToAI() {
     const recentHistory = state.chatHistory.slice(-12);
     const body = hasImage
       ? { message: message || "Analiza este espacio y propón muebles de melamina.", imageData: imgDataForRequest }
-      : { message, tenant: currentTenant(), currentItem: state.lastDesignItems[0] || null, history: recentHistory, customPrices: state.globalPrices.customItems || [] };
+      : { message, tenant: currentTenant(), currentItem: state.lastDesignItems[0] || null, history: recentHistory, customPrices: tenantPrices().customItems || [] };
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 55000);
@@ -2580,6 +2627,7 @@ const AUTH = {
   mode: null,        // "admin" | "ebanista"
   token: null,       // admin JWT token
   tenantId: null,    // active tenant ID (ebanista mode)
+  accessCode: null,  // ebanista access code
   linkModalTenantId: null
 };
 
@@ -2654,9 +2702,11 @@ document.getElementById("loginCodeBtn")?.addEventListener("click", async () => {
 
   AUTH.mode = "ebanista";
   AUTH.tenantId = tenant.id;
+  AUTH.accessCode = tenant.accessCode;
   state.selectedTenantId = tenant.id;
   sessionStorage.setItem("ebAuthMode", "ebanista");
   sessionStorage.setItem("ebTenantId", tenant.id);
+  sessionStorage.setItem("ebAccessCode", tenant.accessCode);
   save();
 
   // Hide admin nav item from ebanistas
@@ -2706,10 +2756,11 @@ document.getElementById("logoutBtn")?.addEventListener("click", async () => {
   if (AUTH.token && window.location.protocol !== "file:") {
     try { await fetch("/api/auth/logout", { method: "POST", headers: { Authorization: `Bearer ${AUTH.token}` } }); } catch {}
   }
-  AUTH.mode = null; AUTH.token = null; AUTH.tenantId = null;
+  AUTH.mode = null; AUTH.token = null; AUTH.tenantId = null; AUTH.accessCode = null;
   sessionStorage.removeItem("ebAuthMode");
   sessionStorage.removeItem("ebAdminToken");
   sessionStorage.removeItem("ebTenantId");
+  sessionStorage.removeItem("ebAccessCode");
   showLogin();
 });
 
@@ -2815,9 +2866,11 @@ function _loginAsEbanista(tenant) {
   save();
   AUTH.mode = "ebanista";
   AUTH.tenantId = tenant.id;
+  AUTH.accessCode = tenant.accessCode;
   state.selectedTenantId = tenant.id;
   sessionStorage.setItem("ebAuthMode", "ebanista");
   sessionStorage.setItem("ebTenantId", tenant.id);
+  sessionStorage.setItem("ebAccessCode", tenant.accessCode);
   document.querySelector('[data-view="adminView"]')?.classList.add("hidden");
   showApp();
   showView("clientView");
@@ -2929,6 +2982,7 @@ async function tryAutoLogin() {
   if (savedMode === "ebanista" && savedTenantId) {
     const tenant = state.tenants.find(t => t.id === savedTenantId);
     if (tenant && isTenantActive(tenant)) {
+      AUTH.accessCode = sessionStorage.getItem("ebAccessCode") || tenant.accessCode || null;
       _loginAsEbanista(tenant);
       return;
     }
@@ -3015,8 +3069,6 @@ els.marginPercent?.addEventListener("change", (e) => {
 })();
 
 // ── Price grid event delegation (names + prices + remove custom) ───────────
-// renderCustomPrices kept as no-op alias for backward compat
-function renderCustomPrices() { renderPricesForm(); }
 
 document.getElementById("pricesGrid")?.addEventListener("input", e => {
   const priceKey  = e.target.dataset.priceKey;
@@ -3077,6 +3129,119 @@ document.getElementById("resetPricesBtn")?.addEventListener("click", () => {
   toast("Precios restablecidos a valores por defecto");
 });
 
+// ── saveTenantPrices: save per-tenant prices locally and to server ──────────
+async function saveTenantPrices(prices) {
+  const tenant = currentTenant();
+  if (!tenant) return;
+  tenant.prices = { ...prices };
+  save();
+  if (window.location.protocol !== "file:") {
+    try {
+      if (AUTH.token) {
+        await fetch(`/api/tenants/${tenant.id}`, { method: "PUT", headers: adminApiHeader(), body: JSON.stringify(tenant) });
+      } else {
+        const accessCode = AUTH.accessCode || tenant.accessCode;
+        if (accessCode) await fetch("/api/ebanista-prices", {
+          method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: accessCode, prices })
+        });
+      }
+      toast("Precios guardados ✓");
+    } catch { toast("Guardado local ✓ (sin servidor)"); }
+  } else {
+    toast("Precios guardados ✓");
+  }
+}
+
+// ── tenantPricesGrid event delegation (ebanista editing their own prices) ──
+document.getElementById("tenantPricesGrid")?.addEventListener("input", e => {
+  if (!_tenantPrices) return;
+  const priceKey  = e.target.dataset.priceKey;
+  const nameKey   = e.target.dataset.nameKey;
+  const customIdx = e.target.dataset.customIdx;
+  const customName= e.target.dataset.customName;
+  if (priceKey) {
+    _tenantPrices[priceKey] = parseFloat(e.target.value) || 0;
+  } else if (nameKey) {
+    if (!_tenantPrices._names) _tenantPrices._names = {};
+    const defaultName = defaultPriceNames[nameKey] || "";
+    const entered = e.target.value.trim();
+    if (entered && entered !== defaultName) _tenantPrices._names[nameKey] = entered;
+    else delete _tenantPrices._names[nameKey];
+  } else if (customIdx !== undefined && _tenantPrices.customItems?.[Number(customIdx)] !== undefined) {
+    _tenantPrices.customItems[Number(customIdx)].price = parseFloat(e.target.value) || 0;
+  } else if (customName !== undefined && _tenantPrices.customItems?.[Number(customName)] !== undefined) {
+    _tenantPrices.customItems[Number(customName)].name = e.target.value;
+  }
+});
+
+document.getElementById("tenantPricesGrid")?.addEventListener("click", e => {
+  if (!_tenantPrices) return;
+  const idx = e.target.dataset.rmCustom;
+  if (idx !== undefined) {
+    _tenantPrices.customItems = (_tenantPrices.customItems || []).filter((_, i) => i !== Number(idx));
+    renderPricesFormFor("tenantPricesGrid", _tenantPrices);
+  }
+});
+
+document.getElementById("tenantAddPriceBtn")?.addEventListener("click", () => {
+  if (!_tenantPrices) return;
+  const name     = document.getElementById("tenantNewPriceName")?.value.trim();
+  const price    = parseFloat(document.getElementById("tenantNewPriceValue")?.value) || 0;
+  const category = document.getElementById("tenantNewPriceCategory")?.value || "madera";
+  if (!name) { toast("Escribe el nombre del ítem.", "error"); return; }
+  if (!_tenantPrices.customItems) _tenantPrices.customItems = [];
+  _tenantPrices.customItems.push({ name, price, category });
+  document.getElementById("tenantNewPriceName").value  = "";
+  document.getElementById("tenantNewPriceValue").value = "";
+  renderPricesFormFor("tenantPricesGrid", _tenantPrices);
+  toast(`Ítem "${name}" agregado ✓`);
+});
+
+document.getElementById("saveTenantPricesBtn")?.addEventListener("click", async () => {
+  if (!_tenantPrices) return;
+  await saveTenantPrices(_tenantPrices);
+});
+
+document.getElementById("resetTenantPricesBtn")?.addEventListener("click", () => {
+  const tenant = currentTenant();
+  if (!tenant) return;
+  _tenantPrices = { ...state.globalPrices, customItems: [...(state.globalPrices.customItems || [])] };
+  renderPricesFormFor("tenantPricesGrid", _tenantPrices);
+  toast("Precios restaurados a los valores globales");
+});
+
+// ── em_pricesGrid event delegation (admin setting per-tenant prices in modal) ──
+document.getElementById("em_pricesGrid")?.addEventListener("input", e => {
+  if (!_modalPrices) return;
+  const priceKey  = e.target.dataset.priceKey;
+  const nameKey   = e.target.dataset.nameKey;
+  const customIdx = e.target.dataset.customIdx;
+  const customName= e.target.dataset.customName;
+  if (priceKey) {
+    _modalPrices[priceKey] = parseFloat(e.target.value) || 0;
+  } else if (nameKey) {
+    if (!_modalPrices._names) _modalPrices._names = {};
+    const defaultName = defaultPriceNames[nameKey] || "";
+    const entered = e.target.value.trim();
+    if (entered && entered !== defaultName) _modalPrices._names[nameKey] = entered;
+    else delete _modalPrices._names[nameKey];
+  } else if (customIdx !== undefined && _modalPrices.customItems?.[Number(customIdx)] !== undefined) {
+    _modalPrices.customItems[Number(customIdx)].price = parseFloat(e.target.value) || 0;
+  } else if (customName !== undefined && _modalPrices.customItems?.[Number(customName)] !== undefined) {
+    _modalPrices.customItems[Number(customName)].name = e.target.value;
+  }
+});
+
+document.getElementById("em_pricesGrid")?.addEventListener("click", e => {
+  if (!_modalPrices) return;
+  const idx = e.target.dataset.rmCustom;
+  if (idx !== undefined) {
+    _modalPrices.customItems = (_modalPrices.customItems || []).filter((_, i) => i !== Number(idx));
+    renderPricesFormFor("em_pricesGrid", _modalPrices);
+  }
+});
+
 // ── Logo upload handler in ebanista modal ────────────────────────────────
 document.getElementById("em_logoFile")?.addEventListener("change", (e) => {
   const file = e.target.files?.[0];
@@ -3113,8 +3278,8 @@ const _origSaveEbanista = saveEbanistaFromModal;
 // Patch logo into saved tenantData after the fact via event interception is complex;
 // instead, the save function now handles _pendingB64 directly (see below)
 
-// ── Render custom prices on load ─────────────────────────────────────────
-renderCustomPrices();
+// ── Render prices on load ──────────────────────────────────────────────────
+renderPricesForm();
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────
 tryAutoLogin();

@@ -698,7 +698,7 @@ const server = http.createServer(async (req, res) => {
         adminPasswordSet: ADMIN_PASSWORD !== "admin1234",
         tenantsCount: tenants.length,
         apiEndpoint: "chat/completions",
-        build: "2026-06-05-v32"
+        build: "2026-06-05-v33"
       });
       return;
     }
@@ -722,6 +722,18 @@ const server = http.createServer(async (req, res) => {
       prices = { ...defaultPrices(), ...incoming };
       savePrices(prices);
       sendJson(res, 200, prices);
+      return;
+    }
+
+    // Ebanista updates their own prices (auth by access code, no admin token needed)
+    if (method === "PUT" && p === "/api/ebanista-prices") {
+      const body = await readBody(req);
+      const { code, prices: incoming } = body ? JSON.parse(body) : {};
+      const tenant = tenants.find(t => t.accessCode === code);
+      if (!tenant) { sendJson(res, 401, { error: "Código inválido" }); return; }
+      tenant.prices = { ...(tenant.prices || {}), ...incoming };
+      saveTenants(tenants);
+      sendJson(res, 200, { ok: true });
       return;
     }
 
