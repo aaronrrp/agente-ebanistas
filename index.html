@@ -317,27 +317,31 @@
                     <label>Repisas/divisiones<input id="shelves" type="number" min="0" step="1" placeholder="0"></label>
                     <label>Ubicación repisas
                       <select id="shelfPlacement">
-                        <option value="internal" selected>Internas</option>
+                        <option value="" disabled selected>— Seleccionar —</option>
+                        <option value="internal">Internas</option>
                         <option value="external">Externas / vistas</option>
                       </select>
                     </label>
                     <label>Tipo de puerta
                       <select id="doorPlacement">
-                        <option value="overlay" selected>Sobrepuesta exterior</option>
+                        <option value="" disabled selected>— Seleccionar —</option>
+                        <option value="overlay">Sobrepuesta exterior</option>
                         <option value="inset">Embutida / a ras</option>
                         <option value="internal">Interna</option>
                       </select>
                     </label>
                     <label>Tipo de gaveta
                       <select id="drawerPlacement">
-                        <option value="external_front" selected>Frente exterior</option>
+                        <option value="" disabled selected>— Seleccionar —</option>
+                        <option value="external_front">Frente exterior</option>
                         <option value="inset_front">Frente embutido</option>
                         <option value="internal_box">Caja interna solamente</option>
                       </select>
                     </label>
                     <label>Tipo de fondo
                       <select id="backPlacement">
-                        <option value="external" selected>Fondo exterior / sobrepuesto</option>
+                        <option value="" disabled selected>— Seleccionar —</option>
+                        <option value="external">Fondo exterior / sobrepuesto</option>
                         <option value="internal">Fondo interno / embutido</option>
                         <option value="none">Sin fondo</option>
                       </select>

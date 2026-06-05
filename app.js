@@ -453,11 +453,19 @@ function renderCatalogOptions() {
       catalog.furnitureTypes.map(t => `<option>${escapeHtml(t)}</option>`).join("");
     if (!ftSel.value) ftSel.value = ""; // keep blank unless already set
   }
-  // Hardware selects default to "No incluir" (= blank for pricing purposes)
-  setSelectOptions("edgeBanding",  catalog.edgeOptions,  "No incluir canto");
-  setSelectOptions("hinges",       catalog.hingeOptions, "No incluir bisagras");
-  setSelectOptions("drawerSlides", catalog.slideOptions, "No incluir correderas");
-  setSelectOptions("handles",      catalog.handleOptions,"No incluir jaladores");
+  // Hardware selects — blank placeholder; user or AI must pick explicitly
+  [
+    ["edgeBanding",  catalog.edgeOptions],
+    ["hinges",       catalog.hingeOptions],
+    ["drawerSlides", catalog.slideOptions],
+    ["handles",      catalog.handleOptions]
+  ].forEach(([id, options]) => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    sel.innerHTML = `<option value="" disabled>— Seleccionar —</option>` +
+      options.map(o => `<option>${escapeHtml(o)}</option>`).join("");
+    sel.value = ""; // reset to blank (fillFormFromItem sets it if editing)
+  });
 }
 
 // Reset every field in the "Agregar mueble" form back to blank/default
@@ -468,21 +476,15 @@ function resetModuleForm() {
     const el = document.getElementById(id);
     if (el) el.value = "";
   });
-  // Selects with blank placeholder → reset to blank
-  ["complexity","melamineSheet","melamineThickness"].forEach(id => {
+  // All selects that must start blank
+  ["complexity","melamineSheet","melamineThickness",
+   "doorPlacement","drawerPlacement","shelfPlacement","backPlacement"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = "";
   });
-  // Selects with structural defaults → restore HTML defaults
-  const defaults = {
-    dimensionBasis: "external", doorPlacement: "overlay",
-    drawerPlacement: "external_front", shelfPlacement: "internal",
-    backPlacement: "external"
-  };
-  Object.entries(defaults).forEach(([id, val]) => {
-    const el = document.getElementById(id);
-    if (el) el.value = val;
-  });
+  // Dimension basis keeps its structural default (external = exterior del mueble)
+  const db = document.getElementById("dimensionBasis");
+  if (db) db.value = "external";
   // Catalog selects (furnitureType blank, hardware → "No incluir")
   renderCatalogOptions();
   // Color picker → default
@@ -1009,7 +1011,7 @@ function calculateItem(item) {
 function noInc(val) { return !val || /^no incluir/i.test(String(val).trim()); }
 
 function optionCost(map, key, fallback) {
-  if (String(key).toLowerCase().startsWith("no incluir")) return 0;
+  if (!key || String(key).toLowerCase().startsWith("no incluir")) return 0;
   return Object.prototype.hasOwnProperty.call(map, key) ? map[key] : fallback;
 }
 
@@ -1043,7 +1045,7 @@ function renderDraftItems() {
         </div>
         <span class="item-price">${money(item.finalPrice)}</span>
       </header>
-      <p class="item-spec">${item.melamineThickness}${item.melamineSheet ? ` · ${escapeHtml(getMelamineSheetLabel(item.melamineSheet))}` : ""} · puertas ${placementLabel(item.doorPlacement)} · fondo ${placementLabel(item.backPlacement)} · ${item.edgeBanding}</p>
+      <p class="item-spec">${item.melamineThickness || "—"}${item.melamineSheet ? ` · ${escapeHtml(getMelamineSheetLabel(item.melamineSheet))}` : ""}${item.doors ? ` · puertas ${placementLabel(item.doorPlacement)}` : ""}${item.drawers ? ` · gavetas ${placementLabel(item.drawerPlacement)}` : ""}${item.shelves ? ` · repisas ${placementLabel(item.shelfPlacement)}` : ""}${item.backPlacement ? ` · fondo ${placementLabel(item.backPlacement)}` : ""}${!noInc(item.edgeBanding) ? ` · ${item.edgeBanding}` : ""}</p>
       ${item.manualPrice > 0 ? `<p class="manual-note">Precio manual. Calculado: ${money(item.calculated)}</p>` : ""}
       <div class="item-btns">
         <button class="tiny-btn" type="button" data-edit-item="${item.id}">✏ Editar</button>
