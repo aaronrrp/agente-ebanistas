@@ -273,6 +273,7 @@ function renderPricesForm() {
     const el = document.getElementById(`price_${k}`);
     if (el) el.value = state.globalPrices[k] ?? defaultGlobalPrices[k];
   });
+  renderCustomPrices();
 }
 
 function collectPricesFromForm() {
@@ -357,10 +358,11 @@ function renderCatalogOptions() {
   if (!tenant) return;
   const catalog = ensureCatalog(tenant);
   setSelectOptions("furnitureType", catalog.furnitureTypes);
-  setSelectOptions("edgeBanding", catalog.edgeOptions);
-  setSelectOptions("hinges", catalog.hingeOptions);
-  setSelectOptions("drawerSlides", catalog.slideOptions);
-  setSelectOptions("handles", catalog.handleOptions);
+  // Default hardware to "No incluir" so form starts blank
+  setSelectOptions("edgeBanding",   catalog.edgeOptions,  "No incluir canto");
+  setSelectOptions("hinges",        catalog.hingeOptions, "No incluir bisagras");
+  setSelectOptions("drawerSlides",  catalog.slideOptions, "No incluir correderas");
+  setSelectOptions("handles",       catalog.handleOptions,"No incluir jaladores");
 }
 
 function isTenantActive(tenant) {
@@ -464,14 +466,47 @@ function renderTenantForm(tenant) {
   els.catalogHandleOptions.value = listToLines(catalog.handleOptions);
 }
 
+function applyTenantTheme(tenant) {
+  const root = document.documentElement;
+  const theme = tenant?.theme || {};
+  // Apply or reset CSS custom properties
+  if (theme.accentColor) {
+    root.style.setProperty("--accent", theme.accentColor);
+    root.style.setProperty("--accent-dark", theme.accentColor);
+  } else {
+    root.style.removeProperty("--accent");
+    root.style.removeProperty("--accent-dark");
+  }
+  if (theme.headerBg) {
+    root.style.setProperty("--sidebar-bg", theme.headerBg);
+  } else {
+    root.style.removeProperty("--sidebar-bg");
+  }
+  // Apply custom greeting to chat initial bubble
+  const firstBubble = document.querySelector("#chatMessages .chat-bubble.assistant:first-child");
+  if (firstBubble && theme.greeting) {
+    firstBubble.textContent = theme.greeting;
+  } else if (firstBubble && !theme.greeting) {
+    firstBubble.textContent = "👋 ¡Hola! Cuéntame qué mueble necesitas — tipo, medidas, color y cuarto. Te preparo el diseño técnico con render visual.";
+  }
+}
+
 function renderClient() {
   const tenant = currentTenant();
   if (!tenant) return;
   const active = isTenantActive(tenant);
 
-  // Show logo if available
-  if (tenant.logoBase64) {
-    els.clientTitle.innerHTML = `<img src="${tenant.logoBase64}" alt="Logo" style="max-height:32px;max-width:80px;object-fit:contain;vertical-align:middle;margin-right:.5rem">Agente IA de ${tenant.companyName}`;
+  // In ebanista mode: hide tenant switcher so they can't switch to other profiles
+  const switcher = document.getElementById("tenantSwitcher");
+  if (switcher) switcher.style.display = AUTH.mode === "ebanista" ? "none" : "";
+
+  // Apply tenant theme (colors, logo, greeting)
+  applyTenantTheme(tenant);
+
+  // Show logo if available (from theme or legacy logoBase64)
+  const logoSrc = tenant.theme?.logoBase64 || tenant.logoBase64;
+  if (logoSrc) {
+    els.clientTitle.innerHTML = `<img src="${logoSrc}" alt="Logo" style="max-height:32px;max-width:80px;object-fit:contain;vertical-align:middle;margin-right:.5rem">Agente IA de ${tenant.companyName}`;
   } else {
     els.clientTitle.textContent = `Agente IA de ${tenant.companyName}`;
   }
@@ -556,6 +591,17 @@ function openEbanistaModal(editId) {
   document.getElementById("em_fee").value = t?.monthlyFee || "";
   document.getElementById("em_margin").value = t?.margin ?? 30;
   document.getElementById("em_expires").value = t?.expiresAt || addDays(30);
+  // Theme fields
+  const theme = t?.theme || {};
+  document.getElementById("em_accentColor").value = theme.accentColor || "#6366F1";
+  document.getElementById("em_headerBg").value   = theme.headerBg    || "#1E1B4B";
+  document.getElementById("em_greeting").value   = theme.greeting    || "";
+  const preview = document.getElementById("em_logoPreview");
+  const logoImg = document.getElementById("em_logoImg");
+  if (preview && logoImg) {
+    if (theme.logoBase64) { logoImg.src = theme.logoBase64; preview.style.display = ""; }
+    else preview.style.display = "none";
+  }
   document.getElementById("em_result").classList.add("hidden");
   document.getElementById("em_actions").style.display = "";
   const btn = document.getElementById("saveEbanistaModalBtn");
@@ -598,7 +644,13 @@ async function saveEbanistaFromModal() {
     materials: existing?.materials || "Melamina hidrófuga, canto PVC, herrajes estándar.",
     terms: existing?.terms || "60% para iniciar fabricación y 40% contra entrega.",
     accessCode,
-    catalog: existing?.catalog || cloneCatalog()
+    catalog: existing?.catalog || cloneCatalog(),
+    theme: {
+      accentColor: document.getElementById("em_accentColor")?.value || existing?.theme?.accentColor || "",
+      headerBg:    document.getElementById("em_headerBg")?.value    || existing?.theme?.headerBg    || "",
+      greeting:    document.getElementById("em_greeting")?.value?.trim() || existing?.theme?.greeting || "",
+      logoBase64:  document.getElementById("em_logoFile")?._pendingB64 || existing?.theme?.logoBase64 || ""
+    }
   };
 
   if (existing) { Object.assign(existing, tenantData); }
@@ -1173,32 +1225,37 @@ function renderCutsPiecesTable() {
     </div>`;
 }
 
-// ── FFDH 2D bin packing (First Fit Decreasing Height) by thickness ──────────
+// ── BFDH 2D bin packing (Best Fit Decreasing + rotation) ────────────────────
 function packPiecesFFDH(pieces, sheetW, sheetH, wastePct) {
-  const kerf = 0.3; // 3 mm saw kerf per cut (in cm)
-  const marginX = 2, marginY = 2; // sheet margin cm
+  const kerf = 0.3; // 3 mm saw kerf (cm)
+  const marginX = 2, marginY = 2;
   const usableW = sheetW - marginX * 2;
   const usableH = sheetH - marginY * 2;
 
-  // Sort by height desc, then width desc
-  const sorted = [...pieces].sort((a, b) => {
-    const dh = (Number(b.height)||1) - (Number(a.height)||1);
-    return dh !== 0 ? dh : (Number(b.width)||1) - (Number(a.width)||1);
-  });
+  // Sort by longest side desc — better than height-only
+  const sorted = [...pieces].sort((a, b) =>
+    Math.max(Number(b.width)||1, Number(b.height)||1) -
+    Math.max(Number(a.width)||1, Number(a.height)||1)
+  );
 
-  const sheets = []; // { placements: [{piece,x,y,w,h}], shelves: [{y,h,usedW}] }
+  const sheets = [];
 
+  // Best-fit shelf: choose shelf that wastes least remaining width
   const tryPlace = (sheet, pw, ph) => {
+    let best = null, bestWaste = Infinity;
     for (const shelf of sheet.shelves) {
-      const remaining = usableW - shelf.usedW;
-      if (remaining >= pw + kerf && shelf.h >= ph) {
-        const x = marginX + shelf.usedW;
-        const y = marginY + shelf.y;
-        shelf.usedW += pw + kerf;
-        return { x, y };
+      const rem = usableW - shelf.usedW;
+      if (rem >= pw + kerf && shelf.h >= ph) {
+        const waste = rem - pw - kerf;
+        if (waste < bestWaste) { bestWaste = waste; best = shelf; }
       }
     }
-    // Try new shelf on this sheet
+    if (best) {
+      const x = marginX + best.usedW, y = marginY + best.y;
+      best.usedW += pw + kerf;
+      return { x, y };
+    }
+    // New shelf
     const nextY = sheet.shelves.reduce((s, sh) => s + sh.h + kerf, 0);
     if (nextY + ph <= usableH && pw <= usableW) {
       sheet.shelves.push({ y: nextY, h: ph, usedW: pw + kerf });
@@ -1207,18 +1264,29 @@ function packPiecesFFDH(pieces, sheetW, sheetH, wastePct) {
     return null;
   };
 
-  sorted.forEach((piece, pi) => {
+  // Try both orientations; prefer the one that fits on existing sheets first
+  const placePiece = (sheet, pw, ph) => {
+    const p1 = tryPlace(sheet, pw, ph);
+    if (p1) return { ...p1, w: pw, h: ph, rotated: false };
+    if (pw !== ph) {
+      const p2 = tryPlace(sheet, ph, pw);
+      if (p2) return { ...p2, w: ph, h: pw, rotated: true };
+    }
+    return null;
+  };
+
+  sorted.forEach(piece => {
     const pw = Math.max(1, Number(piece.width)  || 1);
     const ph = Math.max(1, Number(piece.height) || 1);
     let placed = false;
     for (const sheet of sheets) {
-      const pos = tryPlace(sheet, pw, ph);
-      if (pos) { sheet.placements.push({ piece, ...pos, w: pw, h: ph }); placed = true; break; }
+      const r = placePiece(sheet, pw, ph);
+      if (r) { sheet.placements.push({ piece, ...r }); placed = true; break; }
     }
     if (!placed) {
       const sheet = { number: sheets.length + 1, shelves: [], placements: [] };
-      const pos = tryPlace(sheet, pw, ph);
-      if (pos) sheet.placements.push({ piece, ...pos, w: pw, h: ph });
+      const r = placePiece(sheet, pw, ph);
+      if (r) sheet.placements.push({ piece, ...r });
       sheets.push(sheet);
     }
   });
@@ -1367,7 +1435,7 @@ async function sendToAI() {
     const recentHistory = state.chatHistory.slice(-12);
     const body = hasImage
       ? { message: message || "Analiza este espacio y propón muebles de melamina.", imageData: imgDataForRequest }
-      : { message, tenant: currentTenant(), currentItem: state.lastDesignItems[0] || null, history: recentHistory };
+      : { message, tenant: currentTenant(), currentItem: state.lastDesignItems[0] || null, history: recentHistory, customPrices: state.globalPrices.customItems || [] };
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 55000);
@@ -2762,18 +2830,100 @@ els.marginPercent?.addEventListener("change", (e) => {
   });
 })();
 
+// ── Custom price items ─────────────────────────────────────────────────────
+function renderCustomPrices() {
+  const list = document.getElementById("customPricesList");
+  if (!list) return;
+  const items = state.globalPrices.customItems || [];
+  if (!items.length) { list.innerHTML = '<p style="font-size:.8rem;color:#9CA3AF;margin:4px 0">Sin ítems personalizados.</p>'; return; }
+  list.innerHTML = items.map((item, i) => `
+    <label class="price-row" style="align-items:center">
+      <span style="flex:2">${escapeHtml(item.name)}</span>
+      <span class="price-input-wrap" style="gap:4px">
+        $<input data-custom-idx="${i}" type="number" step="0.01" min="0" class="price-input" value="${item.price}" style="width:70px">
+        <button data-rm-custom="${i}" class="tiny-btn danger" type="button" style="font-size:.7rem;padding:2px 5px;line-height:1">✕</button>
+      </span>
+    </label>`).join("");
+}
+
+document.getElementById("customPricesList")?.addEventListener("input", e => {
+  const idx = e.target.dataset.customIdx;
+  if (idx !== undefined && state.globalPrices.customItems) {
+    state.globalPrices.customItems[Number(idx)].price = parseFloat(e.target.value) || 0;
+  }
+});
+document.getElementById("customPricesList")?.addEventListener("click", e => {
+  const idx = e.target.dataset.rmCustom;
+  if (idx !== undefined) {
+    state.globalPrices.customItems = (state.globalPrices.customItems || []).filter((_, i) => i !== Number(idx));
+    renderCustomPrices();
+  }
+});
+document.getElementById("addCustomPriceBtn")?.addEventListener("click", () => {
+  const name  = document.getElementById("newPriceName")?.value.trim();
+  const price = parseFloat(document.getElementById("newPriceValue")?.value) || 0;
+  if (!name) { toast("Escribe el nombre del ítem.", "error"); return; }
+  if (!state.globalPrices.customItems) state.globalPrices.customItems = [];
+  state.globalPrices.customItems.push({ name, price });
+  document.getElementById("newPriceName").value  = "";
+  document.getElementById("newPriceValue").value = "";
+  renderCustomPrices();
+  toast("Ítem agregado ✓");
+});
+
 // ── Prices editor ─────────────────────────────────────────────────────────
 document.getElementById("savePricesBtn")?.addEventListener("click", async () => {
   collectPricesFromForm();
   await saveGlobalPrices();
+  renderCustomPrices();
   toast("Precios guardados ✓");
 });
 
 document.getElementById("resetPricesBtn")?.addEventListener("click", () => {
   state.globalPrices = { ...defaultGlobalPrices };
   renderPricesForm();
+  renderCustomPrices();
   toast("Precios restablecidos a valores por defecto");
 });
+
+// ── Logo upload handler in ebanista modal ────────────────────────────────
+document.getElementById("em_logoFile")?.addEventListener("change", (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  if (file.size > 350_000) { toast("El logo debe ser menor a 300 KB.", "error"); e.target.value = ""; return; }
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const b64 = ev.target.result;
+    // Store temporarily — saved to tenant on modal save
+    document.getElementById("em_logoFile")._pendingB64 = b64;
+    const img = document.getElementById("em_logoImg");
+    const preview = document.getElementById("em_logoPreview");
+    if (img) img.src = b64;
+    if (preview) preview.style.display = "";
+  };
+  reader.readAsDataURL(file);
+});
+document.getElementById("em_removeLogoBtn")?.addEventListener("click", () => {
+  document.getElementById("em_logoFile").value = "";
+  document.getElementById("em_logoFile")._pendingB64 = null;
+  const preview = document.getElementById("em_logoPreview");
+  if (preview) preview.style.display = "none";
+  // Clear from current tenant being edited
+  const id = _ebModalEditId;
+  if (id) {
+    const t = state.tenants.find(x => x.id === id);
+    if (t?.theme) t.theme.logoBase64 = "";
+    save();
+  }
+});
+
+// Also capture pending logo b64 when saving modal
+const _origSaveEbanista = saveEbanistaFromModal;
+// Patch logo into saved tenantData after the fact via event interception is complex;
+// instead, the save function now handles _pendingB64 directly (see below)
+
+// ── Render custom prices on load ─────────────────────────────────────────
+renderCustomPrices();
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────
 tryAutoLogin();

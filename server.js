@@ -413,7 +413,12 @@ async function handleAi(req, res) {
   }
   const body = await readBody(req);
   const payload = body ? JSON.parse(body) : {};
-  const pricesBlock = `\n══ PRECIOS ACTUALES (en USD) ══\nLámina melamina estándar 2440×1220: $${prices.melamina_std}\nLámina melamina grande 2750×1830: $${prices.melamina_lg}\nCanto PVC 22mm/metro: $${prices.canto_pvc}\nCanto grueso 2mm/metro: $${prices.canto_grueso}\nFondo/backing por m²: $${prices.backing_m2}\nBisagra estándar: $${prices.bisagra_std}/un\nBisagra cierre suave: $${prices.bisagra_sc}/un\nCorredera estándar: $${prices.corredera_std}/par\nCorredera cierre suave: $${prices.corredera_sc}/par\nJalador 128mm: $${prices.jalador_chico}/un\nJalador 320mm: $${prices.jalador_grande}/un\nJalador premium inox: $${prices.jalador_premium}/un\nInstalación: $${prices.install_hour}/hora\nTransporte base: $${prices.transport_base}`;
+  // Include custom price items sent from client (stored in client localStorage)
+  const clientCustomItems = Array.isArray(payload.customPrices) ? payload.customPrices : [];
+  const customBlock = clientCustomItems.length
+    ? "\n" + clientCustomItems.map(i => `${String(i.name).slice(0,50)}: $${Number(i.price)||0}`).join("\n")
+    : "";
+  const pricesBlock = `\n══ PRECIOS ACTUALES (en USD) ══\nMadera/Melamina estándar 2440×1220: $${prices.melamina_std}\nMadera/Melamina grande 2750×1830: $${prices.melamina_lg}\nFondo/backing por m²: $${prices.backing_m2}\nCanto PVC 22mm/metro: $${prices.canto_pvc}\nCanto grueso 2mm/metro: $${prices.canto_grueso}\nBisagra estándar: $${prices.bisagra_std}/un\nBisagra cierre suave: $${prices.bisagra_sc}/un\nCorredera estándar: $${prices.corredera_std}/par\nCorredera cierre suave: $${prices.corredera_sc}/par\nJalador 128mm: $${prices.jalador_chico}/un\nJalador 320mm: $${prices.jalador_grande}/un\nJalador premium inox: $${prices.jalador_premium}/un\nInstalación: $${prices.install_hour}/hora\nTransporte base: $${prices.transport_base}${customBlock}`;
 
   // Build conversation history context block
   const history = Array.isArray(payload.history) ? payload.history.slice(-12) : [];
@@ -720,7 +725,7 @@ const server = http.createServer(async (req, res) => {
         adminPasswordSet: ADMIN_PASSWORD !== "admin1234",
         tenantsCount: tenants.length,
         apiEndpoint: "chat/completions",
-        build: "2026-06-04-v22"
+        build: "2026-06-04-v23"
       });
       return;
     }
