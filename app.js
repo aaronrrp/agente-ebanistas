@@ -446,12 +446,52 @@ function renderCatalogOptions() {
   const tenant = currentTenant();
   if (!tenant) return;
   const catalog = ensureCatalog(tenant);
-  setSelectOptions("furnitureType", catalog.furnitureTypes);
-  // Default hardware to "No incluir" so form starts blank
-  setSelectOptions("edgeBanding",   catalog.edgeOptions,  "No incluir canto");
-  setSelectOptions("hinges",        catalog.hingeOptions, "No incluir bisagras");
-  setSelectOptions("drawerSlides",  catalog.slideOptions, "No incluir correderas");
-  setSelectOptions("handles",       catalog.handleOptions,"No incluir jaladores");
+  // Furniture type — blank placeholder so nothing is pre-selected
+  const ftSel = document.getElementById("furnitureType");
+  if (ftSel) {
+    ftSel.innerHTML = `<option value="" disabled>— Tipo de mueble —</option>` +
+      catalog.furnitureTypes.map(t => `<option>${escapeHtml(t)}</option>`).join("");
+    if (!ftSel.value) ftSel.value = ""; // keep blank unless already set
+  }
+  // Hardware selects default to "No incluir" (= blank for pricing purposes)
+  setSelectOptions("edgeBanding",  catalog.edgeOptions,  "No incluir canto");
+  setSelectOptions("hinges",       catalog.hingeOptions, "No incluir bisagras");
+  setSelectOptions("drawerSlides", catalog.slideOptions, "No incluir correderas");
+  setSelectOptions("handles",      catalog.handleOptions,"No incluir jaladores");
+}
+
+// Reset every field in the "Agregar mueble" form back to blank/default
+function resetModuleForm() {
+  // Text and number inputs → empty
+  ["itemName","widthCm","heightCm","depthCm","itemManualPrice","itemNotes",
+   "doors","drawers","shelves"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
+  // Selects with blank placeholder → reset to blank
+  ["complexity","melamineSheet","melamineThickness"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
+  // Selects with structural defaults → restore HTML defaults
+  const defaults = {
+    dimensionBasis: "external", doorPlacement: "overlay",
+    drawerPlacement: "external_front", shelfPlacement: "internal",
+    backPlacement: "external"
+  };
+  Object.entries(defaults).forEach(([id, val]) => {
+    const el = document.getElementById(id);
+    if (el) el.value = val;
+  });
+  // Catalog selects (furnitureType blank, hardware → "No incluir")
+  renderCatalogOptions();
+  // Color picker → default
+  const colorHidden = document.getElementById("selectedColor");
+  if (colorHidden) colorHidden.value = "RH01";
+  renderColorPicker();
+  // Button label
+  document.getElementById("addQuoteItemBtn").textContent = "Agregar módulo";
+  state.editingItemId = null;
 }
 
 function isTenantActive(tenant) {
@@ -2397,20 +2437,8 @@ document.getElementById("addQuoteItemBtn").addEventListener("click", () => {
   } else {
     state.draftItems.push(item);
   }
-  state.editingItemId = null;
+  resetModuleForm(); // clear all fields + state.editingItemId = null
   renderDraftItems();
-  // Clear form for next module
-  ["itemName","widthCm","heightCm","depthCm","itemManualPrice","itemNotes"].forEach(id => {
-    const el = document.getElementById(id); if (el) el.value = "";
-  });
-  ["doors","drawers","shelves"].forEach(id => {
-    const el = document.getElementById(id); if (el) el.value = "";
-  });
-  const sheetSel = document.getElementById("melamineSheet");
-  if (sheetSel) sheetSel.value = "";
-  const complexSel = document.getElementById("complexity");
-  if (complexSel) complexSel.value = "";
-  document.getElementById("addQuoteItemBtn").textContent = "Agregar módulo";
   // Collapse the panel
   const panel = document.getElementById("moduleFormPanel");
   const btn   = document.getElementById("toggleModuleFormBtn");
@@ -2594,7 +2622,10 @@ document.getElementById("toggleModuleFormBtn")?.addEventListener("click", () => 
   const opening = panel.classList.contains("hidden");
   panel.classList.toggle("hidden");
   btn.textContent = opening ? "▲ Cerrar formulario" : "＋ Agregar módulo";
-  if (opening) document.getElementById("itemName")?.focus();
+  if (opening) {
+    if (!state.editingItemId) resetModuleForm(); // fresh open → blank form
+    document.getElementById("itemName")?.focus();
+  }
 });
 
 // ── Clear all draft modules ───────────────────────────────────────────────
