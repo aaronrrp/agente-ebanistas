@@ -290,6 +290,44 @@ async function saveGlobalPrices() {
   } catch {}
 }
 
+// ── Return display label for a melamineSheet key ──────────────────────────
+function getMelamineSheetLabel(key) {
+  if (!key) return "";
+  if (key.startsWith("custom_")) {
+    const ci = (state.globalPrices.customItems || [])[ Number(key.slice(7)) ];
+    return ci ? ci.name : key;
+  }
+  const names = state.globalPrices._names || {};
+  return names[key] || defaultPriceNames[key] || key;
+}
+
+// ── Populate the melamine sheet selector from the prices catalog ─────────
+function renderMelamineSheetOptions() {
+  const sel = document.getElementById("melamineSheet");
+  if (!sel) return;
+  const names = state.globalPrices._names || {};
+  const prev = sel.value;
+
+  // Standard melamine sheets (exclude backing which is a different material)
+  const stdOptions = ["melamina_std", "melamina_lg"].map(k => {
+    const label = names[k] || defaultPriceNames[k];
+    const price = state.globalPrices[k] ?? defaultGlobalPrices[k];
+    return `<option value="${k}">${escapeHtml(label)} — $${price}</option>`;
+  });
+
+  // Custom items placed in the "madera" category (may be extra sheet sizes, etc.)
+  const customItems = state.globalPrices.customItems || [];
+  const customOptions = customItems
+    .filter(item => (item.category || "madera") === "madera")
+    .map((item, i) => `<option value="custom_${i}">${escapeHtml(item.name)} — $${item.price}</option>`);
+
+  sel.innerHTML = `<option value="">— Seleccionar lámina —</option>` +
+    stdOptions.join("") + customOptions.join("");
+
+  // Restore previous selection if the option still exists
+  if (prev && sel.querySelector(`option[value="${CSS.escape(prev)}"]`)) sel.value = prev;
+}
+
 function renderPricesForm() {
   const grid = document.getElementById("pricesGrid");
   if (!grid) return;
@@ -323,6 +361,9 @@ function renderPricesForm() {
       ${stdRows}${customRows}
     </div>`;
   }).join("");
+
+  // Keep melamine sheet selector in sync with the prices catalog
+  renderMelamineSheetOptions();
 }
 
 function collectPricesFromForm() {
@@ -834,7 +875,8 @@ function readItemFromForm() {
     doorPlacement: document.getElementById("doorPlacement").value,
     drawerPlacement: document.getElementById("drawerPlacement").value,
     backPlacement: document.getElementById("backPlacement").value,
-    melamineThickness: document.getElementById("melamineThickness").value,
+    melamineSheet: document.getElementById("melamineSheet")?.value || "",
+    melamineThickness: document.getElementById("melamineThickness")?.value || "18 mm",
     edgeBanding: document.getElementById("edgeBanding").value,
     hinges: document.getElementById("hinges").value,
     drawerSlides: document.getElementById("drawerSlides").value,
@@ -853,8 +895,24 @@ function calculateItem(item) {
   const heightFactor = Math.max(0.85, Math.min(1.55, item.height / 200));
   const depthFactor = Math.max(0.85, Math.min(1.25, item.depth / 55));
   const base = furnitureBase[item.furnitureType] || furnitureBase.Otro;
-  const technicalFactor = (thicknessFactor[item.melamineThickness] || 1) * (edgeFactor[item.edgeBanding] || 1);
-  const materialCost = Math.max(85, linearMeters * base * heightFactor * depthFactor * technicalFactor);
+  const technicalFactor = (thicknessFactor[item.melamineThickness || "18 mm"] || 1) * (edgeFactor[item.edgeBanding] || 1);
+
+  // Scale material cost by the actual melamine sheet price vs reference ($45 std)
+  const refSheetPrice = defaultGlobalPrices.melamina_std; // 45
+  let sheetPrice = refSheetPrice;
+  const sheetKey = item.melamineSheet;
+  if (sheetKey) {
+    if (sheetKey.startsWith("custom_")) {
+      const ci = (state.globalPrices.customItems || [])[ Number(sheetKey.slice(7)) ];
+      if (ci?.price > 0) sheetPrice = ci.price;
+    } else if (state.globalPrices[sheetKey] > 0) {
+      sheetPrice = state.globalPrices[sheetKey];
+    }
+  }
+  // Weighted factor: 40% fixed + 60% proportional to sheet price
+  const melamineFactor = 0.4 + 0.6 * (sheetPrice / refSheetPrice);
+
+  const materialCost = Math.max(85, linearMeters * base * heightFactor * depthFactor * technicalFactor * melamineFactor);
   const hardwareCost = (item.doors * optionCost(hingeCost, item.hinges, 10))
     + (item.drawers * optionCost(slideCost, item.drawerSlides, 20))
     + ((item.doors + item.drawers) * optionCost(handleCost, item.handles, 8))
@@ -910,7 +968,7 @@ function renderDraftItems() {
         </div>
         <span class="item-price">${money(item.finalPrice)}</span>
       </header>
-      <p class="item-spec">${item.melamineThickness} · puertas ${placementLabel(item.doorPlacement)} · fondo ${placementLabel(item.backPlacement)} · ${item.edgeBanding}</p>
+      <p class="item-spec">${item.melamineThickness}${item.melamineSheet ? ` · ${escapeHtml(getMelamineSheetLabel(item.melamineSheet))}` : ""} · puertas ${placementLabel(item.doorPlacement)} · fondo ${placementLabel(item.backPlacement)} · ${item.edgeBanding}</p>
       ${item.manualPrice > 0 ? `<p class="manual-note">Precio manual. Calculado: ${money(item.calculated)}</p>` : ""}
       <div class="item-btns">
         <button class="tiny-btn" type="button" data-edit-item="${item.id}">✏ Editar</button>
@@ -943,6 +1001,7 @@ function fillFormFromItem(item, sourceText = "") {
   setSelectIfExists("doorPlacement", item.doorPlacement);
   setSelectIfExists("drawerPlacement", item.drawerPlacement);
   setSelectIfExists("backPlacement", item.backPlacement);
+  setSelectIfExists("melamineSheet", item.melamineSheet);
   setSelectIfExists("melamineThickness", item.melamineThickness);
   setSelectIfExists("edgeBanding", item.edgeBanding);
   setSelectIfExists("hinges", item.hinges);
@@ -1086,7 +1145,7 @@ function renderQuotePaper(quote) {
               <td><strong>${item.name}</strong><br>${item.furnitureType} · ${item.complexityLabel}</td>
               <td>
                 ${item.width} x ${item.height} x ${item.depth} cm<br>
-                Melamina: ${item.melamineThickness}<br>
+                Melamina: ${item.melamineThickness}${item.melamineSheet ? ` (${escapeHtml(getMelamineSheetLabel(item.melamineSheet))})` : ""}<br>
                 Canto: ${item.edgeBanding}<br>
                 Bisagras: ${item.hinges}<br>
                 Correderas: ${item.drawerSlides}<br>
@@ -2284,8 +2343,12 @@ document.getElementById("addQuoteItemBtn").addEventListener("click", () => {
     const el = document.getElementById(id); if (el) el.value = "";
   });
   ["doors","drawers","shelves"].forEach(id => {
-    const el = document.getElementById(id); if (el) el.value = "0";
+    const el = document.getElementById(id); if (el) el.value = "";
   });
+  const sheetSel = document.getElementById("melamineSheet");
+  if (sheetSel) sheetSel.value = "";
+  const complexSel = document.getElementById("complexity");
+  if (complexSel) complexSel.value = "";
   document.getElementById("addQuoteItemBtn").textContent = "Agregar módulo";
   // Collapse the panel
   const panel = document.getElementById("moduleFormPanel");

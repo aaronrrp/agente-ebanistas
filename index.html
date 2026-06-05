@@ -273,15 +273,16 @@
                     <label>Profundidad cm<input id="depthCm" type="number" min="1" step="1" placeholder="Ej: 55"></label>
                     <label>Complejidad
                       <select id="complexity">
+                        <option value="" disabled selected>— Seleccionar —</option>
                         <option value="low">Baja</option>
                         <option value="medium">Media</option>
                         <option value="high">Alta</option>
                         <option value="premium">Premium / especial</option>
                       </select>
                     </label>
-                    <label>Puertas<input id="doors" type="number" min="0" step="1" value="0"></label>
-                    <label>Gavetas<input id="drawers" type="number" min="0" step="1" value="0"></label>
-                    <label>Repisas/divisiones<input id="shelves" type="number" min="0" step="1" value="0"></label>
+                    <label>Puertas<input id="doors" type="number" min="0" step="1" placeholder="0"></label>
+                    <label>Gavetas<input id="drawers" type="number" min="0" step="1" placeholder="0"></label>
+                    <label>Repisas/divisiones<input id="shelves" type="number" min="0" step="1" placeholder="0"></label>
                     <label>Ubicación repisas
                       <select id="shelfPlacement">
                         <option value="internal" selected>Internas</option>
@@ -309,10 +310,16 @@
                         <option value="none">Sin fondo</option>
                       </select>
                     </label>
+                    <label>Tipo de lámina (precio de mercado)
+                      <select id="melamineSheet">
+                        <option value="">— Seleccionar lámina —</option>
+                      </select>
+                    </label>
                     <label>Grosor melamina
                       <select id="melamineThickness">
+                        <option value="" disabled selected>— Seleccionar —</option>
                         <option>15 mm</option>
-                        <option selected>18 mm</option>
+                        <option>18 mm</option>
                         <option>25 mm</option>
                         <option>36 mm doble laminado</option>
                       </select>
