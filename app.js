@@ -556,11 +556,26 @@ function applyTenantTheme(tenant) {
     root.style.removeProperty("--accent-dark");
   }
 
-  // ── Sidebar/header background ─────────────────────────────
+  // ── Sidebar background ────────────────────────────────────
   if (theme.headerBg) {
     root.style.setProperty("--sidebar-bg", theme.headerBg);
   } else {
     root.style.removeProperty("--sidebar-bg");
+  }
+
+  // ── Sidebar text color ────────────────────────────────────
+  if (theme.sidebarTextColor) {
+    root.style.setProperty("--sidebar-text", theme.sidebarTextColor);
+  } else {
+    root.style.removeProperty("--sidebar-text");
+  }
+
+  // ── Brand-lockup logo (replaces the TM box) ───────────────
+  const brandMark = document.querySelector(".brand-mark");
+  if (brandMark) {
+    brandMark.innerHTML = theme.logoBase64
+      ? `<img src="${theme.logoBase64}" alt="Logo">`
+      : "TM";
   }
 
   // ── Chat assistant bubble color ───────────────────────────
@@ -688,9 +703,10 @@ function openEbanistaModal(editId) {
   document.getElementById("em_expires").value = t?.expiresAt || addDays(30);
   // Theme fields
   const theme = t?.theme || {};
-  document.getElementById("em_accentColor").value    = theme.accentColor    || "#6366F1";
-  document.getElementById("em_headerBg").value       = theme.headerBg       || "#1E1B4B";
-  document.getElementById("em_chatBubbleColor").value= theme.chatBubbleColor|| "#f3f4f6";
+  document.getElementById("em_accentColor").value       = theme.accentColor       || "#6366F1";
+  document.getElementById("em_headerBg").value          = theme.headerBg          || "#162a25";
+  document.getElementById("em_sidebarTextColor").value  = theme.sidebarTextColor  || "#ffffff";
+  document.getElementById("em_chatBubbleColor").value   = theme.chatBubbleColor   || "#f3f4f6";
   document.getElementById("em_fontFamily").value     = theme.fontFamily     || "";
   document.getElementById("em_tagline").value        = theme.tagline        || "";
   document.getElementById("em_greeting").value       = theme.greeting       || "";
@@ -752,8 +768,9 @@ async function saveEbanistaFromModal() {
     theme: {
       accentColor:    document.getElementById("em_accentColor")?.value     || existing?.theme?.accentColor    || "",
       headerBg:       document.getElementById("em_headerBg")?.value        || existing?.theme?.headerBg       || "",
-      chatBubbleColor:document.getElementById("em_chatBubbleColor")?.value || existing?.theme?.chatBubbleColor|| "",
-      fontFamily:     document.getElementById("em_fontFamily")?.value      || existing?.theme?.fontFamily     || "",
+      chatBubbleColor:  document.getElementById("em_chatBubbleColor")?.value   || existing?.theme?.chatBubbleColor   || "",
+      sidebarTextColor: document.getElementById("em_sidebarTextColor")?.value  || existing?.theme?.sidebarTextColor  || "",
+      fontFamily:       document.getElementById("em_fontFamily")?.value        || existing?.theme?.fontFamily        || "",
       tagline:        document.getElementById("em_tagline")?.value?.trim() || existing?.theme?.tagline        || "",
       greeting:       document.getElementById("em_greeting")?.value?.trim()|| existing?.theme?.greeting       || "",
       logoBase64:     document.getElementById("em_logoFile")?._pendingB64  || existing?.theme?.logoBase64     || "",

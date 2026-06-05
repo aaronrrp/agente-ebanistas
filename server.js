@@ -384,19 +384,28 @@ async function handleAi(req, res) {
     : "";
   const pricesBlock = `\n══ PRECIOS ACTUALES (en USD) ══\nMadera/Melamina estándar 2440×1220: $${prices.melamina_std}\nMadera/Melamina grande 2750×1830: $${prices.melamina_lg}\nFondo/backing por m²: $${prices.backing_m2}\nCanto PVC 22mm/metro: $${prices.canto_pvc}\nCanto grueso 2mm/metro: $${prices.canto_grueso}\nBisagra estándar: $${prices.bisagra_std}/un\nBisagra cierre suave: $${prices.bisagra_sc}/un\nCorredera estándar: $${prices.corredera_std}/par\nCorredera cierre suave: $${prices.corredera_sc}/par\nJalador 128mm: $${prices.jalador_chico}/un\nJalador 320mm: $${prices.jalador_grande}/un\nJalador premium inox: $${prices.jalador_premium}/un\nInstalación: $${prices.install_hour}/hora\nTransporte base: $${prices.transport_base}${customBlock}`;
 
-  // Build conversation history context block
-  const history = Array.isArray(payload.history) ? payload.history.slice(-12) : [];
+  // Build conversation history context block — limit to 5 msgs × 200 chars to stay under TPM
+  const history = Array.isArray(payload.history) ? payload.history.slice(-5) : [];
   let historyBlock = "";
   if (history.length > 0) {
     const lines = history.map(h =>
-      `${h.role === "user" ? "Usuario" : "Asistente"}: ${String(h.text || "").slice(0, 500)}`
+      `${h.role === "user" ? "U" : "A"}: ${String(h.text || "").slice(0, 200)}`
     ).join("\n");
-    historyBlock = `\n\n══ CONVERSACIÓN ANTERIOR (contexto) ══\n${lines}\n══ FIN CONTEXTO ══`;
+    historyBlock = `\n\n══ HISTORIAL ══\n${lines}\n══ FIN ══`;
   }
+
+  // Trim tenant to essentials only — avoids sending large catalog arrays
+  const rawTenant = payload.tenant || {};
+  const slimTenant = {
+    companyName: rawTenant.companyName || "",
+    margin: rawTenant.margin || 30,
+    materials: String(rawTenant.materials || "").slice(0, 200),
+    terms: String(rawTenant.terms || "").slice(0, 150)
+  };
 
   const content = [{
     type: "input_text",
-    text: JSON.stringify({ message: payload.message || "", tenant: payload.tenant || {}, currentItem: payload.currentItem || null })
+    text: JSON.stringify({ message: payload.message || "", tenant: slimTenant, currentItem: payload.currentItem || null })
   }];
   if (typeof payload.imageData === "string" && payload.imageData.startsWith("data:image/")) {
     content.push({ type: "input_image", image_url: payload.imageData });
@@ -689,7 +698,7 @@ const server = http.createServer(async (req, res) => {
         adminPasswordSet: ADMIN_PASSWORD !== "admin1234",
         tenantsCount: tenants.length,
         apiEndpoint: "chat/completions",
-        build: "2026-06-05-v30"
+        build: "2026-06-05-v31"
       });
       return;
     }

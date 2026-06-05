@@ -49,8 +49,8 @@ button {
   flex-direction: column;
   gap: 28px;
   padding: 24px;
-  background: #162a25;
-  color: white;
+  background: var(--sidebar-bg, #162a25);
+  color: var(--sidebar-text, white);
 }
 
 .brand-lockup {
@@ -65,18 +65,25 @@ button {
   height: 44px;
   place-items: center;
   border-radius: 8px;
-  background: #d8f3e8;
-  color: var(--accent-strong);
+  background: rgba(255,255,255,0.15);
+  color: var(--sidebar-text, white);
   font-weight: 800;
+  overflow: hidden;
+}
+.brand-mark img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
 }
 
 .brand-lockup strong,
 .brand-lockup span {
   display: block;
+  color: var(--sidebar-text, white);
 }
 
 .brand-lockup span {
-  color: #bdd0ca;
+  opacity: .7;
   font-size: 13px;
 }
 
@@ -94,7 +101,7 @@ button {
   border: 1px solid transparent;
   border-radius: 8px;
   background: transparent;
-  color: #dce7e3;
+  color: var(--sidebar-text, #dce7e3);
   text-align: left;
 }
 
@@ -113,7 +120,7 @@ button {
 .nav-item:hover {
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.14);
-  color: white;
+  color: var(--sidebar-text, white);
 }
 
 .sidebar-note {
