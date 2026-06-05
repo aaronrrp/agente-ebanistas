@@ -233,15 +233,17 @@ function save() {
 }
 
 // ── Global prices ────────────────────────────────────────────────────────────
+// localStorage is the source of truth for the admin.
+// loadGlobalPrices() pushes local → server (never overwrites local with server).
 async function loadGlobalPrices() {
+  if (window.location.protocol === "file:" || !AUTH.token) return;
+  renderPricesForm(); // render immediately from local state
   try {
-    const res = await fetch("/api/prices");
-    if (res.ok) {
-      const data = await res.json();
-      state.globalPrices = { ...defaultGlobalPrices, ...data };
-      localStorage.setItem("tm_global_prices", JSON.stringify(state.globalPrices));
-      renderPricesForm();
-    }
+    await fetch("/api/admin/prices", {
+      method: "PUT",
+      headers: adminApiHeader(),
+      body: JSON.stringify(state.globalPrices)
+    });
   } catch {}
 }
 
