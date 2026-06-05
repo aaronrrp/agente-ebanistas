@@ -721,7 +721,7 @@ function renderClient() {
 
   const tenantQuotes = state.quotes.filter((quote) => quote.tenantId === tenant.id);
   els.quoteHistory.innerHTML = tenantQuotes.length ? tenantQuotes.map((quote) => `
-    <article class="history-card">
+    <article class="history-card" data-view-quote="${quote.id}" style="cursor:pointer" title="Ver cotización">
       <header>
         <strong>${escapeHtml(quote.finalClient || "Sin cliente")}</strong>
         <div style="display:flex;align-items:center;gap:8px">
@@ -797,6 +797,9 @@ function openEbanistaModal(editId) {
   if (cbShowDesign) cbShowDesign.checked = theme.showDesign !== false;
   if (cbShowQuote)  cbShowQuote.checked  = theme.showQuote  !== false;
   if (cbShowCuts)   cbShowCuts.checked   = theme.showCuts   !== false;
+  // Always clear pending logo from a previous modal open so it doesn't leak to other ebanistas
+  const logoFile = document.getElementById("em_logoFile");
+  if (logoFile) { logoFile.value = ""; logoFile._pendingB64 = null; }
   const preview = document.getElementById("em_logoPreview");
   const logoImg = document.getElementById("em_logoImg");
   if (preview && logoImg) {
@@ -1001,6 +1004,9 @@ function calculateItem(item) {
     finalPrice
   };
 }
+
+// Returns true if an item spec is empty or "No incluir…" (should not appear in the quote doc)
+function noInc(val) { return !val || /^no incluir/i.test(String(val).trim()); }
 
 function optionCost(map, key, fallback) {
   if (String(key).toLowerCase().startsWith("no incluir")) return 0;
@@ -1231,12 +1237,12 @@ function renderQuotePaper(quote) {
               <td><strong>${item.name}</strong><br>${item.furnitureType} · ${item.complexityLabel}</td>
               <td>
                 ${item.width} x ${item.height} x ${item.depth} cm<br>
-                Melamina: ${item.melamineThickness}${item.melamineSheet ? ` (${escapeHtml(getMelamineSheetLabel(item.melamineSheet))})` : ""}<br>
-                Canto: ${item.edgeBanding}<br>
-                Bisagras: ${item.hinges}<br>
-                Correderas: ${item.drawerSlides}<br>
-                Jaladores: ${item.handles}<br>
-                Puertas: ${item.doors} (${placementLabel(item.doorPlacement)}) · Gavetas: ${item.drawers} (${placementLabel(item.drawerPlacement)}) · Repisas: ${item.shelves} (${placementLabel(item.shelfPlacement)}) · Fondo: ${placementLabel(item.backPlacement)}
+                Melamina: ${item.melamineThickness}${item.melamineSheet ? ` (${escapeHtml(getMelamineSheetLabel(item.melamineSheet))})` : ""}
+                ${noInc(item.edgeBanding)     ? "" : `<br>Canto: ${item.edgeBanding}`}
+                ${noInc(item.hinges)          ? "" : `<br>Bisagras: ${item.hinges}`}
+                ${noInc(item.drawerSlides)    ? "" : `<br>Correderas: ${item.drawerSlides}`}
+                ${noInc(item.handles)         ? "" : `<br>Jaladores: ${item.handles}`}
+                ${item.doors || item.drawers || item.shelves ? `<br>Puertas: ${item.doors} (${placementLabel(item.doorPlacement)}) · Gavetas: ${item.drawers} (${placementLabel(item.drawerPlacement)}) · Repisas: ${item.shelves} (${placementLabel(item.shelfPlacement)}) · Fondo: ${placementLabel(item.backPlacement)}` : ""}
                 ${item.notes ? `<br>Notas: ${item.notes}` : ""}
               </td>
               <td>${money(item.finalPrice)}</td>
@@ -2575,16 +2581,26 @@ els.cutsOutput.addEventListener("click", (e) => {
   }
 });
 
-// ── Delete quote from history ──────────────────────────────────────────────
+// ── Quote history: delete or click-to-view ────────────────────────────────
 els.quoteHistory.addEventListener("click", (e) => {
-  const qid = e.target.dataset.deleteQuote;
-  if (!qid) return;
-  if (!confirm("¿Borrar esta cotización? Esta acción no se puede deshacer.")) return;
-  state.quotes = state.quotes.filter(q => q.id !== qid);
-  save();
-  renderClient();
-  renderAdmin();
-  toast("Cotización borrada");
+  // ── Delete button ✕ ──
+  const delId = e.target.dataset.deleteQuote;
+  if (delId) {
+    if (!confirm("¿Borrar esta cotización? Esta acción no se puede deshacer.")) return;
+    state.quotes = state.quotes.filter(q => q.id !== delId);
+    save();
+    renderClient();
+    renderAdmin();
+    toast("Cotización borrada");
+    return;
+  }
+  // ── Click on card → navigate to quote view and display it ──
+  const card = e.target.closest("article[data-view-quote]");
+  if (!card) return;
+  const quote = state.quotes.find(q => q.id === card.dataset.viewQuote);
+  if (!quote) return;
+  showView("quoteView");
+  renderQuotePaper(quote);
 });
 
 els.quoteForm.addEventListener("submit", (event) => {
