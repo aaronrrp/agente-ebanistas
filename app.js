@@ -679,12 +679,15 @@ function renderClient() {
     renderPricesFormFor("tenantPricesGrid", _tenantPrices);
   }
 
-  const tenantQuotes = state.quotes.filter((quote) => quote.tenantId === tenant.id).slice(0, 6);
+  const tenantQuotes = state.quotes.filter((quote) => quote.tenantId === tenant.id);
   els.quoteHistory.innerHTML = tenantQuotes.length ? tenantQuotes.map((quote) => `
     <article class="history-card">
       <header>
-        <strong>${quote.finalClient}</strong>
-        <span>${money(quote.total)}</span>
+        <strong>${escapeHtml(quote.finalClient || "Sin cliente")}</strong>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span>${money(quote.total)}</span>
+          <button class="tiny-btn danger" data-delete-quote="${quote.id}" type="button" title="Borrar cotización" style="font-size:.7rem;padding:2px 7px;line-height:1.4">✕</button>
+        </div>
       </header>
       <p>${quote.items?.length || 1} mueble(s) · ${quote.createdAt}</p>
     </article>
@@ -2542,6 +2545,18 @@ els.cutsOutput.addEventListener("click", (e) => {
     state.editablePieces = [];
     renderCuts();
   }
+});
+
+// ── Delete quote from history ──────────────────────────────────────────────
+els.quoteHistory.addEventListener("click", (e) => {
+  const qid = e.target.dataset.deleteQuote;
+  if (!qid) return;
+  if (!confirm("¿Borrar esta cotización? Esta acción no se puede deshacer.")) return;
+  state.quotes = state.quotes.filter(q => q.id !== qid);
+  save();
+  renderClient();
+  renderAdmin();
+  toast("Cotización borrada");
 });
 
 els.quoteForm.addEventListener("submit", (event) => {
