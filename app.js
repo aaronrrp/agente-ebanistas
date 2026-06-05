@@ -668,19 +668,10 @@ function getTenantLink(tenant) {
       .toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
       .replace(/[^a-z0-9]/g, "").slice(0, 8) || "ebanista";
     tenant.accessCode = `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
-    save(); // persist to localStorage
+    save();
   }
-  const minimal = {
-    id: tenant.id, companyName: tenant.companyName, contactName: tenant.contactName || "",
-    phone: tenant.phone || "", email: tenant.email || "",
-    status: tenant.status, expiresAt: tenant.expiresAt, margin: tenant.margin || 30,
-    installBase: tenant.installBase || 75, transportBase: tenant.transportBase || 30,
-    materials: tenant.materials || "", terms: tenant.terms || "",
-    accessCode: tenant.accessCode
-  };
-  // URL-encode the JSON directly — no base64, no + / = corruption
-  const encoded = encodeURIComponent(JSON.stringify(minimal));
-  return `${window.location.origin}/?code=${tenant.accessCode}&d=${encoded}`;
+  // Short link — ebanista always fetches fresh data from server (theme, etc. always up to date)
+  return `${window.location.origin}/?code=${tenant.accessCode}`;
 }
 
 let _ebModalEditId = null;
@@ -2847,6 +2838,8 @@ async function tryAutoLogin() {
     const inp = document.getElementById("loginCodeInput");
     if (btn) { btn.textContent = "Conectando…"; btn.disabled = true; }
     if (inp) inp.disabled = true;
+    // Show friendly message — first request can take ~30s if server is sleeping
+    setLoginError("⏳ Iniciando sesión… la primera vez puede tardar hasta 30 segundos.");
     try {
       const res = await fetch(`/api/tenant-by-code?code=${encodeURIComponent(urlCode)}`);
       if (res.ok) {
@@ -2862,7 +2855,7 @@ async function tryAutoLogin() {
     } catch {
       const local = state.tenants.find(t => t.accessCode === urlCode);
       if (local && isTenantActive(local)) { _loginAsEbanista(local); return; }
-      setLoginError("Sin conexión al servidor. Pide un link actualizado.");
+      setLoginError("Sin conexión al servidor. Contacta al administrador.");
     } finally {
       if (btn) { btn.textContent = "Ingresar →"; btn.disabled = false; }
       if (inp) inp.disabled = false;
