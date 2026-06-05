@@ -449,9 +449,9 @@ function renderCatalogOptions() {
   // Furniture type — blank placeholder so nothing is pre-selected
   const ftSel = document.getElementById("furnitureType");
   if (ftSel) {
-    ftSel.innerHTML = `<option value="" disabled>— Tipo de mueble —</option>` +
+    ftSel.innerHTML = `<option value="" disabled selected>— Tipo de mueble —</option>` +
       catalog.furnitureTypes.map(t => `<option>${escapeHtml(t)}</option>`).join("");
-    if (!ftSel.value) ftSel.value = ""; // keep blank unless already set
+    ftSel.selectedIndex = 0; // ensure placeholder is visible
   }
   // Hardware selects — blank placeholder; user or AI must pick explicitly
   [
@@ -462,9 +462,9 @@ function renderCatalogOptions() {
   ].forEach(([id, options]) => {
     const sel = document.getElementById(id);
     if (!sel) return;
-    sel.innerHTML = `<option value="" disabled>— Seleccionar —</option>` +
+    sel.innerHTML = `<option value="" disabled selected>— Seleccionar —</option>` +
       options.map(o => `<option>${escapeHtml(o)}</option>`).join("");
-    sel.value = ""; // reset to blank (fillFormFromItem sets it if editing)
+    sel.selectedIndex = 0; // ensure placeholder is visible (fillFormFromItem overrides when editing)
   });
 }
 
