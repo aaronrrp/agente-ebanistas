@@ -2716,6 +2716,47 @@ function setLoginError(msg) {
   el.classList.toggle("hidden", !msg);
 }
 
+// ── Auto-connecting loading overlay (shown instead of login form while URL-code fetch runs) ───
+let _connectingEl = null;
+function showConnectingScreen() {
+  if (!document.getElementById("_spinKF")) {
+    const s = document.createElement("style");
+    s.id = "_spinKF";
+    s.textContent = "@keyframes _spin{to{transform:rotate(360deg)}}";
+    document.head.appendChild(s);
+  }
+  if (_connectingEl) return; // already showing
+  const el = document.createElement("div");
+  el.id = "connectingOverlay";
+  el.style.cssText = [
+    "position:fixed", "inset:0", "z-index:10001",
+    "background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 60%,#1e293b 100%)",
+    "display:flex", "align-items:center", "justify-content:center"
+  ].join(";");
+  el.innerHTML = `
+    <div style="text-align:center;color:#fff;padding:2rem;max-width:320px">
+      <div style="font-size:2.8rem;margin-bottom:1.25rem">🪵</div>
+      <p style="font-size:1.25rem;font-weight:800;margin:0 0 .4rem;letter-spacing:-.01em">Cargando tu espacio…</p>
+      <p style="font-size:.875rem;opacity:.65;margin:0 0 2.25rem;line-height:1.5">Un momento, por favor</p>
+      <div style="width:38px;height:38px;border:3px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;animation:_spin .75s linear infinite;margin:0 auto"></div>
+    </div>`;
+  document.body.appendChild(el);
+  _connectingEl = el;
+}
+function hideConnectingScreen() {
+  if (_connectingEl) { _connectingEl.remove(); _connectingEl = null; }
+  document.getElementById("connectingOverlay")?.remove(); // safety
+}
+// Pre-fill ebanista code tab (used when auto-login fails and we fall back to the form)
+function _prefillCodeTab(code) {
+  document.querySelectorAll("[data-login-tab]").forEach(b => b.classList.remove("active"));
+  document.querySelector('[data-login-tab="code"]')?.classList.add("active");
+  document.getElementById("loginCodePanel")?.classList.remove("hidden");
+  document.getElementById("loginAdminPanel")?.classList.add("hidden");
+  const inp = document.getElementById("loginCodeInput");
+  if (inp) inp.value = code;
+}
+
 // ── Tab switch ────────────────────────────────────────────────────────────
 document.querySelectorAll("[data-login-tab]").forEach(btn => {
   btn.addEventListener("click", () => {
@@ -2978,39 +3019,48 @@ async function tryAutoLogin() {
 
     if (!urlCode) { showLogin(); return; } // ?d= was present but invalid, no code either
 
-    // Path B: no ?d= or parse failed → ask server, show loading state while waiting
-    showLogin();
-    // Switch to ebanista tab and pre-fill code
-    document.querySelectorAll("[data-login-tab]").forEach(b => b.classList.remove("active"));
-    document.querySelector('[data-login-tab="code"]')?.classList.add("active");
-    document.getElementById("loginCodePanel")?.classList.remove("hidden");
-    document.getElementById("loginAdminPanel")?.classList.add("hidden");
-    document.getElementById("loginCodeInput").value = urlCode;
-    const btn = document.getElementById("loginCodeBtn");
-    const inp = document.getElementById("loginCodeInput");
-    if (btn) { btn.textContent = "Conectando…"; btn.disabled = true; }
-    if (inp) inp.disabled = true;
-    // Show friendly message — first request can take ~30s if server is sleeping
-    setLoginError("⏳ Iniciando sesión… la primera vez puede tardar hasta 30 segundos.");
+    // Path B: no ?d= → fetch from server. Show clean spinner — NOT the login form.
+    // The login form only appears if auth actually fails.
+    showConnectingScreen();
     try {
       const res = await fetch(`/api/tenant-by-code?code=${encodeURIComponent(urlCode)}`);
       if (res.ok) {
         const data = await res.json();
-        if (data.active) { _loginAsEbanista(data); return; }
+        if (data.active) {
+          hideConnectingScreen();
+          _loginAsEbanista(data);
+          return;
+        }
+        // Tenant found but inactive
+        hideConnectingScreen();
+        showLogin();
+        _prefillCodeTab(urlCode);
         setLoginError("Tu acceso está suspendido o venció. Contacta al administrador.");
       } else {
-        // Try local state as last resort
+        // Server returned error — try local cache as last resort
         const local = state.tenants.find(t => t.accessCode === urlCode);
-        if (local && isTenantActive(local)) { _loginAsEbanista(local); return; }
+        if (local && isTenantActive(local)) {
+          hideConnectingScreen();
+          _loginAsEbanista(local);
+          return;
+        }
+        hideConnectingScreen();
+        showLogin();
+        _prefillCodeTab(urlCode);
         setLoginError("Código no válido. Pide un link actualizado a tu administrador.");
       }
     } catch {
+      // Network error — try local cache
       const local = state.tenants.find(t => t.accessCode === urlCode);
-      if (local && isTenantActive(local)) { _loginAsEbanista(local); return; }
+      if (local && isTenantActive(local)) {
+        hideConnectingScreen();
+        _loginAsEbanista(local);
+        return;
+      }
+      hideConnectingScreen();
+      showLogin();
+      _prefillCodeTab(urlCode);
       setLoginError("Sin conexión al servidor. Contacta al administrador.");
-    } finally {
-      if (btn) { btn.textContent = "Ingresar →"; btn.disabled = false; }
-      if (inp) inp.disabled = false;
     }
     return;
   }
