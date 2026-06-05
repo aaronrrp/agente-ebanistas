@@ -58,40 +58,7 @@ function cloneCatalog() {
   return JSON.parse(JSON.stringify(defaultCatalog));
 }
 
-const defaultTenants = [
-  {
-    id: crypto.randomUUID(),
-    companyName: "Muebles Rivera",
-    contactName: "Luis Rivera",
-    phone: "+507 6000-0001",
-    email: "ventas@mueblesrivera.com",
-    monthlyFee: 35,
-    status: "active",
-    expiresAt: "2026-07-03",
-    margin: 35,
-    installBase: 85,
-    transportBase: 35,
-    materials: "Melamina hidrófuga RH blanca, nogal y gris; canto PVC; bisagras cierre suave; correderas telescópicas.",
-    terms: "60% para iniciar fabricación y 40% contra entrega o antes de instalación. La cotización puede variar si cambian medidas, materiales, herrajes o condiciones de instalación.",
-    catalog: cloneCatalog()
-  },
-  {
-    id: crypto.randomUUID(),
-    companyName: "Ebanistería El Cedro",
-    contactName: "María Santos",
-    phone: "+507 6000-0002",
-    email: "cotizaciones@elcedro.com",
-    monthlyFee: 25,
-    status: "suspended",
-    expiresAt: "2026-05-28",
-    margin: 28,
-    installBase: 70,
-    transportBase: 25,
-    materials: "Melamina hidrófuga blanca, gris y madera clara. Herrajes estándar.",
-    terms: "50% de abono inicial y 50% al finalizar. No incluye plomería, electricidad ni retiro de muebles existentes.",
-    catalog: cloneCatalog()
-  }
-];
+const defaultTenants = []; // Sin ebanistas de demo — el admin agrega los reales
 
 const complexityMap = {
   low: { label: "Baja", multiplier: 1, days: "5 a 7 días hábiles" },

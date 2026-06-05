@@ -43,43 +43,7 @@ function makeStableId(seed) {
 }
 
 function defaultTenants() {
-  // IDs and codes are stable (deterministic) — survive redeploys
-  return [
-    {
-      id: makeStableId("muebles-rivera-default"),
-      companyName: "Muebles Rivera",
-      contactName: "Luis Rivera",
-      phone: "+507 6000-0001",
-      email: "ventas@mueblesrivera.com",
-      monthlyFee: 35,
-      status: "active",
-      expiresAt: "2027-01-01",
-      margin: 35,
-      installBase: 85,
-      transportBase: 35,
-      materials: "Melamina hidrófuga RH blanca, nogal y gris; canto PVC; bisagras cierre suave; correderas telescópicas.",
-      terms: "60% para iniciar fabricación y 40% contra entrega. La cotización puede variar si cambian medidas o materiales.",
-      accessCode: makeCode("Muebles Rivera"),
-      catalog: { furnitureTypes: [], edgeOptions: [], hingeOptions: [], slideOptions: [], handleOptions: [] }
-    },
-    {
-      id: makeStableId("ebanisteria-cedro-default"),
-      companyName: "Ebanistería El Cedro",
-      contactName: "María Santos",
-      phone: "+507 6000-0002",
-      email: "cotizaciones@elcedro.com",
-      monthlyFee: 25,
-      status: "active",
-      expiresAt: "2027-01-01",
-      margin: 28,
-      installBase: 70,
-      transportBase: 25,
-      materials: "Melamina hidrófuga blanca, gris y madera clara. Herrajes estándar.",
-      terms: "50% de abono inicial y 50% al finalizar.",
-      accessCode: makeCode("Ebanistería El Cedro"),
-      catalog: { furnitureTypes: [], edgeOptions: [], hingeOptions: [], slideOptions: [], handleOptions: [] }
-    }
-  ];
+  return []; // Sin ebanistas de demo — el admin agrega los reales
 }
 
 function loadTenants() {
@@ -725,7 +689,7 @@ const server = http.createServer(async (req, res) => {
         adminPasswordSet: ADMIN_PASSWORD !== "admin1234",
         tenantsCount: tenants.length,
         apiEndpoint: "chat/completions",
-        build: "2026-06-05-v27"
+        build: "2026-06-05-v28"
       });
       return;
     }
