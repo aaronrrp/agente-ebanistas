@@ -542,6 +542,7 @@ function renderAdmin() {
           <button class="tiny-btn" type="button" data-renew-tenant="${t.id}">+30 días</button>
           <button class="tiny-btn" type="button" data-edit-tenant="${t.id}">✏ Editar</button>
           <button class="tiny-btn ${act ? "danger-btn" : ""}" type="button" data-toggle-tenant="${t.id}">${act ? "Suspender" : "Activar"}</button>
+          <button class="tiny-btn danger" type="button" data-delete-tenant="${t.id}">🗑 Eliminar</button>
         </div>
       </article>`;
   }).join("");
@@ -2195,13 +2196,28 @@ els.tenantSelect.addEventListener("change", (event) => {
 });
 
 els.tenantList.addEventListener("click", async (event) => {
-  const btn = event.target.closest("button[data-link-tenant], button[data-edit-tenant], button[data-toggle-tenant], button[data-renew-tenant]");
+  const btn = event.target.closest("button[data-link-tenant], button[data-edit-tenant], button[data-toggle-tenant], button[data-renew-tenant], button[data-delete-tenant]");
   if (!btn) return;
 
   const linkId   = btn.dataset.linkTenant;
   const editId   = btn.dataset.editTenant;
   const toggleId = btn.dataset.toggleTenant;
   const renewId  = btn.dataset.renewTenant;
+  const deleteId = btn.dataset.deleteTenant;
+
+  if (deleteId) {
+    const t = state.tenants.find(t => t.id === deleteId);
+    if (!t) return;
+    if (!confirm(`¿Eliminar a "${t.companyName}" permanentemente?\n\nEsta acción no se puede deshacer.`)) return;
+    state.tenants = state.tenants.filter(t => t.id !== deleteId);
+    // If we just deleted the active tenant, switch to the next one
+    if (state.selectedTenantId === deleteId) {
+      state.selectedTenantId = state.tenants[0]?.id || null;
+    }
+    save(); render();
+    toast(`"${t.companyName}" eliminado ✓`);
+    return;
+  }
 
   if (renewId) {
     const t = state.tenants.find(t => t.id === renewId);
