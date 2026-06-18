@@ -1,1 +1,94 @@
-[]
+[
+  {
+    "id": "2a97a58c-7e0e-4930-99b8-2bedd9c1f0fc",
+    "companyName": "todomarketmr",
+    "contactName": "richard figuera",
+    "phone": "62446522",
+    "email": "",
+    "monthlyFee": 0,
+    "status": "active",
+    "expiresAt": "2026-07-18",
+    "margin": 30,
+    "installBase": 75,
+    "transportBase": 30,
+    "materials": "Melamina hidrófuga, canto PVC, herrajes estándar.",
+    "terms": "60% para iniciar fabricación y 40% contra entrega.",
+    "accessCode": "todomark-hipb55",
+    "catalog": {
+      "furnitureTypes": [
+        "Cocina",
+        "Closet",
+        "Vanity",
+        "Centro de entretenimiento",
+        "Mueble de lavandería",
+        "Escritorio",
+        "Otro"
+      ],
+      "edgeOptions": [
+        "No incluir canto",
+        "Solo frentes visibles",
+        "Frentes visibles y puertas",
+        "Todos los cantos expuestos",
+        "Canto premium en todo el mueble"
+      ],
+      "hingeOptions": [
+        "Blum CLIP top BLUMOTION 110° (cierre suave)",
+        "Blum CLIP top 165° apertura amplia",
+        "Blum CLIP top estándar 110°",
+        "Häfele cierre suave 35mm",
+        "Häfele estándar 35mm",
+        "No incluir bisagras"
+      ],
+      "slideOptions": [
+        "Blum LEGRABOX premium (70 kg)",
+        "Blum MOVENTO undermount (40 kg, cierre suave)",
+        "Blum TANDEMBOX antaro (30 kg)",
+        "Häfele Matrix cierre suave (45 kg)",
+        "Häfele telescópica estándar (25 kg)",
+        "No incluir correderas"
+      ],
+      "handleOptions": [
+        "Barra aluminio 320mm",
+        "Barra aluminio 128mm",
+        "Jalador integrado / embutido",
+        "Sin jalador (push-to-open)",
+        "Inox premium acero inoxidable",
+        "No incluir jaladores"
+      ]
+    },
+    "prices": {
+      "melamina_std": 45,
+      "melamina_lg": 85,
+      "canto_pvc": 0.8,
+      "canto_grueso": 2.2,
+      "backing_m2": 12,
+      "bisagra_std": 3.5,
+      "bisagra_sc": 7,
+      "corredera_std": 18,
+      "corredera_sc": 32,
+      "jalador_chico": 7,
+      "jalador_grande": 14,
+      "jalador_premium": 26,
+      "install_hour": 25,
+      "transport_base": 30,
+      "transport_km": 0.5,
+      "customItems": [],
+      "_names": {}
+    },
+    "theme": {
+      "accentColor": "#6366f1",
+      "headerBg": "#162a25",
+      "chatBubbleColor": "#f3f4f6",
+      "sidebarTextColor": "#ffffff",
+      "fontFamily": "",
+      "tagline": "",
+      "greeting": "",
+      "logoBase64": "",
+      "showDesign": true,
+      "showQuote": true,
+      "showCuts": true
+    },
+    "passwordSalt": "62e57a698919af6c31dcc8de44023ba1",
+    "passwordHash": "ef484c3b14ee965f13aea162293bcc149f366a0e8c23f419fefa1dc21f3c75b9d98335c50bf50f5d7e1247c71b49da0d5e83556083687fcffe9066947610a9c2"
+  }
+]

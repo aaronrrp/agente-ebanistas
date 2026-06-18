@@ -1,0 +1,17 @@
+{
+  "melamina_std": 45,
+  "melamina_lg": 85,
+  "canto_pvc": 0.8,
+  "canto_grueso": 2.2,
+  "backing_m2": 12,
+  "bisagra_std": 3.5,
+  "bisagra_sc": 7,
+  "corredera_std": 18,
+  "corredera_sc": 32,
+  "jalador_chico": 7,
+  "jalador_grande": 14,
+  "jalador_premium": 26,
+  "install_hour": 25,
+  "transport_base": 30,
+  "transport_km": 0.5
+}
