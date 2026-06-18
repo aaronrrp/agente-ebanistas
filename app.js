@@ -875,17 +875,32 @@ async function saveEbanistaFromModal() {
     }
   };
 
+  const isNew = !existing;
   if (existing) { Object.assign(existing, tenantData); }
   else { state.tenants.unshift(tenantData); state.selectedTenantId = id; }
   save(); render();
 
-  // Background server sync (non-blocking)
+  // Server sync: new tenants must be awaited — the server is the one generating
+  // and hashing the password, so we need its response to show it to the admin.
+  let passwordPlain = "";
   if (window.location.protocol !== "file:" && AUTH.token) {
-    fetch(`/api/tenants/${id}`, { method: "PUT", headers: adminApiHeader(), body: JSON.stringify(tenantData) }).catch(() => {});
+    if (isNew) {
+      try {
+        const res = await fetch(`/api/tenants/${id}`, { method: "PUT", headers: adminApiHeader(), body: JSON.stringify(tenantData) });
+        if (res.ok) { const data = await res.json(); passwordPlain = data.passwordPlain || ""; }
+      } catch {}
+    } else {
+      fetch(`/api/tenants/${id}`, { method: "PUT", headers: adminApiHeader(), body: JSON.stringify(tenantData) }).catch(() => {});
+    }
   }
 
   const link = getTenantLink(tenantData);
   document.getElementById("em_link").value = link;
+  const pwRow = document.getElementById("em_passwordRow");
+  if (pwRow) {
+    if (passwordPlain) { document.getElementById("em_passwordDisplay").value = passwordPlain; pwRow.classList.remove("hidden"); }
+    else pwRow.classList.add("hidden");
+  }
   document.getElementById("em_result").classList.remove("hidden");
   document.getElementById("em_actions").style.display = "none";
   btn.textContent = "Guardado ✓";
@@ -2374,6 +2389,19 @@ document.getElementById("em_copyBtn")?.addEventListener("click", () => {
     toast("Link copiado ✓");
   });
 });
+document.getElementById("em_copyPasswordBtn")?.addEventListener("click", () => {
+  const val = document.getElementById("em_passwordDisplay").value;
+  navigator.clipboard.writeText(val).then(() => {
+    toast("Contraseña copiada ✓");
+    const btn = document.getElementById("em_copyPasswordBtn");
+    btn.textContent = "¡Copiado!";
+    setTimeout(() => { btn.textContent = "Copiar"; }, 2000);
+  }).catch(() => {
+    const inp = document.getElementById("em_passwordDisplay");
+    inp.select(); document.execCommand("copy");
+    toast("Contraseña copiada ✓");
+  });
+});
 document.getElementById("em_company")?.addEventListener("keydown", e => {
   if (e.key === "Enter") saveEbanistaFromModal();
 });
@@ -2753,8 +2781,33 @@ function _prefillCodeTab(code) {
   document.querySelector('[data-login-tab="code"]')?.classList.add("active");
   document.getElementById("loginCodePanel")?.classList.remove("hidden");
   document.getElementById("loginAdminPanel")?.classList.add("hidden");
+  _resetEbLoginStep();
   const inp = document.getElementById("loginCodeInput");
   if (inp) inp.value = code;
+}
+
+// ── Ebanista login step machine (code → password, only when the tenant has one) ──
+let _ebLoginStep = "code"; // "code" | "password"
+
+function _resetEbLoginStep() {
+  _ebLoginStep = "code";
+  document.getElementById("loginEbPasswordInput")?.classList.add("hidden");
+  const pwInput = document.getElementById("loginEbPasswordInput");
+  if (pwInput) pwInput.value = "";
+  const hint = document.getElementById("loginCodeHint");
+  if (hint) hint.textContent = "Ingresa el código que te dio el administrador, o usa el enlace directo que te enviaron.";
+  const btn = document.getElementById("loginCodeBtn");
+  if (btn) btn.textContent = "Ingresar →";
+}
+
+function _showEbPasswordStep(companyName) {
+  _ebLoginStep = "password";
+  document.getElementById("loginEbPasswordInput")?.classList.remove("hidden");
+  const hint = document.getElementById("loginCodeHint");
+  if (hint) hint.textContent = companyName ? `Bienvenido, ${companyName} — ingresa tu contraseña.` : "Ingresa tu contraseña.";
+  const btn = document.getElementById("loginCodeBtn");
+  if (btn) btn.textContent = "Entrar →";
+  setTimeout(() => document.getElementById("loginEbPasswordInput")?.focus(), 50);
 }
 
 // ── Tab switch ────────────────────────────────────────────────────────────
@@ -2765,6 +2818,7 @@ document.querySelectorAll("[data-login-tab]").forEach(btn => {
     const tab = btn.dataset.loginTab;
     document.getElementById("loginCodePanel").classList.toggle("hidden", tab !== "code");
     document.getElementById("loginAdminPanel").classList.toggle("hidden", tab !== "admin");
+    if (tab === "code") _resetEbLoginStep();
     setLoginError("");
   });
 });
@@ -2773,22 +2827,44 @@ document.querySelectorAll("[data-login-tab]").forEach(btn => {
 document.getElementById("loginCodeInput")?.addEventListener("keydown", e => {
   if (e.key === "Enter") document.getElementById("loginCodeBtn").click();
 });
+document.getElementById("loginEbPasswordInput")?.addEventListener("keydown", e => {
+  if (e.key === "Enter") document.getElementById("loginCodeBtn").click();
+});
 document.getElementById("loginPasswordInput")?.addEventListener("keydown", e => {
   if (e.key === "Enter") document.getElementById("loginAdminBtn").click();
 });
 
-// ── Ebanista login with code ───────────────────────────────────────────────
+// ── Ebanista login with code (+ password, only when the tenant has one) ────
 document.getElementById("loginCodeBtn")?.addEventListener("click", async () => {
   const code = document.getElementById("loginCodeInput").value.trim();
   if (!code) { setLoginError("Ingresa tu código de acceso."); return; }
 
-  // Try server first; fall back to local state (for offline/demo)
+  // Step 2: password already requested — submit code+password to the server
+  if (_ebLoginStep === "password") {
+    const password = document.getElementById("loginEbPasswordInput").value;
+    if (!password) { setLoginError("Ingresa tu contraseña."); return; }
+    if (window.location.protocol === "file:") { setLoginError("Sin conexión al servidor."); return; }
+    try {
+      const res = await fetch("/api/auth/ebanista", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, password })
+      });
+      const data = await res.json();
+      if (!res.ok) { setLoginError(data.error || "Contraseña incorrecta."); return; }
+      setLoginError("");
+      _loginAsEbanista(data.tenant, data.token);
+    } catch { setLoginError("Sin conexión al servidor."); }
+    return;
+  }
+
+  // Step 1: try server first; fall back to local state (for offline/demo)
   let tenant = null;
   if (window.location.protocol !== "file:") {
     try {
       const res = await fetch(`/api/tenant-by-code?code=${encodeURIComponent(code)}`);
       if (res.ok) {
         const data = await res.json();
+        if (data.requiresPassword) { setLoginError(""); _showEbPasswordStep(data.companyName); return; }
         // Merge server tenant into local state
         const existing = state.tenants.find(t => t.id === data.id);
         if (existing) Object.assign(existing, data);
@@ -2919,6 +2995,7 @@ function openLinkModal(tenantId) {
   const url = getTenantLink(tenant);
   document.getElementById("linkModalDesc").textContent = `Link de acceso para ${tenant.companyName}:`;
   document.getElementById("linkModalUrl").value = url;
+  document.getElementById("linkModalPassword").value = "";
   document.getElementById("linkModal").classList.remove("hidden");
 }
 
@@ -2935,6 +3012,32 @@ document.getElementById("copyLinkBtn")?.addEventListener("click", () => {
     document.getElementById("copyLinkBtn").textContent = "¡Copiado!";
     setTimeout(() => { document.getElementById("copyLinkBtn").textContent = "Copiar"; }, 2000);
   }).catch(() => { input.select(); document.execCommand("copy"); toast("Link copiado ✓"); });
+});
+document.getElementById("copyPasswordBtn")?.addEventListener("click", () => {
+  const input = document.getElementById("linkModalPassword");
+  if (!input.value) { toast("Genera una contraseña primero"); return; }
+  navigator.clipboard.writeText(input.value).then(() => {
+    toast("Contraseña copiada al portapapeles ✓");
+    document.getElementById("copyPasswordBtn").textContent = "¡Copiado!";
+    setTimeout(() => { document.getElementById("copyPasswordBtn").textContent = "Copiar"; }, 2000);
+  }).catch(() => { input.select(); document.execCommand("copy"); toast("Contraseña copiada ✓"); });
+});
+document.getElementById("generatePasswordBtn")?.addEventListener("click", async () => {
+  const id = AUTH.linkModalTenantId;
+  if (!id) return;
+  if (window.location.protocol === "file:" || !AUTH.token) { toast("Necesitas conexión con el servidor para generar contraseña."); return; }
+  try {
+    const res = await fetch(`/api/tenants/${id}/set-password`, { method: "POST", headers: adminApiHeader(), body: JSON.stringify({}) });
+    if (res.ok) {
+      const data = await res.json();
+      document.getElementById("linkModalPassword").value = data.passwordPlain;
+      const tenant = state.tenants.find(t => t.id === id);
+      if (tenant) { tenant.hasPassword = true; save(); }
+      toast("Nueva contraseña generada — cópiala ahora ✓");
+    } else {
+      toast("No se pudo generar la contraseña.");
+    }
+  } catch { toast("Sin conexión al servidor."); }
 });
 
 document.getElementById("regenerateCodeBtn")?.addEventListener("click", async () => {
@@ -2964,7 +3067,7 @@ document.getElementById("regenerateCodeBtn")?.addEventListener("click", async ()
 
 // ── URL code auto-login ────────────────────────────────────────────────────
 // ── Helper: log in as ebanista tenant ────────────────────────────────────────
-function _loginAsEbanista(tenant) {
+function _loginAsEbanista(tenant, ebToken) {
   const existing = state.tenants.find(t => t.id === tenant.id);
   if (existing) Object.assign(existing, tenant);
   else { tenant.catalog = tenant.catalog || cloneCatalog(); state.tenants.push(tenant); }
@@ -2976,6 +3079,7 @@ function _loginAsEbanista(tenant) {
   sessionStorage.setItem("ebAuthMode", "ebanista");
   sessionStorage.setItem("ebTenantId", tenant.id);
   sessionStorage.setItem("ebAccessCode", tenant.accessCode);
+  if (ebToken) { AUTH.ebToken = ebToken; sessionStorage.setItem("ebToken", ebToken); }
   document.querySelector('[data-view="adminView"]')?.classList.add("hidden");
   showApp();
   showView("clientView");
@@ -3026,6 +3130,13 @@ async function tryAutoLogin() {
       const res = await fetch(`/api/tenant-by-code?code=${encodeURIComponent(urlCode)}`);
       if (res.ok) {
         const data = await res.json();
+        if (data.requiresPassword) {
+          hideConnectingScreen();
+          showLogin();
+          _prefillCodeTab(urlCode);
+          _showEbPasswordStep(data.companyName);
+          return;
+        }
         if (data.active) {
           hideConnectingScreen();
           _loginAsEbanista(data);
@@ -3095,10 +3206,25 @@ async function tryAutoLogin() {
 
   if (savedMode === "ebanista" && savedTenantId) {
     const tenant = state.tenants.find(t => t.id === savedTenantId);
+    const savedEbToken = sessionStorage.getItem("ebToken");
     if (tenant && isTenantActive(tenant)) {
-      AUTH.accessCode = sessionStorage.getItem("ebAccessCode") || tenant.accessCode || null;
-      _loginAsEbanista(tenant);
-      return;
+      if (tenant.hasPassword && window.location.protocol !== "file:") {
+        // Password-protected tenant: the stored token must still be valid server-side
+        try {
+          const res = await fetch("/api/auth/ebanista/check", { headers: { Authorization: `Bearer ${savedEbToken || ""}` } });
+          const data = res.ok ? await res.json() : null;
+          if (data?.valid) {
+            AUTH.accessCode = sessionStorage.getItem("ebAccessCode") || tenant.accessCode || null;
+            _loginAsEbanista(tenant, savedEbToken);
+            return;
+          }
+          // Token expired/invalid — fall through to login screen, ask for password again
+        } catch {}
+      } else if (!tenant.hasPassword) {
+        AUTH.accessCode = sessionStorage.getItem("ebAccessCode") || tenant.accessCode || null;
+        _loginAsEbanista(tenant);
+        return;
+      }
     }
   }
 

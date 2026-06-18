@@ -37,6 +37,30 @@ function makeCode(companyName) {
   return `${prefix}-${hash}`;
 }
 
+function generatePassword() {
+  return crypto.randomBytes(6).toString("base64url");
+}
+
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const hash = crypto.pbkdf2Sync(password, salt, 100000, 64, "sha512").toString("hex");
+  return { salt, hash };
+}
+
+function verifyPassword(password, salt, hash) {
+  if (!salt || !hash) return false;
+  const candidate = crypto.pbkdf2Sync(String(password || ""), salt, 100000, 64, "sha512").toString("hex");
+  const a = Buffer.from(candidate, "hex");
+  const b = Buffer.from(hash, "hex");
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
+function publicTenant(t) {
+  const { passwordHash, passwordSalt, ...rest } = t;
+  return { ...rest, hasPassword: Boolean(passwordHash) };
+}
+
 function makeStableId(seed) {
   const h = crypto.createHash("sha256").update(seed).digest("hex");
   return `${h.slice(0,8)}-${h.slice(8,12)}-4${h.slice(13,16)}-${h.slice(16,20)}-${h.slice(20,32)}`;
@@ -125,6 +149,24 @@ function requireAdmin(req, res) {
     return false;
   }
   return true;
+}
+
+// ── Ebanista sessions (password login) ──────────────────────────────────────
+const ebanistaSessions = new Map(); // token -> { tenantId, ts }
+const EB_SESSION_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+function createEbanistaSession(tenantId) {
+  const token = crypto.randomBytes(32).toString("hex");
+  ebanistaSessions.set(token, { tenantId, ts: Date.now() });
+  return token;
+}
+
+function getEbanistaSession(token) {
+  if (!token) return null;
+  const s = ebanistaSessions.get(token);
+  if (!s) return null;
+  if (Date.now() - s.ts > EB_SESSION_TTL) { ebanistaSessions.delete(token); return null; }
+  return s;
 }
 
 function todayIso() { return new Date().toISOString().slice(0, 10); }
@@ -552,12 +594,36 @@ async function handleAuthLogout(req, res) {
   sendJson(res, 200, { message: "Sesión cerrada." });
 }
 
+async function handleAuthEbanista(req, res) {
+  const body = await readBody(req);
+  const { code, password } = body ? JSON.parse(body) : {};
+  const tenant = tenants.find(t => t.accessCode === code);
+  if (!tenant) { sendJson(res, 401, { error: "Código no válido." }); return; }
+  if (tenant.passwordHash && !verifyPassword(password, tenant.passwordSalt, tenant.passwordHash)) {
+    sendJson(res, 401, { error: "Contraseña incorrecta." });
+    return;
+  }
+  const token = createEbanistaSession(tenant.id);
+  sendJson(res, 200, { token, tenant: { ...publicTenant(tenant), active: isTenantActive(tenant) } });
+}
+
+function handleAuthEbanistaCheck(req, res) {
+  sendJson(res, 200, { valid: Boolean(getEbanistaSession(getToken(req))) });
+}
+
+async function handleAuthEbanistaLogout(req, res) {
+  const token = getToken(req);
+  if (token) ebanistaSessions.delete(token);
+  sendJson(res, 200, { message: "Sesión cerrada." });
+}
+
 function handleGetTenants(req, res) {
   if (!requireAdmin(req, res)) return;
   sendJson(res, 200, tenants.map(t => ({
     id: t.id, companyName: t.companyName, contactName: t.contactName,
     phone: t.phone, email: t.email, plan: t.plan, status: t.status,
     expiresAt: t.expiresAt, margin: t.margin, accessCode: t.accessCode,
+    hasPassword: Boolean(t.passwordHash),
     active: isTenantActive(t)
   })));
 }
@@ -566,6 +632,8 @@ async function handleCreateTenant(req, res) {
   if (!requireAdmin(req, res)) return;
   const body = await readBody(req);
   const data = body ? JSON.parse(body) : {};
+  const passwordPlain = (data.password && String(data.password).trim()) || generatePassword();
+  const { salt, hash } = hashPassword(passwordPlain);
   const tenant = {
     id: crypto.randomUUID(),
     companyName: data.companyName || "Nueva ebanistería",
@@ -581,30 +649,38 @@ async function handleCreateTenant(req, res) {
     materials: data.materials || "Melamina hidrófuga, canto PVC, herrajes estándar.",
     terms: data.terms || "60% para iniciar fabricación y 40% contra entrega.",
     accessCode: makeCode(data.companyName || "ebanista"),
+    passwordSalt: salt,
+    passwordHash: hash,
     catalog: data.catalog || { furnitureTypes: [], edgeOptions: [], hingeOptions: [], slideOptions: [], handleOptions: [] }
   };
   tenants.push(tenant);
   saveTenants(tenants);
-  sendJson(res, 201, tenant);
+  sendJson(res, 201, { ...publicTenant(tenant), passwordPlain });
 }
 
 async function handleUpdateTenant(req, res, id) {
   if (!requireAdmin(req, res)) return;
   const body = await readBody(req);
   const data = body ? JSON.parse(body) : {};
+  delete data.passwordHash; delete data.passwordSalt; // password solo cambia via set-password
   const idx = tenants.findIndex(t => t.id === id);
   if (idx === -1) {
-    // Upsert: tenant was cleared by redeploy, recreate it
+    // Upsert: this is the path the UI actually uses to create a tenant
+    // (it PUTs a client-generated id instead of calling POST /api/tenants).
     const tenant = { ...data, id };
     if (!tenant.accessCode) tenant.accessCode = makeCode(tenant.companyName || "ebanista");
+    const passwordPlain = generatePassword();
+    const { salt, hash } = hashPassword(passwordPlain);
+    tenant.passwordSalt = salt;
+    tenant.passwordHash = hash;
     tenants.push(tenant);
     saveTenants(tenants);
-    sendJson(res, 200, tenant);
+    sendJson(res, 200, { ...publicTenant(tenant), passwordPlain });
     return;
   }
   tenants[idx] = { ...tenants[idx], ...data, id };
   saveTenants(tenants);
-  sendJson(res, 200, tenants[idx]);
+  sendJson(res, 200, publicTenant(tenants[idx]));
 }
 
 function handleToggleTenant(req, res, id) {
@@ -642,13 +718,31 @@ function handleRegenerateCode(req, res, id) {
   sendJson(res, 200, { accessCode: t.accessCode });
 }
 
+async function handleSetTenantPassword(req, res, id) {
+  if (!requireAdmin(req, res)) return;
+  const t = tenants.find(t => t.id === id);
+  if (!t) { sendJson(res, 404, { error: "No encontrado." }); return; }
+  const body = await readBody(req);
+  const data = body ? JSON.parse(body) : {};
+  const passwordPlain = (data.password && String(data.password).trim()) || generatePassword();
+  const { salt, hash } = hashPassword(passwordPlain);
+  t.passwordSalt = salt;
+  t.passwordHash = hash;
+  saveTenants(tenants);
+  sendJson(res, 200, { passwordPlain });
+}
+
 function handleTenantByCode(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const code = url.searchParams.get("code") || "";
   const t = tenants.find(t => t.accessCode === code);
   if (!t) { sendJson(res, 404, { error: "Código no válido." }); return; }
   const active = isTenantActive(t);
-  sendJson(res, 200, { ...t, active });
+  if (t.passwordHash) {
+    sendJson(res, 200, { requiresPassword: true, companyName: t.companyName, active });
+    return;
+  }
+  sendJson(res, 200, { ...publicTenant(t), active });
 }
 
 function handleTenantAccess(req, res, id) {
@@ -712,6 +806,9 @@ const server = http.createServer(async (req, res) => {
     if (method === "POST" && p === "/api/auth/admin")  { await handleAuthAdmin(req, res); return; }
     if (method === "GET"  && p === "/api/auth/check")  { handleAuthCheck(req, res); return; }
     if (method === "POST" && p === "/api/auth/logout") { await handleAuthLogout(req, res); return; }
+    if (method === "POST" && p === "/api/auth/ebanista")        { await handleAuthEbanista(req, res); return; }
+    if (method === "GET"  && p === "/api/auth/ebanista/check")  { handleAuthEbanistaCheck(req, res); return; }
+    if (method === "POST" && p === "/api/auth/ebanista/logout") { await handleAuthEbanistaLogout(req, res); return; }
 
     // Prices (GET public, PUT admin)
     if (method === "GET" && p === "/api/prices") { sendJson(res, 200, prices); return; }
@@ -752,6 +849,7 @@ const server = http.createServer(async (req, res) => {
       if (method === "POST" && action === "renew30")         { handleRenewTenant(req, res, id, 30); return; }
       if (method === "POST" && action === "renew365")        { handleRenewTenant(req, res, id, 365); return; }
       if (method === "POST" && action === "regenerate-code") { handleRegenerateCode(req, res, id); return; }
+      if (method === "POST" && action === "set-password")    { await handleSetTenantPassword(req, res, id); return; }
       if (method === "GET"  && action === "access")          { handleTenantAccess(req, res, id); return; }
     }
 

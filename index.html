@@ -30,10 +30,12 @@
 
       <!-- Tab: ebanista por código -->
       <div id="loginCodePanel" class="login-panel" role="tabpanel">
-        <p class="login-hint">Ingresa el código que te dio el administrador, o usa el enlace directo que te enviaron.</p>
+        <p id="loginCodeHint" class="login-hint">Ingresa el código que te dio el administrador, o usa el enlace directo que te enviaron.</p>
         <input id="loginCodeInput" class="login-input" type="text"
                placeholder="Ejemplo: mueblrivera-4f8a2c"
                autocomplete="off" autocapitalize="none" spellcheck="false">
+        <input id="loginEbPasswordInput" class="login-input hidden" type="password"
+               placeholder="Tu contraseña" autocomplete="current-password">
         <button id="loginCodeBtn" class="primary-btn login-btn" type="button">Ingresar →</button>
       </div>
 
@@ -499,7 +501,13 @@ Tapa superior, 120, 55, 1, 18 mm, sin canto"></textarea>
         <button id="copyLinkBtn" class="secondary-btn" type="button">Copiar</button>
       </div>
       <p class="link-hint">Envía este link por WhatsApp o correo. El ebanista lo abre en su teléfono y ya entra directamente a su espacio.</p>
+      <div class="link-box" style="margin-top:.5rem">
+        <input id="linkModalPassword" class="link-input" type="text" readonly placeholder="Genera una contraseña nueva para verla aquí">
+        <button id="copyPasswordBtn" class="secondary-btn" type="button">Copiar</button>
+      </div>
+      <p class="link-hint">La contraseña solo se muestra justo al generarla — no se puede volver a ver después.</p>
       <button id="regenerateCodeBtn" class="tiny-btn" type="button" style="margin-top:.5rem">🔄 Generar nuevo código</button>
+      <button id="generatePasswordBtn" class="tiny-btn" type="button" style="margin-top:.5rem">🔑 Generar nueva contraseña</button>
     </div>
   </div>
 
@@ -607,12 +615,16 @@ Tapa superior, 120, 55, 1, 18 mm, sin canto"></textarea>
       </details>
 
       <div id="em_result" class="hidden" style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:1rem;margin-top:1rem">
-        <p style="font-weight:600;color:#166534;margin:0 0 .75rem">✅ Guardado. Comparte este link por WhatsApp:</p>
+        <p style="font-weight:600;color:#166534;margin:0 0 .75rem">✅ Guardado. Comparte estos datos por WhatsApp:</p>
         <div class="link-box">
           <input id="em_link" class="link-input" type="text" readonly>
           <button id="em_copyBtn" class="secondary-btn" type="button">Copiar</button>
         </div>
-        <p class="link-hint">El ebanista abre el link y entra directo. No necesita contraseña.</p>
+        <div id="em_passwordRow" class="link-box hidden" style="margin-top:.5rem">
+          <input id="em_passwordDisplay" class="link-input" type="text" readonly>
+          <button id="em_copyPasswordBtn" class="secondary-btn" type="button">Copiar</button>
+        </div>
+        <p class="link-hint">El ebanista abre el link; si tiene contraseña asignada, la pide una vez por sesión. Esta contraseña no se volverá a mostrar — guárdala ahora.</p>
       </div>
       <div class="form-actions" id="em_actions">
         <button id="cancelEbanistaModalBtn" class="secondary-btn" type="button">Cancelar</button>
