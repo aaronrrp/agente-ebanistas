@@ -1659,7 +1659,21 @@ function recalcCutsLayout() {
 
   const kerfCm = (Number(tenantPrices()?.kerf_mm) || 5) / 10;
   const allSheetGroups = Object.entries(byThickness).map(([thickness, pieces]) => {
-    const sheets = packPiecesFFDH(pieces, sheetW, sheetH, wastePct, kerfCm);
+    // Piezas con manualPlacement no entran al auto-nesting — se reservan en su posición fija.
+    const autoPieces = pieces.filter(p => !p.manualPlacement);
+    const manualPieces = pieces.filter(p => p.manualPlacement);
+    const sheets = packPiecesFFDH(autoPieces, sheetW, sheetH, wastePct, kerfCm);
+    manualPieces.forEach(p => {
+      const si = Math.max(0, Number(p.manualPlacement.sheetIndex) || 0);
+      while (sheets.length <= si) sheets.push({ number: sheets.length + 1, shelves: [], placements: [] });
+      const rotated = Boolean(p.manualPlacement.rotated);
+      const w = rotated ? Number(p.height) || 1 : Number(p.width) || 1;
+      const h = rotated ? Number(p.width) || 1 : Number(p.height) || 1;
+      sheets[si].placements.push({
+        piece: p, x: Number(p.manualPlacement.x) || 0, y: Number(p.manualPlacement.y) || 0,
+        w, h, rotated, manual: true
+      });
+    });
     return { thickness, sheets };
   });
 
@@ -1695,15 +1709,19 @@ function recalcCutsLayout() {
           if (Number(gx) >= rx + rw - 1) return "";
           return `<line x1="${gx}" y1="${(ry+1.5).toFixed(1)}" x2="${gx}" y2="${(ry+rh-1.5).toFixed(1)}" stroke="#9CA3AF" stroke-width="0.3"/>`;
         }).join('') : '';
-        return `<rect x="${rx.toFixed(1)}" y="${ry.toFixed(1)}" width="${rw.toFixed(1)}" height="${rh.toFixed(1)}"
-          fill="${colors[pi % colors.length]}" stroke="${pl.piece.grain ? "#374151" : "#6B7280"}" stroke-width="${pl.piece.grain ? 0.9 : 0.4}" rx="1"/>
+        return `<g class="cut-piece-g" data-piece-id="${pl.piece.id}" data-rotated="${pl.rotated ? 1 : 0}" style="cursor:move">
+          <rect x="${rx.toFixed(1)}" y="${ry.toFixed(1)}" width="${rw.toFixed(1)}" height="${rh.toFixed(1)}"
+          fill="${colors[pi % colors.length]}" stroke="${pl.piece.grain ? "#374151" : "#6B7280"}" stroke-width="${pl.piece.grain ? 0.9 : 0.4}"
+          stroke-dasharray="${pl.manual ? "2,1.5" : "none"}" rx="1"/>
           ${grainLines}
           <text x="${(rx+rw/2).toFixed(1)}" y="${(ry+rh/2+3).toFixed(1)}" text-anchor="middle"
-            font-size="6" fill="#1F2937" overflow="hidden">${label}${pl.piece.grain ? " 🌳" : ""}</text>`;
+            font-size="6" fill="#1F2937" overflow="hidden" style="pointer-events:none">${label}${pl.piece.grain ? " 🌳" : ""}</text>
+        </g>`;
       }).join('');
       return `<div style="display:inline-block;margin:.3rem;vertical-align:top">
         <p style="font-size:.72rem;font-weight:600;margin:0 0 3px">Lámina ${sh.number} — ${thickness}</p>
-        <svg width="${SW}" height="${SH}" style="border:1px solid #D1D5DB;border-radius:5px;background:#F9FAFB">${rects}</svg>
+        <svg width="${SW}" height="${SH}" data-thickness="${thickness}" data-sheet-index="${si}" data-sheet-w="${sheetW}" data-sheet-h="${sheetH}"
+          style="border:1px solid #D1D5DB;border-radius:5px;background:#F9FAFB;touch-action:none">${rects}</svg>
       </div>`;
     }).join('');
 
@@ -1722,6 +1740,95 @@ function recalcCutsLayout() {
     <h4 style="margin:14px 0 6px">Distribución por grosor</h4>
     ${groupsHtml}`;
 }
+
+// ── Manual drag/rotate in cuts SVG ──────────────────────────────────────────
+let _cutDrag = null; // { pieceId, svg, sheetIndex, sheetW, sheetH, startX, startY, origX, origY }
+
+function _svgPxToCm(svg, px, py) {
+  const sheetW = Number(svg.dataset.sheetW) || 244;
+  const sheetH = Number(svg.dataset.sheetH) || 122;
+  const SW = 380, SH = 190;
+  const cmX = ((px - 2) / (SW - 4)) * sheetW;
+  const cmY = ((py - 2) / (SH - 4)) * sheetH;
+  return { cmX: Math.max(0, cmX), cmY: Math.max(0, cmY) };
+}
+
+function _eventToSvgPoint(svg, e) {
+  const rect = svg.getBoundingClientRect();
+  const scaleX = svg.width.baseVal.value / rect.width;
+  const scaleY = svg.height.baseVal.value / rect.height;
+  return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+}
+
+els.cutsLayoutOutput?.addEventListener("pointerdown", (e) => {
+  const g = e.target.closest(".cut-piece-g");
+  if (!g) return;
+  const svg = g.closest("svg");
+  if (!svg) return;
+  const rectEl = g.querySelector("rect");
+  const pt = _eventToSvgPoint(svg, e);
+  _cutDrag = {
+    pieceId: g.dataset.pieceId,
+    svg,
+    sheetIndex: Number(svg.dataset.sheetIndex) || 0,
+    startX: pt.x, startY: pt.y,
+    origX: Number(rectEl.getAttribute("x")), origY: Number(rectEl.getAttribute("y")),
+    rectEl, textEl: g.querySelector("text")
+  };
+  g.setPointerCapture?.(e.pointerId);
+  e.preventDefault();
+});
+
+els.cutsLayoutOutput?.addEventListener("pointermove", (e) => {
+  if (!_cutDrag) return;
+  const pt = _eventToSvgPoint(_cutDrag.svg, e);
+  const dx = pt.x - _cutDrag.startX, dy = pt.y - _cutDrag.startY;
+  const newX = _cutDrag.origX + dx, newY = _cutDrag.origY + dy;
+  _cutDrag.rectEl.setAttribute("x", newX.toFixed(1));
+  _cutDrag.rectEl.setAttribute("y", newY.toFixed(1));
+  if (_cutDrag.textEl) {
+    const w = Number(_cutDrag.rectEl.getAttribute("width")), h = Number(_cutDrag.rectEl.getAttribute("height"));
+    _cutDrag.textEl.setAttribute("x", (newX + w / 2).toFixed(1));
+    _cutDrag.textEl.setAttribute("y", (newY + h / 2 + 3).toFixed(1));
+  }
+});
+
+els.cutsLayoutOutput?.addEventListener("pointerup", (e) => {
+  if (!_cutDrag) return;
+  const piece = state.editablePieces.find(p => p.id === _cutDrag.pieceId);
+  const rectEl = _cutDrag.rectEl;
+  if (piece && rectEl) {
+    const { cmX, cmY } = _svgPxToCm(_cutDrag.svg, Number(rectEl.getAttribute("x")), Number(rectEl.getAttribute("y")));
+    const wasRotated = piece.manualPlacement?.rotated ?? (_cutDrag.svg.querySelector(`[data-piece-id="${piece.id}"]`)?.dataset.rotated === "1");
+    piece.manualPlacement = { sheetIndex: _cutDrag.sheetIndex, x: cmX, y: cmY, rotated: Boolean(wasRotated) };
+  }
+  _cutDrag = null;
+  recalcCutsLayout();
+});
+
+els.cutsLayoutOutput?.addEventListener("dblclick", (e) => {
+  const g = e.target.closest(".cut-piece-g");
+  if (!g) return;
+  const piece = state.editablePieces.find(p => p.id === g.dataset.pieceId);
+  if (!piece) return;
+  if (piece.grain && !confirm("Esta pieza tiene veta marcada — rotarla manualmente puede no calzar con el resto. ¿Rotar igual?")) return;
+  const svg = g.closest("svg");
+  const sheetIndex = Number(svg.dataset.sheetIndex) || 0;
+  if (piece.manualPlacement) {
+    piece.manualPlacement.rotated = !piece.manualPlacement.rotated;
+  } else {
+    const rectEl = g.querySelector("rect");
+    const { cmX, cmY } = _svgPxToCm(svg, Number(rectEl.getAttribute("x")), Number(rectEl.getAttribute("y")));
+    piece.manualPlacement = { sheetIndex, x: cmX, y: cmY, rotated: g.dataset.rotated !== "1" };
+  }
+  recalcCutsLayout();
+});
+
+document.getElementById("resetCutPlacementsBtn")?.addEventListener("click", () => {
+  state.editablePieces.forEach(p => { delete p.manualPlacement; });
+  recalcCutsLayout();
+  toast("Posiciones automáticas restauradas ✓");
+});
 
 function exportCutsCSV() {
   const pieces = state.editablePieces.length ? state.editablePieces : (() => {
