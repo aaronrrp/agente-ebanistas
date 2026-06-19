@@ -1730,13 +1730,44 @@ function recalcCutsLayout() {
       <div style="overflow-x:auto;margin-top:6px">${svgs}</div>`;
   }).join('<hr style="margin:12px 0;border-color:#E5E7EB">');
 
+  // Cortes estimados: en un patrón de corte por estantes (shelf cutting), separar N piezas
+  // en una lámina toma N-1 cortes guillotina (estantes + piezas dentro de cada estante).
+  const estimatedCuts = allSheetGroups.reduce((sum, g) =>
+    sum + g.sheets.reduce((s, sh) => s + Math.max(0, sh.placements.length - 1), 0), 0);
+
+  // Canto total: suma la longitud de cada lado con canto (arriba/abajo = ancho, izq/der = alto),
+  // agrupado por grosor, con costo estimado usando los precios por metro ya configurados.
+  const cantoPriceByThickness = {
+    "0.45mm": Number(tenantPrices()?.canto_045mm_metro) || 0,
+    "1.00mm": Number(tenantPrices()?.canto_100mm_metro) || 0,
+    "2.00mm": Number(tenantPrices()?.canto_200mm_metro) || 0
+  };
+  const cantoMetersByThickness = { "0.45mm": 0, "1.00mm": 0, "2.00mm": 0 };
+  state.editablePieces.forEach(p => {
+    const es = p.edgeSides || {};
+    if (es.top)    cantoMetersByThickness[es.top]    = (cantoMetersByThickness[es.top]    || 0) + (Number(p.width)  || 0) / 100;
+    if (es.bottom) cantoMetersByThickness[es.bottom] = (cantoMetersByThickness[es.bottom] || 0) + (Number(p.width)  || 0) / 100;
+    if (es.left)   cantoMetersByThickness[es.left]   = (cantoMetersByThickness[es.left]   || 0) + (Number(p.height) || 0) / 100;
+    if (es.right)  cantoMetersByThickness[es.right]  = (cantoMetersByThickness[es.right]  || 0) + (Number(p.height) || 0) / 100;
+  });
+  const totalCantoMeters = Object.values(cantoMetersByThickness).reduce((s, v) => s + v, 0);
+  const totalCantoCost = Object.entries(cantoMetersByThickness)
+    .reduce((s, [t, m]) => s + m * (cantoPriceByThickness[t] || 0), 0);
+  const cantoBreakdown = Object.entries(cantoMetersByThickness)
+    .filter(([, m]) => m > 0)
+    .map(([t, m]) => `${t}: ${m.toFixed(2)}m`)
+    .join(" · ") || "Sin canto";
+
   els.cutsLayoutOutput.innerHTML = `
     <div class="cuts-summary" style="margin-top:14px">
       <article><span>Piezas</span><strong>${state.editablePieces.length}</strong></article>
       <article><span>Láminas totales</span><strong>${totalSheets}</strong></article>
       <article><span>Área total</span><strong>${(totalArea/10000).toFixed(2)} m²</strong></article>
       <article><span>Lámina</span><strong>${sheetW}×${sheetH} cm</strong></article>
+      <article><span>Cortes estimados</span><strong>${estimatedCuts}</strong></article>
+      <article><span>Canto total</span><strong>${totalCantoMeters.toFixed(2)} m</strong></article>
     </div>
+    <p style="font-size:.78rem;color:#6B7280;margin:6px 0 0">Canto por grosor: ${cantoBreakdown}${totalCantoMeters > 0 ? ` · costo estimado $${totalCantoCost.toFixed(2)}` : ""}. "Cortes estimados" asume corte por estantes (N piezas por lámina ≈ N-1 cortes guillotina) — es una estimación, no la secuencia exacta de corte.</p>
     <h4 style="margin:14px 0 6px">Distribución por grosor</h4>
     ${groupsHtml}`;
 }
