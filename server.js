@@ -905,6 +905,7 @@ async function handleCreateSeller(req, res) {
     passwordHash: hash,
     status: "active",
     notes: data.notes || "",
+    theme: data.theme || {},
     createdAt: todayIso()
   };
   sellers.push(seller);
@@ -916,12 +917,20 @@ async function handleUpdateSeller(req, res, id) {
   if (!requireAdmin(req, res)) return;
   const body = await readBody(req);
   const data = body ? JSON.parse(body) : {};
-  delete data.passwordHash; delete data.passwordSalt; // password solo cambia via set-password
+  delete data.passwordHash; delete data.passwordSalt; // hash siempre se deriva de data.password, nunca se acepta directo
   const s = sellers.find(s => s.id === id);
   if (!s) { sendJson(res, 404, { error: "No encontrado." }); return; }
+  let passwordPlain;
+  if (data.password && String(data.password).trim()) {
+    passwordPlain = String(data.password).trim();
+    const { salt, hash } = hashPassword(passwordPlain);
+    s.passwordSalt = salt;
+    s.passwordHash = hash;
+  }
+  delete data.password;
   Object.assign(s, data, { id });
   saveSellers(sellers);
-  sendJson(res, 200, publicSeller(s));
+  sendJson(res, 200, passwordPlain ? { ...publicSeller(s), passwordPlain } : publicSeller(s));
 }
 
 function handleToggleSeller(req, res, id) {

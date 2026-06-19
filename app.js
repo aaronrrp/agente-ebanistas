@@ -2599,6 +2599,7 @@ function renderSellers() {
     wrap.classList.add("hidden");
     selfPanel.classList.remove("hidden");
     const s = AUTH.sellerInfo || {};
+    applyTenantTheme(s);
     document.getElementById("sellerSelfSummary").innerHTML = `
       <div><dt>Nombre</dt><dd>${escapeHtml(s.name || "")}</dd></div>
       <div><dt>Empresa</dt><dd>${escapeHtml(s.company || "—")}</dd></div>
@@ -2658,6 +2659,19 @@ function openSellerModal(editId) {
   document.getElementById("sm_phone").value = s?.phone || "";
   document.getElementById("sm_email").value = s?.email || "";
   document.getElementById("sm_notes").value = s?.notes || "";
+  document.getElementById("sm_password").value = "";
+  const theme = s?.theme || {};
+  document.getElementById("sm_accentColor").value      = theme.accentColor      || "#6366F1";
+  document.getElementById("sm_headerBg").value         = theme.headerBg         || "#162a25";
+  document.getElementById("sm_sidebarTextColor").value = theme.sidebarTextColor || "#ffffff";
+  const smLogoFile = document.getElementById("sm_logoFile");
+  if (smLogoFile) { smLogoFile.value = ""; smLogoFile._pendingB64 = null; }
+  const smPreview = document.getElementById("sm_logoPreview");
+  const smLogoImg = document.getElementById("sm_logoImg");
+  if (smPreview && smLogoImg) {
+    if (theme.logoBase64) { smLogoImg.src = theme.logoBase64; smPreview.style.display = ""; }
+    else smPreview.style.display = "none";
+  }
   document.getElementById("sm_result").classList.add("hidden");
   document.getElementById("sm_actions").style.display = "";
   const btn = document.getElementById("saveSellerModalBtn");
@@ -2677,13 +2691,26 @@ async function saveSellerFromModal() {
   const btn = document.getElementById("saveSellerModalBtn");
   btn.textContent = "Guardando…"; btn.disabled = true;
 
+  const existing = _sellerModalEditId ? state.sellers.find(s => s.id === _sellerModalEditId) : null;
+  const password = document.getElementById("sm_password").value.trim();
   const payload = {
     name,
     company: document.getElementById("sm_company").value.trim(),
     phone: document.getElementById("sm_phone").value.trim(),
     email: document.getElementById("sm_email").value.trim(),
-    notes: document.getElementById("sm_notes").value.trim()
+    notes: document.getElementById("sm_notes").value.trim(),
+    theme: {
+      accentColor:      document.getElementById("sm_accentColor")?.value      || "",
+      headerBg:         document.getElementById("sm_headerBg")?.value         || "",
+      sidebarTextColor: document.getElementById("sm_sidebarTextColor")?.value || "",
+      logoBase64: (() => {
+        const pending = document.getElementById("sm_logoFile")?._pendingB64;
+        if (pending === "__clear__") return "";
+        return pending || existing?.theme?.logoBase64 || "";
+      })()
+    }
   };
+  if (password) payload.password = password;
 
   try {
     const res = _sellerModalEditId
@@ -3443,6 +3470,17 @@ function _resetSellerLoginStep() {
   if (btn) btn.textContent = "Ingresar →";
 }
 
+function _prefillSellerTab(code) {
+  document.querySelectorAll("[data-login-tab]").forEach(b => b.classList.remove("active"));
+  document.querySelector('[data-login-tab="seller"]')?.classList.add("active");
+  document.getElementById("loginCodePanel")?.classList.add("hidden");
+  document.getElementById("loginSellerPanel")?.classList.remove("hidden");
+  document.getElementById("loginAdminPanel")?.classList.add("hidden");
+  _resetSellerLoginStep();
+  const inp = document.getElementById("loginSellerCodeInput");
+  if (inp) inp.value = code;
+}
+
 function _showSellerPasswordStep(name) {
   _sellerLoginStep = "password";
   document.getElementById("loginSellerPasswordInput")?.classList.remove("hidden");
@@ -3880,6 +3918,38 @@ async function tryAutoLogin() {
     return;
   }
 
+  // ── 1.5. URL has ?scode= (vendedor link) ───────────────────────────────────
+  const rawSCode = params.get("scode");
+  const urlSCode = (rawSCode && rawSCode !== "undefined") ? rawSCode : null;
+  if (urlSCode) {
+    showConnectingScreen();
+    try {
+      const res = await fetch(`/api/seller-by-code?code=${encodeURIComponent(urlSCode)}`);
+      if (res.ok) {
+        const data = await res.json();
+        hideConnectingScreen();
+        if (data.requiresPassword) {
+          showLogin();
+          _prefillSellerTab(urlSCode);
+          _showSellerPasswordStep(data.name);
+          return;
+        }
+        _loginAsSeller(data, null);
+        return;
+      }
+      hideConnectingScreen();
+      showLogin();
+      _prefillSellerTab(urlSCode);
+      setLoginError("Código no válido. Pide un link actualizado a tu administrador.");
+    } catch {
+      hideConnectingScreen();
+      showLogin();
+      _prefillSellerTab(urlSCode);
+      setLoginError("Sin conexión al servidor.");
+    }
+    return;
+  }
+
   // ── 2. Restore session from sessionStorage ────────────────────────────────
   const savedMode = sessionStorage.getItem("ebAuthMode");
   const savedToken = sessionStorage.getItem("ebAdminToken");
@@ -4229,6 +4299,28 @@ document.getElementById("em_removeLogoBtn")?.addEventListener("click", () => {
     if (t?.theme) t.theme.logoBase64 = "";
     save();
   }
+});
+
+document.getElementById("sm_logoFile")?.addEventListener("change", (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  if (file.size > 2_000_000) { toast("El logo debe ser menor a 2 MB.", "error"); e.target.value = ""; return; }
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const b64 = ev.target.result;
+    document.getElementById("sm_logoFile")._pendingB64 = b64;
+    const img = document.getElementById("sm_logoImg");
+    const preview = document.getElementById("sm_logoPreview");
+    if (img) img.src = b64;
+    if (preview) preview.style.display = "";
+  };
+  reader.readAsDataURL(file);
+});
+document.getElementById("sm_removeLogoBtn")?.addEventListener("click", () => {
+  document.getElementById("sm_logoFile").value = "";
+  document.getElementById("sm_logoFile")._pendingB64 = "__clear__";
+  const preview = document.getElementById("sm_logoPreview");
+  if (preview) preview.style.display = "none";
 });
 
 // Also capture pending logo b64 when saving modal
