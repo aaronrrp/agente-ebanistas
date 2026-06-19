@@ -1609,11 +1609,12 @@ function packPiecesFFDH(pieces, sheetW, sheetH, wastePct, kerfCm = 0.5) {
     return null;
   };
 
-  // Try both orientations; prefer the one that fits on existing sheets first
-  const placePiece = (sheet, pw, ph) => {
+  // Try both orientations; prefer the one that fits on existing sheets first.
+  // Piezas con veta (grain=true) no se rotan — deben mantener su orientación original.
+  const placePiece = (sheet, pw, ph, allowRotate) => {
     const p1 = tryPlace(sheet, pw, ph);
     if (p1) return { ...p1, w: pw, h: ph, rotated: false };
-    if (pw !== ph) {
+    if (allowRotate && pw !== ph) {
       const p2 = tryPlace(sheet, ph, pw);
       if (p2) return { ...p2, w: ph, h: pw, rotated: true };
     }
@@ -1623,14 +1624,15 @@ function packPiecesFFDH(pieces, sheetW, sheetH, wastePct, kerfCm = 0.5) {
   sorted.forEach(piece => {
     const pw = Math.max(1, Number(piece.width)  || 1);
     const ph = Math.max(1, Number(piece.height) || 1);
+    const allowRotate = !piece.grain;
     let placed = false;
     for (const sheet of sheets) {
-      const r = placePiece(sheet, pw, ph);
+      const r = placePiece(sheet, pw, ph, allowRotate);
       if (r) { sheet.placements.push({ piece, ...r }); placed = true; break; }
     }
     if (!placed) {
       const sheet = { number: sheets.length + 1, shelves: [], placements: [] };
-      const r = placePiece(sheet, pw, ph);
+      const r = placePiece(sheet, pw, ph, allowRotate);
       if (r) sheet.placements.push({ piece, ...r });
       sheets.push(sheet);
     }
@@ -1688,10 +1690,16 @@ function recalcCutsLayout() {
         const rw = Math.max(8, scale(pl.w));
         const rh = Math.max(5, scaleH(pl.h));
         const label = (pl.piece.name || '').slice(0, 12);
+        const grainLines = pl.piece.grain ? Array.from({ length: Math.max(2, Math.floor(rw / 6)) }, (_, gi) => {
+          const gx = (rx + 3 + gi * 6).toFixed(1);
+          if (Number(gx) >= rx + rw - 1) return "";
+          return `<line x1="${gx}" y1="${(ry+1.5).toFixed(1)}" x2="${gx}" y2="${(ry+rh-1.5).toFixed(1)}" stroke="#9CA3AF" stroke-width="0.3"/>`;
+        }).join('') : '';
         return `<rect x="${rx.toFixed(1)}" y="${ry.toFixed(1)}" width="${rw.toFixed(1)}" height="${rh.toFixed(1)}"
-          fill="${colors[pi % colors.length]}" stroke="#6B7280" stroke-width="0.4" rx="1"/>
+          fill="${colors[pi % colors.length]}" stroke="${pl.piece.grain ? "#374151" : "#6B7280"}" stroke-width="${pl.piece.grain ? 0.9 : 0.4}" rx="1"/>
+          ${grainLines}
           <text x="${(rx+rw/2).toFixed(1)}" y="${(ry+rh/2+3).toFixed(1)}" text-anchor="middle"
-            font-size="6" fill="#1F2937" overflow="hidden">${label}</text>`;
+            font-size="6" fill="#1F2937" overflow="hidden">${label}${pl.piece.grain ? " 🌳" : ""}</text>`;
       }).join('');
       return `<div style="display:inline-block;margin:.3rem;vertical-align:top">
         <p style="font-size:.72rem;font-weight:600;margin:0 0 3px">Lámina ${sh.number} — ${thickness}</p>
