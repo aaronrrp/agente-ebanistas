@@ -168,7 +168,11 @@ function defaultPrices() {
     jalador_premium: 26,  // Jalador inox premium por unidad
     install_hour: 25,     // Mano de obra instalación por hora
     transport_base: 30,   // Transporte base (primer viaje)
-    transport_km: 0.50    // Transporte por km adicional
+    transport_km: 0.50,   // Transporte por km adicional
+    kerf_mm: 5,            // Ancho del disco de corte (mm)
+    canto_045mm_metro: 0.50,
+    canto_100mm_metro: 0.80,
+    canto_200mm_metro: 2.20
   };
 }
 

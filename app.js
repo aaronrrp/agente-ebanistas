@@ -99,7 +99,8 @@ const defaultGlobalPrices = {
   bisagra_std: 3.50, bisagra_sc: 7.00,
   corredera_std: 18, corredera_sc: 32,
   jalador_chico: 7, jalador_grande: 14, jalador_premium: 26,
-  install_hour: 25, transport_base: 30, transport_km: 0.50
+  install_hour: 25, transport_base: 30, transport_km: 0.50,
+  kerf_mm: 5, canto_045mm_metro: 0.50, canto_100mm_metro: 0.80, canto_200mm_metro: 2.20
 };
 
 // Default display names for each standard price key (editable by admin)
@@ -118,7 +119,11 @@ const defaultPriceNames = {
   jalador_premium: "Jalador inox premium /un",
   install_hour: "Instalación /hora",
   transport_base: "Transporte base",
-  transport_km: "Transporte /km adicional"
+  transport_km: "Transporte /km adicional",
+  kerf_mm: "Kerf de sierra (mm)",
+  canto_045mm_metro: "Canto 0.45mm /metro",
+  canto_100mm_metro: "Canto 1.00mm /metro",
+  canto_200mm_metro: "Canto 2.00mm /metro"
 };
 
 function tenantPrices() {
@@ -135,7 +140,8 @@ function tenantPrices() {
 // Price groups — defines which keys belong to each group
 const priceGroups = [
   { id: "madera",    icon: "🪵", title: "Madera / Melamina",        keys: ["melamina_std","melamina_lg","backing_m2"] },
-  { id: "canto",     icon: "🔄", title: "Canto PVC",                keys: ["canto_pvc","canto_grueso"] },
+  { id: "canto",     icon: "🔄", title: "Canto PVC",                keys: ["canto_pvc","canto_grueso","canto_045mm_metro","canto_100mm_metro","canto_200mm_metro"] },
+  { id: "cortes",    icon: "✂️", title: "Cortes / nesting",          keys: ["kerf_mm"] },
   { id: "bisagras",  icon: "🔩", title: "Bisagras y correderas",    keys: ["bisagra_std","bisagra_sc","corredera_std","corredera_sc"] },
   { id: "jaladores", icon: "🪝", title: "Jaladores",                keys: ["jalador_chico","jalador_grande","jalador_premium"] },
   { id: "mano",      icon: "🚚", title: "Mano de obra y transporte",keys: ["install_hour","transport_base","transport_km"] }
@@ -1313,15 +1319,19 @@ function renderQuotePaper(quote) {
 }
 
 function piece(item, name, width, height, qty = 1) {
+  const edgeSides = computeEdgeSides(name, item.edgeBanding);
+  const substrate = applyEdgeThicknessToDimensions(width, height, edgeSides);
   return Array.from({ length: qty }, (_, index) => ({
     id: crypto.randomUUID(),
     furniture: item.name,
     name: qty > 1 ? `${name} ${index + 1}` : name,
-    width: roundCm(width),
-    height: roundCm(height),
+    width: roundCm(substrate.width),
+    height: roundCm(substrate.height),
     thickness: item.melamineThickness,
-    edge: edgeForPiece(name, item.edgeBanding),
-    area: roundCm(width * height)
+    edgeSides,
+    edge: describeEdgeSides(edgeSides),
+    grain: false,
+    area: roundCm(substrate.width * substrate.height)
   }));
 }
 
@@ -1338,14 +1348,51 @@ function safeDimension(value) {
   return Math.max(0.1, roundCm(value));
 }
 
-function edgeForPiece(name, edgeBanding) {
-  const edgeText = edgeBanding.toLowerCase();
-  const pieceName = name.toLowerCase();
-  if (edgeText.startsWith("no incluir")) return "Sin canto";
-  if (edgeText.includes("todos los cantos") || edgeText.includes("premium")) return "Todos los cantos expuestos";
-  if (pieceName.includes("puerta") || pieceName.includes("frente")) return "4 cantos";
-  if (edgeText.includes("frentes")) return "Canto frontal visible";
-  return "Según instalación";
+const EDGE_THICKNESS_OPTIONS = ["0.45mm", "1.00mm", "2.00mm"];
+
+function defaultEdgeThickness() {
+  const mm = Number(state.globalPrices?.canto_default_mm) || 1;
+  return EDGE_THICKNESS_OPTIONS.find(t => t.startsWith(mm.toFixed(2))) || "1.00mm";
+}
+
+// Reemplaza el viejo edgeForPiece(): devuelve qué lados llevan canto y de qué grosor,
+// en vez de un string descriptivo — describeEdgeSides() genera el texto para la UI vieja.
+function computeEdgeSides(name, edgeBanding, thicknessLabel = defaultEdgeThickness()) {
+  const edgeText = String(edgeBanding || "").toLowerCase();
+  const pieceName = String(name || "").toLowerCase();
+  const none = { top: null, bottom: null, left: null, right: null };
+  if (edgeText.startsWith("no incluir")) return { ...none };
+  if (edgeText.includes("todos los cantos") || edgeText.includes("premium")) {
+    return { top: thicknessLabel, bottom: thicknessLabel, left: thicknessLabel, right: thicknessLabel };
+  }
+  if (pieceName.includes("puerta") || pieceName.includes("frente")) {
+    return { top: thicknessLabel, bottom: thicknessLabel, left: thicknessLabel, right: thicknessLabel };
+  }
+  if (edgeText.includes("frentes")) return { ...none, right: thicknessLabel };
+  return { ...none };
+}
+
+function describeEdgeSides(edgeSides) {
+  const sides = [
+    ["top", "arriba"], ["bottom", "abajo"], ["left", "izq"], ["right", "der"]
+  ].filter(([key]) => edgeSides[key]);
+  if (!sides.length) return "Sin canto";
+  if (sides.length === 4) {
+    const thicknesses = new Set(sides.map(([key]) => edgeSides[key]));
+    return thicknesses.size === 1 ? `Todos los cantos (${[...thicknesses][0]})` : "Todos los cantos expuestos";
+  }
+  return `Canto en ${sides.map(([, label]) => label).join("/")} (${sides.map(([key]) => edgeSides[key]).join("/")})`;
+}
+
+// Resta el grosor de canto (mm→cm) de los lados que lo llevan. width pierde left+right, height pierde top+bottom.
+function applyEdgeThicknessToDimensions(width, height, edgeSides) {
+  const mm = (label) => label ? Number(String(label).replace("mm", "")) : 0;
+  const wReduction = (mm(edgeSides.left) + mm(edgeSides.right)) / 10;
+  const hReduction = (mm(edgeSides.top) + mm(edgeSides.bottom)) / 10;
+  return {
+    width: safeDimension(width - wReduction),
+    height: safeDimension(height - hReduction)
+  };
 }
 
 function generatePiecesForItem(item) {
@@ -1487,20 +1534,29 @@ function renderCutsPiecesTable() {
     return;
   }
   const thick = ["15 mm","18 mm","25 mm","36 mm doble laminado"];
-  const rows = state.editablePieces.map(p => `
+  const edgeOpts = (val) => ["", ...EDGE_THICKNESS_OPTIONS].map(o =>
+    `<option value="${o}"${(val||"")===o?' selected':''}>${o || "Sin canto"}</option>`).join('');
+  const rows = state.editablePieces.map(p => {
+    const es = p.edgeSides || { top: null, bottom: null, left: null, right: null };
+    return `
     <tr data-piece-id="${p.id}">
       <td><input class="cut-input" data-field="furniture" value="${escapeHtml(p.furniture||'')}" placeholder="Mueble"></td>
       <td><input class="cut-input" data-field="name" value="${escapeHtml(p.name||'')}" placeholder="Pieza"></td>
       <td><input class="cut-input cut-num" data-field="width" type="number" min="1" step="0.5" value="${p.width||''}"></td>
       <td><input class="cut-input cut-num" data-field="height" type="number" min="1" step="0.5" value="${p.height||''}"></td>
       <td><select class="cut-input" data-field="thickness">${thick.map(t=>`<option${p.thickness===t?' selected':''}>${t}</option>`).join('')}</select></td>
-      <td><input class="cut-input" data-field="edge" value="${escapeHtml(p.edge||'')}" placeholder="Canto"></td>
+      <td><select class="cut-input" data-edge-side="top" title="Canto arriba">${edgeOpts(es.top)}</select></td>
+      <td><select class="cut-input" data-edge-side="bottom" title="Canto abajo">${edgeOpts(es.bottom)}</select></td>
+      <td><select class="cut-input" data-edge-side="left" title="Canto izquierda">${edgeOpts(es.left)}</select></td>
+      <td><select class="cut-input" data-edge-side="right" title="Canto derecha">${edgeOpts(es.right)}</select></td>
+      <td><label style="display:flex;align-items:center;gap:3px;font-size:.75rem;font-weight:400"><input type="checkbox" data-field="grain" ${p.grain ? "checked" : ""}> veta</label></td>
       <td><button class="tiny-btn danger" data-rm-cut="${p.id}" type="button">×</button></td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 
   els.cutsOutput.innerHTML = `
     <p style="font-size:.8rem;color:#6B7280;margin:0 0 8px">
-      ✏️ Haz clic en cualquier celda para editar. Los cambios se reflejan en el cálculo de láminas al instante.
+      ✏️ Haz clic en cualquier celda para editar. Ancho/alto son tamaño de <strong>corte (sustrato)</strong>, ya con el canto restado — no el tamaño terminado. Los cambios se reflejan en el cálculo de láminas al instante.
     </p>
     <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
       <button id="addCutPieceBtn" class="secondary-btn" type="button">＋ Agregar pieza</button>
@@ -1508,15 +1564,15 @@ function renderCutsPiecesTable() {
     </div>
     <div style="overflow-x:auto">
       <table class="quote-table cuts-editable">
-        <thead><tr><th>Mueble</th><th>Pieza</th><th>Ancho cm</th><th>Alto cm</th><th>Grosor</th><th>Canto</th><th></th></tr></thead>
+        <thead><tr><th>Mueble</th><th>Pieza</th><th>Ancho cm</th><th>Alto cm</th><th>Grosor</th><th>Canto▲</th><th>Canto▼</th><th>Canto◄</th><th>Canto►</th><th>Veta</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
 }
 
 // ── BFDH 2D bin packing (Best Fit Decreasing + rotation) ────────────────────
-function packPiecesFFDH(pieces, sheetW, sheetH, wastePct) {
-  const kerf = 0.3; // 3 mm saw kerf (cm)
+function packPiecesFFDH(pieces, sheetW, sheetH, wastePct, kerfCm = 0.5) {
+  const kerf = kerfCm;
   const marginX = 2, marginY = 2;
   const usableW = sheetW - marginX * 2;
   const usableH = sheetH - marginY * 2;
@@ -1599,8 +1655,9 @@ function recalcCutsLayout() {
     byThickness[t].push(p);
   });
 
+  const kerfCm = (Number(tenantPrices()?.kerf_mm) || 5) / 10;
   const allSheetGroups = Object.entries(byThickness).map(([thickness, pieces]) => {
-    const sheets = packPiecesFFDH(pieces, sheetW, sheetH, wastePct);
+    const sheets = packPiecesFFDH(pieces, sheetW, sheetH, wastePct, kerfCm);
     return { thickness, sheets };
   });
 
@@ -1667,8 +1724,12 @@ function exportCutsCSV() {
     return all;
   })();
   if (!pieces.length) { toast("Calcula los cortes primero.", "error"); return; }
-  const rows = [["Mueble","Pieza","Ancho cm","Alto cm","Grosor","Canto"]];
-  pieces.forEach(p => rows.push([p.furniture||'', p.name, p.width, p.height, p.thickness||'18 mm', p.edge||'']));
+  const rows = [["Mueble","Pieza","Ancho cm (sustrato)","Alto cm (sustrato)","Grosor","Canto arriba","Canto abajo","Canto izq","Canto der","Veta","Canto (resumen)"]];
+  pieces.forEach(p => {
+    const es = p.edgeSides || {};
+    rows.push([p.furniture||'', p.name, p.width, p.height, p.thickness||'18 mm',
+      es.top||'', es.bottom||'', es.left||'', es.right||'', p.grain ? "Sí" : "No", p.edge||'']);
+  });
   const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
   const blob = new Blob(["﻿"+csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
@@ -2981,13 +3042,22 @@ els.cutsOutput.addEventListener("input", (e) => {
 });
 
 els.cutsOutput.addEventListener("change", (e) => {
-  // Handle <select> changes (thickness field)
-  const field = e.target.dataset.field;
-  if (field !== "thickness") return;
   const row = e.target.closest("[data-piece-id]");
   if (!row) return;
   const piece = state.editablePieces.find(p => p.id === row.dataset.pieceId);
-  if (piece) { piece.thickness = e.target.value; recalcCutsLayout(); }
+  if (!piece) return;
+
+  const field = e.target.dataset.field;
+  if (field === "thickness") { piece.thickness = e.target.value; recalcCutsLayout(); return; }
+  if (field === "grain") { piece.grain = e.target.checked; recalcCutsLayout(); return; }
+
+  const side = e.target.dataset.edgeSide;
+  if (side) {
+    piece.edgeSides = piece.edgeSides || { top: null, bottom: null, left: null, right: null };
+    piece.edgeSides[side] = e.target.value || null;
+    piece.edge = describeEdgeSides(piece.edgeSides);
+    recalcCutsLayout();
+  }
 });
 
 els.cutsOutput.addEventListener("click", (e) => {
@@ -3000,7 +3070,9 @@ els.cutsOutput.addEventListener("click", (e) => {
   if (e.target.id === "addCutPieceBtn") {
     state.editablePieces.push({
       id: crypto.randomUUID(), furniture: "", name: "Pieza nueva",
-      width: 60, height: 60, thickness: "18 mm", edge: "Sin canto", area: 3600
+      width: 60, height: 60, thickness: "18 mm",
+      edgeSides: { top: null, bottom: null, left: null, right: null }, edge: "Sin canto",
+      grain: false, area: 3600
     });
     renderCutsPiecesTable();
     recalcCutsLayout();
