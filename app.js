@@ -153,7 +153,8 @@ const state = {
   editingItemId: null,
   aiBackendAvailable: false,
   globalPrices: load("tm_global_prices", defaultGlobalPrices),
-  chatHistory: []           // conversation memory — last N turns for AI context
+  chatHistory: [],          // conversation memory — last N turns for AI context
+  sellers: []                // vendedores — siempre desde servidor, no localStorage
 };
 
 if (!state.selectedTenantId || !state.tenants.some((tenant) => tenant.id === state.selectedTenantId)) {
@@ -512,6 +513,7 @@ function showView(viewId) {
   els.views.forEach((view) => view.classList.toggle("active", view.id === viewId));
   els.navItems.forEach((item) => item.classList.toggle("active", item.dataset.view === viewId));
   render();
+  if (viewId === "sellersView" && AUTH.mode === "admin") loadSellersFromServer();
 }
 
 function render() {
@@ -524,6 +526,7 @@ function render() {
   renderAccess();
   renderDraftItems();
   renderManualPieces();
+  renderSellers();
 }
 
 function renderTenantSelect() {
@@ -770,6 +773,10 @@ function getTenantLink(tenant) {
   }
   // Short link — ebanista always fetches fresh data from server (theme, etc. always up to date)
   return `${window.location.origin}/?code=${tenant.accessCode}`;
+}
+
+function getSellerLink(seller) {
+  return `${window.location.origin}/?scode=${seller.accessCode}`;
 }
 
 let _ebModalEditId = null;
@@ -2369,6 +2376,197 @@ els.tenantList.addEventListener("click", async (event) => {
   }
 });
 
+// ── Sellers (vendedores) ─────────────────────────────────────────────────────
+function renderSellers() {
+  const wrap = document.getElementById("sellerListWrap");
+  const selfPanel = document.getElementById("sellerSelfPanel");
+  if (!wrap || !selfPanel) return;
+
+  if (AUTH.mode === "vendedor") {
+    wrap.classList.add("hidden");
+    selfPanel.classList.remove("hidden");
+    const s = AUTH.sellerInfo || {};
+    document.getElementById("sellerSelfSummary").innerHTML = `
+      <div><dt>Nombre</dt><dd>${escapeHtml(s.name || "")}</dd></div>
+      <div><dt>Empresa</dt><dd>${escapeHtml(s.company || "—")}</dd></div>
+      <div><dt>Teléfono</dt><dd>${escapeHtml(s.phone || "—")}</dd></div>
+      <div><dt>Correo</dt><dd>${escapeHtml(s.email || "—")}</dd></div>
+    `;
+    return;
+  }
+
+  selfPanel.classList.add("hidden");
+  if (AUTH.mode !== "admin") { wrap.classList.add("hidden"); return; }
+  wrap.classList.remove("hidden");
+
+  const list = document.getElementById("sellerList");
+  if (!state.sellers.length) {
+    list.innerHTML = '<p class="muted" style="padding:1.5rem 0">No hay vendedores. Haz clic en <strong>+ Nuevo vendedor</strong> para agregar el primero.</p>';
+    return;
+  }
+
+  list.innerHTML = state.sellers.map(s => `
+    <article class="tenant-card">
+      <header>
+        <div>
+          <strong>${escapeHtml(s.name)}</strong>
+          <p>${escapeHtml(s.company || "Sin empresa")} · ${escapeHtml(s.phone || "—")}</p>
+          <p class="tenant-code-line">código: <code>${s.accessCode}</code></p>
+        </div>
+        <span class="status-pill ${s.status === "active" ? "status-active" : "status-suspended"}">${s.status === "active" ? "Activo" : "Suspendido"}</span>
+      </header>
+      <div class="card-actions">
+        <button class="secondary-btn" type="button" data-edit-seller="${s.id}">Editar</button>
+        <button class="tiny-btn" type="button" data-link-seller="${s.id}">Link</button>
+        <button class="tiny-btn" type="button" data-pass-seller="${s.id}">🔑 Contraseña</button>
+        <button class="tiny-btn" type="button" data-toggle-seller="${s.id}">${s.status === "active" ? "Suspender" : "Activar"}</button>
+        <button class="tiny-btn danger" type="button" data-delete-seller="${s.id}">Eliminar</button>
+      </div>
+    </article>
+  `).join("");
+}
+
+async function loadSellersFromServer() {
+  if (AUTH.mode !== "admin" || !AUTH.token || window.location.protocol === "file:") return;
+  try {
+    const res = await fetch("/api/sellers", { headers: { Authorization: `Bearer ${AUTH.token}` } });
+    if (res.ok) { state.sellers = await res.json(); renderSellers(); }
+  } catch {}
+}
+
+let _sellerModalEditId = null;
+
+function openSellerModal(editId) {
+  _sellerModalEditId = editId || null;
+  const s = editId ? state.sellers.find(s => s.id === editId) : null;
+  document.getElementById("sellerModalTitle").textContent = editId ? "Editar vendedor" : "Nuevo vendedor";
+  document.getElementById("sm_name").value = s?.name || "";
+  document.getElementById("sm_company").value = s?.company || "";
+  document.getElementById("sm_phone").value = s?.phone || "";
+  document.getElementById("sm_email").value = s?.email || "";
+  document.getElementById("sm_notes").value = s?.notes || "";
+  document.getElementById("sm_result").classList.add("hidden");
+  document.getElementById("sm_actions").style.display = "";
+  const btn = document.getElementById("saveSellerModalBtn");
+  if (btn) { btn.textContent = "Guardar y ver link →"; btn.disabled = false; }
+  document.getElementById("sellerModal").classList.remove("hidden");
+  setTimeout(() => document.getElementById("sm_name").focus(), 80);
+}
+
+function closeSellerModal() {
+  document.getElementById("sellerModal").classList.add("hidden");
+  _sellerModalEditId = null;
+}
+
+async function saveSellerFromModal() {
+  const name = document.getElementById("sm_name").value.trim();
+  if (!name) { document.getElementById("sm_name").focus(); return; }
+  const btn = document.getElementById("saveSellerModalBtn");
+  btn.textContent = "Guardando…"; btn.disabled = true;
+
+  const payload = {
+    name,
+    company: document.getElementById("sm_company").value.trim(),
+    phone: document.getElementById("sm_phone").value.trim(),
+    email: document.getElementById("sm_email").value.trim(),
+    notes: document.getElementById("sm_notes").value.trim()
+  };
+
+  try {
+    const res = _sellerModalEditId
+      ? await fetch(`/api/sellers/${_sellerModalEditId}`, { method: "PUT", headers: adminApiHeader(), body: JSON.stringify(payload) })
+      : await fetch("/api/sellers", { method: "POST", headers: adminApiHeader(), body: JSON.stringify(payload) });
+    if (!res.ok) { toast("No se pudo guardar el vendedor."); btn.textContent = "Guardar y ver link →"; btn.disabled = false; return; }
+    const data = await res.json();
+    await loadSellersFromServer();
+
+    document.getElementById("sm_link").value = getSellerLink(data);
+    const pwRow = document.getElementById("sm_passwordRow");
+    if (data.passwordPlain) { document.getElementById("sm_passwordDisplay").value = data.passwordPlain; pwRow.classList.remove("hidden"); }
+    else pwRow.classList.add("hidden");
+    document.getElementById("sm_result").classList.remove("hidden");
+    document.getElementById("sm_actions").style.display = "none";
+    btn.textContent = "Guardado ✓";
+    toast(`${name} guardado ✓`);
+  } catch {
+    toast("Sin conexión al servidor.");
+    btn.textContent = "Guardar y ver link →"; btn.disabled = false;
+  }
+}
+
+document.getElementById("sellerList")?.addEventListener("click", async (event) => {
+  const btn = event.target.closest("button[data-link-seller], button[data-edit-seller], button[data-toggle-seller], button[data-pass-seller], button[data-delete-seller]");
+  if (!btn) return;
+  const linkId = btn.dataset.linkSeller, editId = btn.dataset.editSeller,
+        toggleId = btn.dataset.toggleSeller, passId = btn.dataset.passSeller, deleteId = btn.dataset.deleteSeller;
+
+  if (deleteId) {
+    const s = state.sellers.find(s => s.id === deleteId);
+    if (!s) return;
+    if (!confirm(`¿Eliminar a "${s.name}" permanentemente?\n\nEsta acción no se puede deshacer.`)) return;
+    try {
+      await fetch(`/api/sellers/${deleteId}`, { method: "DELETE", headers: adminApiHeader() });
+      await loadSellersFromServer();
+      toast(`"${s.name}" eliminado ✓`);
+    } catch { toast("Sin conexión al servidor."); }
+    return;
+  }
+  if (editId) { openSellerModal(editId); return; }
+  if (linkId) {
+    const s = state.sellers.find(s => s.id === linkId);
+    if (!s) return;
+    navigator.clipboard.writeText(getSellerLink(s)).then(() => toast("Link copiado ✓")).catch(() => toast(getSellerLink(s)));
+    return;
+  }
+  if (passId) {
+    try {
+      const res = await fetch(`/api/sellers/${passId}/set-password`, { method: "POST", headers: adminApiHeader(), body: JSON.stringify({}) });
+      if (res.ok) {
+        const data = await res.json();
+        await navigator.clipboard.writeText(data.passwordPlain).catch(() => {});
+        alert(`Nueva contraseña (ya copiada al portapapeles):\n\n${data.passwordPlain}\n\nNo se volverá a mostrar.`);
+      } else toast("No se pudo generar la contraseña.");
+    } catch { toast("Sin conexión al servidor."); }
+    return;
+  }
+  if (toggleId) {
+    try {
+      const res = await fetch(`/api/sellers/${toggleId}/toggle`, { method: "POST", headers: adminApiHeader() });
+      if (res.ok) { await loadSellersFromServer(); toast("Estado actualizado ✓"); }
+    } catch { toast("Sin conexión al servidor."); }
+  }
+});
+
+document.getElementById("addSellerBtn")?.addEventListener("click", () => openSellerModal(null));
+document.getElementById("closeSellerModalBtn")?.addEventListener("click", closeSellerModal);
+document.getElementById("cancelSellerModalBtn")?.addEventListener("click", closeSellerModal);
+document.getElementById("saveSellerModalBtn")?.addEventListener("click", saveSellerFromModal);
+document.getElementById("sellerModal")?.addEventListener("click", e => {
+  if (e.target.id === "sellerModal") closeSellerModal();
+});
+document.getElementById("sm_copyBtn")?.addEventListener("click", () => {
+  const val = document.getElementById("sm_link").value;
+  navigator.clipboard.writeText(val).then(() => toast("Link copiado ✓")).catch(() => toast("No se pudo copiar"));
+});
+document.getElementById("sm_copyPasswordBtn")?.addEventListener("click", () => {
+  const val = document.getElementById("sm_passwordDisplay").value;
+  navigator.clipboard.writeText(val).then(() => toast("Contraseña copiada ✓")).catch(() => toast("No se pudo copiar"));
+});
+document.getElementById("sellerChangePasswordBtn")?.addEventListener("click", async () => {
+  const input = document.getElementById("sellerNewPassword");
+  const password = input.value;
+  if (!password || password.length < 4) { toast("Escribe una contraseña de al menos 4 caracteres."); return; }
+  try {
+    const res = await fetch("/api/sellers/me/password", {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${AUTH.sellerToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ password })
+    });
+    if (res.ok) { toast("Contraseña actualizada ✓"); input.value = ""; }
+    else toast("No se pudo actualizar la contraseña.");
+  } catch { toast("Sin conexión al servidor."); }
+});
+
 els.addTenantBtn.addEventListener("click", () => openEbanistaModal(null));
 document.getElementById("closeEbanistaModalBtn")?.addEventListener("click", closeEbanistaModal);
 document.getElementById("cancelEbanistaModalBtn")?.addEventListener("click", closeEbanistaModal);
@@ -2810,6 +3008,47 @@ function _showEbPasswordStep(companyName) {
   setTimeout(() => document.getElementById("loginEbPasswordInput")?.focus(), 50);
 }
 
+// ── Vendedor login step machine (mismo patrón que ebanista) ─────────────────
+let _sellerLoginStep = "code"; // "code" | "password"
+
+function _resetSellerLoginStep() {
+  _sellerLoginStep = "code";
+  const pwInput = document.getElementById("loginSellerPasswordInput");
+  pwInput?.classList.add("hidden");
+  if (pwInput) pwInput.value = "";
+  const hint = document.getElementById("loginSellerHint");
+  if (hint) hint.textContent = "Ingresa el código que te dio el administrador.";
+  const btn = document.getElementById("loginSellerBtn");
+  if (btn) btn.textContent = "Ingresar →";
+}
+
+function _showSellerPasswordStep(name) {
+  _sellerLoginStep = "password";
+  document.getElementById("loginSellerPasswordInput")?.classList.remove("hidden");
+  const hint = document.getElementById("loginSellerHint");
+  if (hint) hint.textContent = name ? `Bienvenido, ${name} — ingresa tu contraseña.` : "Ingresa tu contraseña.";
+  const btn = document.getElementById("loginSellerBtn");
+  if (btn) btn.textContent = "Entrar →";
+  setTimeout(() => document.getElementById("loginSellerPasswordInput")?.focus(), 50);
+}
+
+function _loginAsSeller(seller, sellerToken) {
+  AUTH.mode = "vendedor";
+  AUTH.sellerId = seller.id;
+  AUTH.sellerToken = sellerToken;
+  AUTH.sellerInfo = seller;
+  sessionStorage.setItem("ebAuthMode", "vendedor");
+  sessionStorage.setItem("sellerId", seller.id);
+  sessionStorage.setItem("sellerToken", sellerToken);
+  document.querySelector('[data-view="adminView"]')?.classList.add("hidden");
+  document.querySelector('[data-view="clientView"]')?.classList.add("hidden");
+  document.querySelector('[data-view="designerView"]')?.classList.add("hidden");
+  document.querySelector('[data-view="quoteView"]')?.classList.add("hidden");
+  document.querySelector('[data-view="cutsView"]')?.classList.add("hidden");
+  showApp();
+  showView("sellersView");
+}
+
 // ── Tab switch ────────────────────────────────────────────────────────────
 document.querySelectorAll("[data-login-tab]").forEach(btn => {
   btn.addEventListener("click", () => {
@@ -2817,8 +3056,10 @@ document.querySelectorAll("[data-login-tab]").forEach(btn => {
     btn.classList.add("active");
     const tab = btn.dataset.loginTab;
     document.getElementById("loginCodePanel").classList.toggle("hidden", tab !== "code");
+    document.getElementById("loginSellerPanel").classList.toggle("hidden", tab !== "seller");
     document.getElementById("loginAdminPanel").classList.toggle("hidden", tab !== "admin");
     if (tab === "code") _resetEbLoginStep();
+    if (tab === "seller") _resetSellerLoginStep();
     setLoginError("");
   });
 });
@@ -2829,6 +3070,12 @@ document.getElementById("loginCodeInput")?.addEventListener("keydown", e => {
 });
 document.getElementById("loginEbPasswordInput")?.addEventListener("keydown", e => {
   if (e.key === "Enter") document.getElementById("loginCodeBtn").click();
+});
+document.getElementById("loginSellerCodeInput")?.addEventListener("keydown", e => {
+  if (e.key === "Enter") document.getElementById("loginSellerBtn").click();
+});
+document.getElementById("loginSellerPasswordInput")?.addEventListener("keydown", e => {
+  if (e.key === "Enter") document.getElementById("loginSellerBtn").click();
 });
 document.getElementById("loginPasswordInput")?.addEventListener("keydown", e => {
   if (e.key === "Enter") document.getElementById("loginAdminBtn").click();
@@ -2892,8 +3139,41 @@ document.getElementById("loginCodeBtn")?.addEventListener("click", async () => {
 
   // Hide admin nav item from ebanistas
   document.querySelector('[data-view="adminView"]')?.classList.add("hidden");
+  document.querySelector('[data-view="sellersView"]')?.classList.add("hidden");
   showApp();
   showView("clientView");
+});
+
+// ── Vendedor login with code + password ─────────────────────────────────────
+document.getElementById("loginSellerBtn")?.addEventListener("click", async () => {
+  const code = document.getElementById("loginSellerCodeInput").value.trim();
+  if (!code) { setLoginError("Ingresa tu código de acceso."); return; }
+
+  if (_sellerLoginStep === "password") {
+    const password = document.getElementById("loginSellerPasswordInput").value;
+    if (!password) { setLoginError("Ingresa tu contraseña."); return; }
+    if (window.location.protocol === "file:") { setLoginError("Sin conexión al servidor."); return; }
+    try {
+      const res = await fetch("/api/auth/seller", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, password })
+      });
+      const data = await res.json();
+      if (!res.ok) { setLoginError(data.error || "Contraseña incorrecta."); return; }
+      setLoginError("");
+      _loginAsSeller(data.seller, data.token);
+    } catch { setLoginError("Sin conexión al servidor."); }
+    return;
+  }
+
+  if (window.location.protocol === "file:") { setLoginError("Sin conexión al servidor."); return; }
+  try {
+    const res = await fetch(`/api/seller-by-code?code=${encodeURIComponent(code)}`);
+    if (!res.ok) { setLoginError("Código no válido. Verifica con tu administrador."); return; }
+    const data = await res.json();
+    if (data.requiresPassword) { setLoginError(""); _showSellerPasswordStep(data.name); return; }
+    _loginAsSeller(data, null);
+  } catch { setLoginError("Sin conexión al servidor."); }
 });
 
 // ── Admin login with password ──────────────────────────────────────────────
@@ -3081,6 +3361,7 @@ function _loginAsEbanista(tenant, ebToken) {
   sessionStorage.setItem("ebAccessCode", tenant.accessCode);
   if (ebToken) { AUTH.ebToken = ebToken; sessionStorage.setItem("ebToken", ebToken); }
   document.querySelector('[data-view="adminView"]')?.classList.add("hidden");
+  document.querySelector('[data-view="sellersView"]')?.classList.add("hidden");
   showApp();
   showView("clientView");
 }
@@ -3225,6 +3506,16 @@ async function tryAutoLogin() {
         _loginAsEbanista(tenant);
         return;
       }
+    }
+  }
+
+  if (savedMode === "vendedor") {
+    const savedSellerToken = sessionStorage.getItem("sellerToken");
+    if (savedSellerToken && window.location.protocol !== "file:") {
+      try {
+        const res = await fetch("/api/sellers/me", { headers: { Authorization: `Bearer ${savedSellerToken}` } });
+        if (res.ok) { _loginAsSeller(await res.json(), savedSellerToken); return; }
+      } catch {}
     }
   }
 

@@ -25,6 +25,7 @@
 
       <div class="login-tabs" role="tablist">
         <button class="login-tab active" data-login-tab="code" type="button" role="tab">Soy ebanista</button>
+        <button class="login-tab" data-login-tab="seller" type="button" role="tab">Soy vendedor</button>
         <button class="login-tab" data-login-tab="admin" type="button" role="tab">Administrador</button>
       </div>
 
@@ -37,6 +38,17 @@
         <input id="loginEbPasswordInput" class="login-input hidden" type="password"
                placeholder="Tu contraseña" autocomplete="current-password">
         <button id="loginCodeBtn" class="primary-btn login-btn" type="button">Ingresar →</button>
+      </div>
+
+      <!-- Tab: vendedor por código -->
+      <div id="loginSellerPanel" class="login-panel hidden" role="tabpanel">
+        <p id="loginSellerHint" class="login-hint">Ingresa el código que te dio el administrador.</p>
+        <input id="loginSellerCodeInput" class="login-input" type="text"
+               placeholder="Ejemplo: carlosmendoza-7d2f1a"
+               autocomplete="off" autocapitalize="none" spellcheck="false">
+        <input id="loginSellerPasswordInput" class="login-input hidden" type="password"
+               placeholder="Tu contraseña" autocomplete="current-password">
+        <button id="loginSellerBtn" class="primary-btn login-btn" type="button">Ingresar →</button>
       </div>
 
       <!-- Tab: admin -->
@@ -65,6 +77,7 @@
       <nav class="nav-stack" aria-label="Navegación principal">
         <button class="nav-item active" data-view="adminView" type="button">🏢 Admin</button>
         <button class="nav-item" data-view="clientView" type="button">👷 Ebanista</button>
+        <button class="nav-item" data-view="sellersView" type="button">🪵 Vendedores</button>
         <button class="nav-item" data-view="designerView" type="button">🤖 Diseñar IA</button>
         <button class="nav-item" data-view="quoteView" type="button">📋 Cotizar</button>
         <button class="nav-item" data-view="cutsView" type="button">✂️ Cortes</button>
@@ -228,6 +241,34 @@
             </div>
           </details>
         </section>
+      </section>
+
+      <section id="sellersView" class="view">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Vendedores</p>
+            <h2>Centros madereros que cotizan los cortes</h2>
+          </div>
+          <button id="addSellerBtn" class="primary-btn" type="button">Nuevo vendedor</button>
+        </div>
+
+        <div id="sellerListWrap" class="content-grid admin-grid-single">
+          <section class="panel">
+            <h3>Vendedores registrados</h3>
+            <div id="sellerList" class="tenant-list"></div>
+          </section>
+        </div>
+
+        <div id="sellerSelfPanel" class="content-grid admin-grid-single hidden">
+          <section class="panel">
+            <h3>Mi cuenta de vendedor</h3>
+            <dl id="sellerSelfSummary" class="summary-list"></dl>
+            <div class="form-actions" style="margin-top:1rem;justify-content:flex-start;gap:.5rem">
+              <input id="sellerNewPassword" type="password" placeholder="Nueva contraseña" style="max-width:220px;margin-top:0">
+              <button id="sellerChangePasswordBtn" class="secondary-btn" type="button">Cambiar mi contraseña</button>
+            </div>
+          </section>
+        </div>
       </section>
 
       <section id="designerView" class="view">
@@ -629,6 +670,48 @@ Tapa superior, 120, 55, 1, 18 mm, sin canto"></textarea>
       <div class="form-actions" id="em_actions">
         <button id="cancelEbanistaModalBtn" class="secondary-btn" type="button">Cancelar</button>
         <button id="saveEbanistaModalBtn" class="primary-btn" type="button">Guardar y ver link →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MODAL: nuevo / editar vendedor ──────────────────────── -->
+  <div id="sellerModal" class="modal-overlay hidden" role="dialog">
+    <div class="modal-card" style="max-width:480px">
+      <button id="closeSellerModalBtn" class="modal-close" type="button">✕</button>
+      <h3 id="sellerModalTitle">Nuevo vendedor</h3>
+      <div class="form-grid">
+        <label class="span-2">Nombre <span style="color:#ef4444">*</span>
+          <input id="sm_name" placeholder="Ej: Carlos Mendoza" autocomplete="off">
+        </label>
+        <label class="span-2">Centro maderero / Empresa
+          <input id="sm_company" placeholder="Ej: Maderas del Istmo">
+        </label>
+        <label>Teléfono / WhatsApp
+          <input id="sm_phone" placeholder="+507 6000-0000">
+        </label>
+        <label>Correo
+          <input id="sm_email" type="email" placeholder="correo@ejemplo.com">
+        </label>
+        <label class="span-2">Notas
+          <textarea id="sm_notes" rows="2"></textarea>
+        </label>
+      </div>
+
+      <div id="sm_result" class="hidden" style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:1rem;margin-top:1rem">
+        <p style="font-weight:600;color:#166534;margin:0 0 .75rem">✅ Guardado. Comparte estos datos:</p>
+        <div class="link-box">
+          <input id="sm_link" class="link-input" type="text" readonly>
+          <button id="sm_copyBtn" class="secondary-btn" type="button">Copiar</button>
+        </div>
+        <div id="sm_passwordRow" class="link-box hidden" style="margin-top:.5rem">
+          <input id="sm_passwordDisplay" class="link-input" type="text" readonly>
+          <button id="sm_copyPasswordBtn" class="secondary-btn" type="button">Copiar</button>
+        </div>
+        <p class="link-hint">El vendedor abre el link y entra con código + contraseña. Esta contraseña no se vuelve a mostrar.</p>
+      </div>
+      <div class="form-actions" id="sm_actions">
+        <button id="cancelSellerModalBtn" class="secondary-btn" type="button">Cancelar</button>
+        <button id="saveSellerModalBtn" class="primary-btn" type="button">Guardar y ver link →</button>
       </div>
     </div>
   </div>

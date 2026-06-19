@@ -86,6 +86,35 @@ function saveTenants(list) {
 
 let tenants = loadTenants();
 
+// ── Sellers (vendedores) ─────────────────────────────────────────────────────
+const SELLERS_FILE = path.join(__dirname, "vendedores.json");
+
+function makeSellerCode(name) {
+  const prefix = String(name || "vendedor")
+    .toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]/g, "").slice(0, 8) || "vendedor";
+  const hash = crypto.createHash("sha256").update(String(name || "")).digest("hex").slice(0, 6);
+  return `${prefix}-${hash}`;
+}
+
+function defaultSellers() { return []; }
+
+function loadSellers() {
+  try { return JSON.parse(fs.readFileSync(SELLERS_FILE, "utf-8")); }
+  catch { const s = defaultSellers(); saveSellers(s); return s; }
+}
+
+function saveSellers(list) {
+  try { fs.writeFileSync(SELLERS_FILE, JSON.stringify(list, null, 2)); } catch {}
+}
+
+function publicSeller(s) {
+  const { passwordHash, passwordSalt, ...rest } = s;
+  return { ...rest, hasPassword: Boolean(passwordHash) };
+}
+
+let sellers = loadSellers();
+
 // ── Prices ──────────────────────────────────────────────────────────────────
 const PRICES_FILE = path.join(__dirname, "prices.json");
 
@@ -167,6 +196,30 @@ function getEbanistaSession(token) {
   if (!s) return null;
   if (Date.now() - s.ts > EB_SESSION_TTL) { ebanistaSessions.delete(token); return null; }
   return s;
+}
+
+// ── Seller sessions (vendedor password login) ───────────────────────────────
+const sellerSessions = new Map(); // token -> { sellerId, ts }
+const SELLER_SESSION_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+function createSellerSession(sellerId) {
+  const token = crypto.randomBytes(32).toString("hex");
+  sellerSessions.set(token, { sellerId, ts: Date.now() });
+  return token;
+}
+
+function getSellerSession(token) {
+  if (!token) return null;
+  const s = sellerSessions.get(token);
+  if (!s) return null;
+  if (Date.now() - s.ts > SELLER_SESSION_TTL) { sellerSessions.delete(token); return null; }
+  return s;
+}
+
+function requireSeller(req, res) {
+  const session = getSellerSession(getToken(req));
+  if (!session) { sendJson(res, 401, { error: "No autorizado. Inicia sesión como vendedor." }); return null; }
+  return session;
 }
 
 function todayIso() { return new Date().toISOString().slice(0, 10); }
@@ -617,6 +670,53 @@ async function handleAuthEbanistaLogout(req, res) {
   sendJson(res, 200, { message: "Sesión cerrada." });
 }
 
+async function handleAuthSeller(req, res) {
+  const body = await readBody(req);
+  const { code, password } = body ? JSON.parse(body) : {};
+  const s = sellers.find(s => s.accessCode === code);
+  if (!s) { sendJson(res, 401, { error: "Código no válido." }); return; }
+  if (s.status !== "active") { sendJson(res, 403, { error: "Cuenta de vendedor suspendida." }); return; }
+  if (s.passwordHash && !verifyPassword(password, s.passwordSalt, s.passwordHash)) {
+    sendJson(res, 401, { error: "Contraseña incorrecta." });
+    return;
+  }
+  const token = createSellerSession(s.id);
+  sendJson(res, 200, { token, seller: publicSeller(s) });
+}
+
+function handleAuthSellerCheck(req, res) {
+  sendJson(res, 200, { valid: Boolean(getSellerSession(getToken(req))) });
+}
+
+async function handleAuthSellerLogout(req, res) {
+  const token = getToken(req);
+  if (token) sellerSessions.delete(token);
+  sendJson(res, 200, { message: "Sesión cerrada." });
+}
+
+function handleSellerSelf(req, res) {
+  const session = requireSeller(req, res);
+  if (!session) return;
+  const s = sellers.find(s => s.id === session.sellerId);
+  if (!s) { sendJson(res, 404, { error: "No encontrado." }); return; }
+  sendJson(res, 200, publicSeller(s));
+}
+
+async function handleSellerSelfPassword(req, res) {
+  const session = requireSeller(req, res);
+  if (!session) return;
+  const s = sellers.find(s => s.id === session.sellerId);
+  if (!s) { sendJson(res, 404, { error: "No encontrado." }); return; }
+  const body = await readBody(req);
+  const data = body ? JSON.parse(body) : {};
+  if (!data.password || !String(data.password).trim()) { sendJson(res, 400, { error: "Contraseña requerida." }); return; }
+  const { salt, hash } = hashPassword(String(data.password).trim());
+  s.passwordSalt = salt;
+  s.passwordHash = hash;
+  saveSellers(sellers);
+  sendJson(res, 200, { ok: true });
+}
+
 function handleGetTenants(req, res) {
   if (!requireAdmin(req, res)) return;
   sendJson(res, 200, tenants.map(t => ({
@@ -745,6 +845,88 @@ function handleTenantByCode(req, res) {
   sendJson(res, 200, { ...publicTenant(t), active });
 }
 
+function handleGetSellers(req, res) {
+  if (!requireAdmin(req, res)) return;
+  sendJson(res, 200, sellers.map(publicSeller));
+}
+
+async function handleCreateSeller(req, res) {
+  if (!requireAdmin(req, res)) return;
+  const body = await readBody(req);
+  const data = body ? JSON.parse(body) : {};
+  const passwordPlain = (data.password && String(data.password).trim()) || generatePassword();
+  const { salt, hash } = hashPassword(passwordPlain);
+  const seller = {
+    id: crypto.randomUUID(),
+    name: data.name || "Vendedor",
+    company: data.company || "",
+    phone: data.phone || "",
+    email: data.email || "",
+    accessCode: makeSellerCode(data.name || data.company || "vendedor"),
+    passwordSalt: salt,
+    passwordHash: hash,
+    status: "active",
+    notes: data.notes || "",
+    createdAt: todayIso()
+  };
+  sellers.push(seller);
+  saveSellers(sellers);
+  sendJson(res, 201, { ...publicSeller(seller), passwordPlain });
+}
+
+async function handleUpdateSeller(req, res, id) {
+  if (!requireAdmin(req, res)) return;
+  const body = await readBody(req);
+  const data = body ? JSON.parse(body) : {};
+  delete data.passwordHash; delete data.passwordSalt; // password solo cambia via set-password
+  const s = sellers.find(s => s.id === id);
+  if (!s) { sendJson(res, 404, { error: "No encontrado." }); return; }
+  Object.assign(s, data, { id });
+  saveSellers(sellers);
+  sendJson(res, 200, publicSeller(s));
+}
+
+function handleToggleSeller(req, res, id) {
+  if (!requireAdmin(req, res)) return;
+  const s = sellers.find(s => s.id === id);
+  if (!s) { sendJson(res, 404, { error: "No encontrado." }); return; }
+  s.status = s.status === "active" ? "suspended" : "active";
+  saveSellers(sellers);
+  sendJson(res, 200, publicSeller(s));
+}
+
+async function handleSetSellerPassword(req, res, id) {
+  if (!requireAdmin(req, res)) return;
+  const s = sellers.find(s => s.id === id);
+  if (!s) { sendJson(res, 404, { error: "No encontrado." }); return; }
+  const body = await readBody(req);
+  const data = body ? JSON.parse(body) : {};
+  const passwordPlain = (data.password && String(data.password).trim()) || generatePassword();
+  const { salt, hash } = hashPassword(passwordPlain);
+  s.passwordSalt = salt;
+  s.passwordHash = hash;
+  saveSellers(sellers);
+  sendJson(res, 200, { passwordPlain });
+}
+
+function handleDeleteSeller(req, res, id) {
+  if (!requireAdmin(req, res)) return;
+  const idx = sellers.findIndex(s => s.id === id);
+  if (idx === -1) { sendJson(res, 404, { error: "No encontrado." }); return; }
+  sellers.splice(idx, 1);
+  saveSellers(sellers);
+  sendJson(res, 200, { ok: true });
+}
+
+function handleSellerByCode(req, res) {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const code = url.searchParams.get("code") || "";
+  const s = sellers.find(s => s.accessCode === code);
+  if (!s) { sendJson(res, 404, { error: "Código no válido." }); return; }
+  if (s.passwordHash) { sendJson(res, 200, { requiresPassword: true, name: s.name, company: s.company }); return; }
+  sendJson(res, 200, publicSeller(s));
+}
+
 function handleTenantAccess(req, res, id) {
   const t = tenants.find(t => t.id === id);
   if (!t) { sendJson(res, 404, { error: "No encontrado." }); return; }
@@ -809,6 +991,9 @@ const server = http.createServer(async (req, res) => {
     if (method === "POST" && p === "/api/auth/ebanista")        { await handleAuthEbanista(req, res); return; }
     if (method === "GET"  && p === "/api/auth/ebanista/check")  { handleAuthEbanistaCheck(req, res); return; }
     if (method === "POST" && p === "/api/auth/ebanista/logout") { await handleAuthEbanistaLogout(req, res); return; }
+    if (method === "POST" && p === "/api/auth/seller")        { await handleAuthSeller(req, res); return; }
+    if (method === "GET"  && p === "/api/auth/seller/check")  { handleAuthSellerCheck(req, res); return; }
+    if (method === "POST" && p === "/api/auth/seller/logout") { await handleAuthSellerLogout(req, res); return; }
 
     // Prices (GET public, PUT admin)
     if (method === "GET" && p === "/api/prices") { sendJson(res, 200, prices); return; }
@@ -836,6 +1021,24 @@ const server = http.createServer(async (req, res) => {
 
     // Tenant by code (public)
     if (method === "GET" && p === "/api/tenant-by-code") { handleTenantByCode(req, res); return; }
+    if (method === "GET" && p === "/api/seller-by-code") { handleSellerByCode(req, res); return; }
+
+    // Seller self-service (must come before the generic /api/sellers/:id block)
+    if (method === "GET" && p === "/api/sellers/me")          { handleSellerSelf(req, res); return; }
+    if (method === "PUT" && p === "/api/sellers/me/password") { await handleSellerSelfPassword(req, res); return; }
+
+    // Sellers (admin)
+    if (method === "GET"  && p === "/api/sellers") { handleGetSellers(req, res); return; }
+    if (method === "POST" && p === "/api/sellers") { await handleCreateSeller(req, res); return; }
+
+    if (parts[0] === "api" && parts[1] === "sellers" && parts[2]) {
+      const sellerId = parts[2];
+      const sellerAction = parts[3];
+      if (method === "PUT"    && !sellerAction) { await handleUpdateSeller(req, res, sellerId); return; }
+      if (method === "DELETE" && !sellerAction) { handleDeleteSeller(req, res, sellerId); return; }
+      if (method === "POST" && sellerAction === "toggle")       { handleToggleSeller(req, res, sellerId); return; }
+      if (method === "POST" && sellerAction === "set-password") { await handleSetSellerPassword(req, res, sellerId); return; }
+    }
 
     // Tenants (admin)
     if (method === "GET"  && p === "/api/tenants") { handleGetTenants(req, res); return; }
