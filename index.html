@@ -323,7 +323,7 @@
         </div>
 
         <div id="quoteWorkspace" class="content-grid quote-grid">
-          <section class="panel">
+          <section class="panel" id="ebanistaQuoteFormSection">
             <form id="quoteForm" class="form-grid">
 
               <div class="span-2">
@@ -452,6 +452,50 @@
               <button class="primary-btn span-2" type="submit">Generar cotización</button>
               <button class="secondary-btn span-2" data-view-jump="cutsView" type="button">Ir a cortes</button>
             </form>
+          </section>
+
+          <section class="panel hidden" id="sellerQuoteFormSection">
+            <h3 style="margin:0 0 8px">Cotización de materiales</h3>
+            <div class="form-grid">
+              <label>Cliente (ebanista)
+                <select id="sq_client"><option value="">— Sin asignar —</option></select>
+              </label>
+              <label>Vencimiento (días)
+                <input id="sq_validityDays" type="number" min="1" value="30">
+              </label>
+            </div>
+
+            <div class="subsection" style="margin-top:12px">
+              <h4>Agregar línea</h4>
+              <div class="form-grid compact-grid">
+                <label class="span-2">Descripción
+                  <input id="sq_itemDesc" placeholder="Ej: MDP DUST 2750X1850X15MM">
+                </label>
+                <label>Cantidad
+                  <input id="sq_itemQty" type="number" min="0" step="0.01" value="1">
+                </label>
+                <label>Unidad
+                  <select id="sq_itemUnit">
+                    <option>Unidades</option>
+                    <option>m²</option>
+                    <option>m</option>
+                    <option>kg</option>
+                    <option>par</option>
+                  </select>
+                </label>
+                <label>Precio unitario
+                  <input id="sq_itemPrice" type="number" min="0" step="0.01" value="0">
+                </label>
+                <label>% impuesto
+                  <input id="sq_itemTax" type="number" min="0" max="30" step="0.5" value="7">
+                </label>
+                <button id="addSellerQuoteItemBtn" class="secondary-btn span-2" type="button">＋ Agregar línea</button>
+              </div>
+            </div>
+
+            <div id="sellerQuoteItemsList" class="quote-items-list" style="margin-top:10px"></div>
+
+            <button id="generateSellerQuoteBtn" class="primary-btn" type="button" style="margin-top:12px;width:100%">Generar cotización</button>
           </section>
 
           <section class="quote-paper" id="quotePaper">
@@ -781,6 +825,33 @@ Tapa superior, 120, 55, 1, 18 mm, sin canto"></textarea>
             <img id="sm_logoImg" alt="Logo" style="max-height:48px;max-width:160px;border-radius:4px;border:1px solid #E5E7EB">
             <button id="sm_removeLogoBtn" class="tiny-btn danger" type="button" style="margin-left:8px;font-size:.75rem">Quitar logo</button>
           </div>
+        </div>
+      </details>
+
+      <!-- Business profile / plantilla de cotización -->
+      <details style="margin-top:1rem">
+        <summary style="cursor:pointer;font-weight:600;font-size:.9rem;padding:.4rem 0;list-style:none;display:flex;align-items:center;gap:.5rem">🧾 Plantilla de cotización <span style="font-size:.75rem;font-weight:400;color:#6B7280">(datos fiscales y bancarios, se guardan como predeterminados)</span></summary>
+        <div class="form-grid" style="margin-top:.75rem">
+          <label class="span-2">Dirección / ubicación
+            <input id="sm_bp_address" placeholder="Ej: Panamá">
+          </label>
+          <label>RUC / identificación fiscal
+            <input id="sm_bp_taxId" placeholder="Ej: 155631725-2-2016 DV8">
+          </label>
+          <label>Sitio web
+            <input id="sm_bp_website" placeholder="Ej: https://www.ejemplo.com">
+          </label>
+          <label>Nombre del impuesto
+            <input id="sm_bp_taxLabel" placeholder="Ej: ITBMS" value="ITBMS">
+          </label>
+          <label>% de impuesto
+            <input id="sm_bp_taxPercent" type="number" min="0" max="30" step="0.5" value="7">
+          </label>
+          <label class="span-2">Cuentas para pago (una por línea)
+            <textarea id="sm_bp_bankAccounts" rows="3" placeholder="Banco General 0395011460107
+Banco Banesco 110800076848
+Yappy @miempresa"></textarea>
+          </label>
         </div>
       </details>
 

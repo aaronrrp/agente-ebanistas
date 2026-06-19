@@ -160,7 +160,8 @@ const state = {
   aiBackendAvailable: false,
   globalPrices: load("tm_global_prices", defaultGlobalPrices),
   chatHistory: [],          // conversation memory — last N turns for AI context
-  sellers: []                // vendedores — siempre desde servidor, no localStorage
+  sellers: [],                // vendedores — siempre desde servidor, no localStorage
+  sellerQuoteItems: []        // líneas de la cotización de materiales que arma un vendedor
 };
 
 if (!state.selectedTenantId || !state.tenants.some((tenant) => tenant.id === state.selectedTenantId)) {
@@ -520,6 +521,7 @@ function showView(viewId) {
   els.navItems.forEach((item) => item.classList.toggle("active", item.dataset.view === viewId));
   render();
   if (viewId === "sellersView" && AUTH.mode === "admin") loadSellersFromServer();
+  if (viewId === "quoteView" && AUTH.mode === "vendedor") loadSellerQuoteClientOptions();
   if (viewId === "handoffsView") {
     const canSend = AUTH.mode === "ebanista" || AUTH.mode === "vendedor";
     document.getElementById("handoffSendActions")?.classList.toggle("hidden", !canSend);
@@ -543,6 +545,33 @@ function render() {
   renderManualPieces();
   renderSellers();
   updateSendButtonLabels();
+  renderSellerQuoteForm();
+}
+
+function renderSellerQuoteForm() {
+  const ebSection = document.getElementById("ebanistaQuoteFormSection");
+  const sqSection = document.getElementById("sellerQuoteFormSection");
+  if (!ebSection || !sqSection) return;
+  const isSeller = AUTH.mode === "vendedor";
+  ebSection.classList.toggle("hidden", isSeller);
+  sqSection.classList.toggle("hidden", !isSeller);
+  if (!isSeller) return;
+
+  const list = document.getElementById("sellerQuoteItemsList");
+  if (!state.sellerQuoteItems.length) {
+    list.innerHTML = '<p class="muted">Sin líneas todavía — agrega materiales, herrajes, etc.</p>';
+    return;
+  }
+  list.innerHTML = state.sellerQuoteItems.map(it => `
+    <article class="quote-item-card">
+      <header>
+        <strong>${escapeHtml(it.description)}</strong>
+        <span>$${(it.qty * it.unitPrice).toFixed(2)}</span>
+      </header>
+      <p>${it.qty} ${escapeHtml(it.unit)} × $${Number(it.unitPrice).toFixed(2)} · ${it.taxPercent}% imp.</p>
+      <div class="item-btns"><button class="tiny-btn danger" type="button" data-rm-sq-item="${it.id}">Quitar</button></div>
+    </article>
+  `).join("");
 }
 
 function renderTenantSelect() {
@@ -1318,6 +1347,77 @@ function renderQuotePaper(quote) {
 
       <h4>Contacto</h4>
       <p>${tenant.contactName} · ${tenant.phone}${tenant.email ? ` · ${tenant.email}` : ""}</p>
+    </article>
+  `;
+}
+
+// Cotización de materiales que arma un vendedor — formato tipo factura (logo, datos fiscales,
+// cuentas bancarias), distinto de la cotización de muebles del ebanista (renderQuotePaper).
+function renderSellerQuotePaper(quote, seller) {
+  const theme = seller?.theme || {};
+  const bp = seller?.businessProfile || {};
+  const logoHtml = theme.logoBase64
+    ? `<img src="${theme.logoBase64}" alt="Logo" style="max-height:60px;max-width:160px;object-fit:contain;">`
+    : `<div class="quote-brand-mark">${escapeHtml((seller?.company || seller?.name || "V")[0] || "V")}</div>`;
+
+  const taxLabel = bp.taxLabel || "ITBMS";
+  const defaultTaxPct = Number(bp.taxPercent) || 0;
+  const subtotal = quote.items.reduce((s, it) => s + it.qty * it.unitPrice, 0);
+  const taxAmount = quote.items.reduce((s, it) => s + (it.qty * it.unitPrice) * ((Number(it.taxPercent ?? defaultTaxPct)) / 100), 0);
+  const total = subtotal + taxAmount;
+  const bankLines = String(bp.bankAccounts || "").split("\n").map(l => l.trim()).filter(Boolean);
+
+  els.quotePaper.innerHTML = `
+    <article class="quote-doc">
+      <header>
+        <div class="quote-brand">
+          ${logoHtml}
+          <strong>${escapeHtml(seller?.company || seller?.name || "")}</strong>
+          <span>${escapeHtml(bp.address || "")}</span>
+        </div>
+        <div class="quote-meta">
+          ${quote.clientName ? `<strong>${escapeHtml(quote.clientName)}</strong>` : "Cliente sin asignar"}
+        </div>
+      </header>
+
+      <h4>Número de cotización ${escapeHtml(quote.number)}</h4>
+      <table class="quote-table" style="margin-bottom:1rem">
+        <tbody>
+          <tr>
+            <th>Fecha de cotización</th><th>Vencimiento</th><th>Vendedor</th>
+          </tr>
+          <tr>
+            <td>${quote.date}</td><td>${quote.dueDate}</td><td>${escapeHtml(seller?.name || "")}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <table class="quote-table">
+        <thead>
+          <tr><th>Descripción</th><th>Cantidad</th><th>Precio unitario</th><th>Impuestos</th><th>Importe</th></tr>
+        </thead>
+        <tbody>
+          ${quote.items.map(it => `
+            <tr>
+              <td>${escapeHtml(it.description)}</td>
+              <td>${it.qty} ${escapeHtml(it.unit)}</td>
+              <td>$${Number(it.unitPrice).toFixed(2)}</td>
+              <td>${it.taxPercent ?? defaultTaxPct}% ${escapeHtml(taxLabel)}</td>
+              <td>$${(it.qty * it.unitPrice).toFixed(2)}</td>
+            </tr>`).join("")}
+        </tbody>
+      </table>
+
+      <div class="quote-total">
+        <div>
+          <span>Subtotal $${subtotal.toFixed(2)} · ${escapeHtml(taxLabel)} $${taxAmount.toFixed(2)}</span>
+          <strong>Total ${"$" + total.toFixed(2)}</strong>
+        </div>
+      </div>
+
+      ${bankLines.length ? `<h4>Cuentas para pago</h4><p>${bankLines.map(escapeHtml).join("<br>")}</p>` : ""}
+
+      <p class="muted" style="font-size:.78rem;margin-top:1rem">${escapeHtml(bp.taxId || "")}${bp.website ? ` · ${escapeHtml(bp.website)}` : ""}</p>
     </article>
   `;
 }
@@ -2740,6 +2840,13 @@ function openSellerModal(editId) {
     if (theme.logoBase64) { smLogoImg.src = theme.logoBase64; smPreview.style.display = ""; }
     else smPreview.style.display = "none";
   }
+  const bp = s?.businessProfile || {};
+  document.getElementById("sm_bp_address").value      = bp.address      || "";
+  document.getElementById("sm_bp_taxId").value        = bp.taxId       || "";
+  document.getElementById("sm_bp_website").value      = bp.website     || "";
+  document.getElementById("sm_bp_taxLabel").value     = bp.taxLabel    || "ITBMS";
+  document.getElementById("sm_bp_taxPercent").value   = bp.taxPercent ?? 7;
+  document.getElementById("sm_bp_bankAccounts").value = bp.bankAccounts || "";
   document.getElementById("sm_result").classList.add("hidden");
   document.getElementById("sm_actions").style.display = "";
   const btn = document.getElementById("saveSellerModalBtn");
@@ -2776,6 +2883,14 @@ async function saveSellerFromModal() {
         if (pending === "__clear__") return "";
         return pending || existing?.theme?.logoBase64 || "";
       })()
+    },
+    businessProfile: {
+      address:      document.getElementById("sm_bp_address")?.value.trim()      || "",
+      taxId:        document.getElementById("sm_bp_taxId")?.value.trim()        || "",
+      website:      document.getElementById("sm_bp_website")?.value.trim()      || "",
+      taxLabel:     document.getElementById("sm_bp_taxLabel")?.value.trim()     || "ITBMS",
+      taxPercent:   Number(document.getElementById("sm_bp_taxPercent")?.value) || 0,
+      bankAccounts: document.getElementById("sm_bp_bankAccounts")?.value.trim() || ""
     }
   };
   if (password) payload.password = password;
@@ -3006,6 +3121,58 @@ function goToHandoffWithType(type) {
   if (typeSel) typeSel.value = type;
   document.getElementById("handoffNewTarget")?.scrollIntoView?.({ behavior: "smooth", block: "center" });
 }
+async function loadSellerQuoteClientOptions() {
+  const sel = document.getElementById("sq_client");
+  if (!sel || AUTH.mode !== "vendedor") return;
+  try {
+    const res = await fetch("/api/tenants/active", { headers: handoffAuthHeader() });
+    if (!res.ok) return;
+    const list = await res.json();
+    sel.innerHTML = '<option value="">— Sin asignar —</option>' +
+      list.map(t => `<option value="${t.id}">${escapeHtml(t.companyName)}</option>`).join("");
+  } catch {}
+}
+
+document.getElementById("addSellerQuoteItemBtn")?.addEventListener("click", () => {
+  const description = document.getElementById("sq_itemDesc").value.trim();
+  if (!description) { document.getElementById("sq_itemDesc").focus(); return; }
+  state.sellerQuoteItems.push({
+    id: crypto.randomUUID(),
+    description,
+    qty: Number(document.getElementById("sq_itemQty").value) || 1,
+    unit: document.getElementById("sq_itemUnit").value,
+    unitPrice: Number(document.getElementById("sq_itemPrice").value) || 0,
+    taxPercent: Number(document.getElementById("sq_itemTax").value) || 0
+  });
+  document.getElementById("sq_itemDesc").value = "";
+  document.getElementById("sq_itemQty").value = "1";
+  document.getElementById("sq_itemPrice").value = "0";
+  renderSellerQuoteForm();
+});
+
+document.getElementById("sellerQuoteItemsList")?.addEventListener("click", (e) => {
+  const id = e.target.dataset.rmSqItem;
+  if (!id) return;
+  state.sellerQuoteItems = state.sellerQuoteItems.filter(it => it.id !== id);
+  renderSellerQuoteForm();
+});
+
+document.getElementById("generateSellerQuoteBtn")?.addEventListener("click", () => {
+  if (!state.sellerQuoteItems.length) { toast("Agrega al menos una línea."); return; }
+  const clientId = document.getElementById("sq_client").value;
+  const clientName = document.getElementById("sq_client").selectedOptions[0]?.textContent || "";
+  const validityDays = Number(document.getElementById("sq_validityDays").value) || 30;
+  const quote = {
+    number: "S" + Date.now().toString().slice(-7),
+    date: new Date().toISOString().slice(0, 10),
+    dueDate: (() => { const d = new Date(); d.setDate(d.getDate() + validityDays); return d.toISOString().slice(0, 10); })(),
+    clientId, clientName: clientId ? clientName : "",
+    items: state.sellerQuoteItems
+  };
+  renderSellerQuotePaper(quote, AUTH.sellerInfo || {});
+  toast("Cotización generada ✓");
+});
+
 document.getElementById("sendQuoteToSellerBtn")?.addEventListener("click", () => goToHandoffWithType("quote"));
 document.getElementById("sendCutsToSellerBtn")?.addEventListener("click", () => goToHandoffWithType("cuts"));
 

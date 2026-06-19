@@ -906,6 +906,7 @@ async function handleCreateSeller(req, res) {
     status: "active",
     notes: data.notes || "",
     theme: data.theme || {},
+    businessProfile: data.businessProfile || {},
     createdAt: todayIso()
   };
   sellers.push(seller);
