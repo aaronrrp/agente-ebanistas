@@ -161,7 +161,8 @@ const state = {
   globalPrices: load("tm_global_prices", defaultGlobalPrices),
   chatHistory: [],          // conversation memory — last N turns for AI context
   sellers: [],                // vendedores — siempre desde servidor, no localStorage
-  sellerQuoteItems: []        // líneas de la cotización de materiales que arma un vendedor
+  sellerQuoteItems: [],       // líneas de la cotización de materiales que arma un vendedor
+  materialCartItems: []       // líneas de materiales que arma el ebanista en Cotizar
 };
 
 if (!state.selectedTenantId || !state.tenants.some((tenant) => tenant.id === state.selectedTenantId)) {
@@ -522,6 +523,7 @@ function showView(viewId) {
   render();
   if (viewId === "sellersView" && AUTH.mode === "admin") loadSellersFromServer();
   if (viewId === "quoteView" && AUTH.mode === "vendedor") loadSellerQuoteClientOptions();
+  if (viewId === "quoteView" && AUTH.mode === "ebanista") loadMaterialCatalogOptions();
   if (viewId === "handoffsView") {
     const canSend = AUTH.mode === "ebanista" || AUTH.mode === "vendedor";
     document.getElementById("handoffSendActions")?.classList.toggle("hidden", !canSend);
@@ -1097,26 +1099,22 @@ function placementLabel(value) {
 
 function renderDraftItems() {
   if (!els.quoteItemsList) return;
-  if (!state.draftItems.length) {
-    els.quoteItemsList.innerHTML = `<p class="muted">Sin módulos. Usa el chat de IA o el formulario para agregar.</p>`;
+  if (!state.materialCartItems.length) {
+    els.quoteItemsList.innerHTML = `<p class="muted">Sin materiales. Agrégalos del catálogo, a mano, o pídeselo a la IA en el chat.</p>`;
     return;
   }
 
-  const subtotal = state.draftItems.reduce((s, it) => s + it.finalPrice, 0);
-  const cards = state.draftItems.map((item, index) => `
-    <article class="quote-item-card ${state.editingItemId === item.id ? "editing" : ""}">
+  const subtotal = state.materialCartItems.reduce((s, it) => s + it.qty * it.unitPrice, 0);
+  const cards = state.materialCartItems.map((item, index) => `
+    <article class="quote-item-card">
       <header>
         <div>
-          <strong>${index + 1}. ${escapeHtml(item.name)}</strong>
-          <p>${item.width} × ${item.height} × ${item.depth} cm · ${item.complexityLabel}</p>
+          <strong>${index + 1}. ${escapeHtml(item.description)}</strong>
+          <p>${item.qty} ${escapeHtml(item.unit)} × $${Number(item.unitPrice).toFixed(2)}</p>
         </div>
-        <span class="item-price">${money(item.finalPrice)}</span>
+        <span class="item-price">$${(item.qty * item.unitPrice).toFixed(2)}</span>
       </header>
-      <p class="item-spec">${item.melamineThickness || "—"}${item.melamineSheet ? ` · ${escapeHtml(getMelamineSheetLabel(item.melamineSheet))}` : ""}${item.doors ? ` · puertas ${placementLabel(item.doorPlacement)}` : ""}${item.drawers ? ` · gavetas ${placementLabel(item.drawerPlacement)}` : ""}${item.shelves ? ` · repisas ${placementLabel(item.shelfPlacement)}` : ""}${item.backPlacement ? ` · fondo ${placementLabel(item.backPlacement)}` : ""}${!noInc(item.edgeBanding) ? ` · ${item.edgeBanding}` : ""}</p>
-      ${item.manualPrice > 0 ? `<p class="manual-note">Precio manual. Calculado: ${money(item.calculated)}</p>` : ""}
       <div class="item-btns">
-        <button class="tiny-btn" type="button" data-edit-item="${item.id}">✏ Editar</button>
-        <button class="tiny-btn" type="button" data-duplicate-item="${item.id}">⧉ Duplicar</button>
         <button class="tiny-btn danger" type="button" data-remove-item="${item.id}">× Quitar</button>
       </div>
     </article>
@@ -1124,11 +1122,10 @@ function renderDraftItems() {
 
   els.quoteItemsList.innerHTML = cards + `
     <div class="draft-subtotal">
-      <span>${state.draftItems.length} módulo(s) · Subtotal estimado:</span>
-      <strong>${money(subtotal)}</strong>
+      <span>${state.materialCartItems.length} material(es) · Subtotal:</span>
+      <strong>$${subtotal.toFixed(2)}</strong>
     </div>
   `;
-  autoFillCostFields();
 }
 
 function autoFillCostFields() {
@@ -1422,6 +1419,65 @@ function renderSellerQuotePaper(quote, seller) {
   `;
 }
 
+// Cotización de materiales del ebanista — mismo formato que renderSellerQuotePaper,
+// pero con el branding del ebanista (tenant) en vez del vendedor.
+function renderEbanistaMaterialQuotePaper(quote, tenant) {
+  const theme = tenant?.theme || {};
+  const logoHtml = (theme.logoBase64 || tenant?.logoBase64)
+    ? `<img src="${theme.logoBase64 || tenant.logoBase64}" alt="Logo" style="max-height:60px;max-width:160px;object-fit:contain;">`
+    : `<div class="quote-brand-mark">${escapeHtml((tenant?.companyName || "E")[0] || "E")}</div>`;
+
+  const subtotal = quote.items.reduce((s, it) => s + it.qty * it.unitPrice, 0);
+  const total = quote.manualTotal > 0 ? quote.manualTotal : (subtotal + (quote.manoObra || 0) + (quote.transport || 0));
+
+  els.quotePaper.innerHTML = `
+    <article class="quote-doc">
+      <header>
+        <div class="quote-brand">
+          ${logoHtml}
+          <strong>${escapeHtml(tenant?.companyName || "")}</strong>
+          <span>${escapeHtml(tenant?.terms ? "" : "")}</span>
+        </div>
+        <div class="quote-meta">
+          ${quote.clientName ? `<strong>${escapeHtml(quote.clientName)}</strong>` : "Cliente sin asignar"}
+          ${quote.location ? `<br>${escapeHtml(quote.location)}` : ""}
+        </div>
+      </header>
+
+      <h4>Número de cotización ${escapeHtml(quote.number)}</h4>
+      <table class="quote-table" style="margin-bottom:1rem">
+        <tbody>
+          <tr><th>Fecha de cotización</th><th>Vencimiento</th><th>Contacto</th></tr>
+          <tr><td>${quote.date}</td><td>${quote.dueDate}</td><td>${escapeHtml(tenant?.contactName || "")}</td></tr>
+        </tbody>
+      </table>
+
+      <table class="quote-table">
+        <thead><tr><th>Descripción</th><th>Cantidad</th><th>Precio unitario</th><th>Importe</th></tr></thead>
+        <tbody>
+          ${quote.items.map(it => `
+            <tr>
+              <td>${escapeHtml(it.description)}</td>
+              <td>${it.qty} ${escapeHtml(it.unit)}</td>
+              <td>$${Number(it.unitPrice).toFixed(2)}</td>
+              <td>$${(it.qty * it.unitPrice).toFixed(2)}</td>
+            </tr>`).join("")}
+          ${quote.manoObra > 0 ? `<tr><td>Mano de obra / instalación</td><td></td><td></td><td>$${quote.manoObra.toFixed(2)}</td></tr>` : ""}
+          ${quote.transport > 0 ? `<tr><td>Transporte</td><td></td><td></td><td>$${quote.transport.toFixed(2)}</td></tr>` : ""}
+        </tbody>
+      </table>
+
+      <div class="quote-total">
+        <div><strong>Total $${total.toFixed(2)}</strong></div>
+      </div>
+
+      ${quote.notes ? `<h4>Notas</h4><p>${escapeHtml(quote.notes)}</p>` : ""}
+
+      <p class="muted" style="font-size:.78rem;margin-top:1rem">${escapeHtml(tenant?.contactName || "")}${tenant?.phone ? ` · ${escapeHtml(tenant.phone)}` : ""}${tenant?.email ? ` · ${escapeHtml(tenant.email)}` : ""}</p>
+    </article>
+  `;
+}
+
 function piece(item, name, width, height, qty = 1) {
   const edgeSides = computeEdgeSides(name, item.edgeBanding);
   const substrate = applyEdgeThicknessToDimensions(width, height, edgeSides);
@@ -1639,36 +1695,46 @@ function renderCutsPiecesTable() {
   }
   const thick = ["15 mm","18 mm","25 mm","36 mm doble laminado"];
   const edgeOpts = (val) => ["", ...EDGE_THICKNESS_OPTIONS].map(o =>
-    `<option value="${o}"${(val||"")===o?' selected':''}>${o || "Sin canto"}</option>`).join('');
+    `<option value="${o}"${(val||"")===o?' selected':''}>${o || "—"}</option>`).join('');
+  // Largo = height (lados largo = left/right) · Ancho = width (lados corto = top/bottom)
   const rows = state.editablePieces.map(p => {
     const es = p.edgeSides || { top: null, bottom: null, left: null, right: null };
     return `
     <tr data-piece-id="${p.id}">
+      <td><input type="checkbox" class="cut-select-row" data-select-id="${p.id}" ${_selectedCutPieceIds.has(p.id) ? "checked" : ""}></td>
       <td><input class="cut-input" data-field="furniture" value="${escapeHtml(p.furniture||'')}" placeholder="Mueble"></td>
       <td><input class="cut-input" data-field="name" value="${escapeHtml(p.name||'')}" placeholder="Pieza"></td>
-      <td><input class="cut-input cut-num" data-field="width" type="number" min="1" step="0.5" value="${p.width||''}"></td>
-      <td><input class="cut-input cut-num" data-field="height" type="number" min="1" step="0.5" value="${p.height||''}"></td>
       <td><select class="cut-input" data-field="thickness">${thick.map(t=>`<option${p.thickness===t?' selected':''}>${t}</option>`).join('')}</select></td>
-      <td><select class="cut-input" data-edge-side="top" title="Canto arriba">${edgeOpts(es.top)}</select></td>
-      <td><select class="cut-input" data-edge-side="bottom" title="Canto abajo">${edgeOpts(es.bottom)}</select></td>
-      <td><select class="cut-input" data-edge-side="left" title="Canto izquierda">${edgeOpts(es.left)}</select></td>
-      <td><select class="cut-input" data-edge-side="right" title="Canto derecha">${edgeOpts(es.right)}</select></td>
-      <td><label style="display:flex;align-items:center;gap:3px;font-size:.75rem;font-weight:400"><input type="checkbox" data-field="grain" ${p.grain ? "checked" : ""}> veta</label></td>
+      <td><input class="cut-input cut-num" data-field="height" type="number" min="1" step="0.5" value="${p.height||''}" title="Largo cm"></td>
+      <td><input class="cut-input cut-num" data-field="width" type="number" min="1" step="0.5" value="${p.width||''}" title="Ancho cm"></td>
+      <td><select class="cut-input" data-edge-side="left" title="Canto lado largo 1">${edgeOpts(es.left)}</select></td>
+      <td><select class="cut-input" data-edge-side="right" title="Canto lado largo 2">${edgeOpts(es.right)}</select></td>
+      <td><select class="cut-input" data-edge-side="top" title="Canto lado corto 1">${edgeOpts(es.top)}</select></td>
+      <td><select class="cut-input" data-edge-side="bottom" title="Canto lado corto 2">${edgeOpts(es.bottom)}</select></td>
+      <td>
+        <label style="display:flex;align-items:center;gap:2px;font-size:.72rem;font-weight:400"><input type="checkbox" data-field="grain" ${p.grain ? "checked" : ""}>veta</label>
+        <select class="cut-input" data-field="grainDirection" style="margin-top:2px" ${p.grain ? "" : "disabled"}>
+          <option value="largo" ${p.grainDirection!=="ancho"?"selected":""}>al largo</option>
+          <option value="ancho" ${p.grainDirection==="ancho"?"selected":""}>al ancho</option>
+        </select>
+      </td>
       <td><button class="tiny-btn danger" data-rm-cut="${p.id}" type="button">×</button></td>
     </tr>`;
   }).join('');
 
   els.cutsOutput.innerHTML = `
     <p style="font-size:.8rem;color:#6B7280;margin:0 0 8px">
-      ✏️ Haz clic en cualquier celda para editar. Ancho/alto son tamaño de <strong>corte (sustrato)</strong>, ya con el canto restado — no el tamaño terminado. Los cambios se reflejan en el cálculo de láminas al instante.
+      ✏️ Haz clic en cualquier celda para editar. Largo/Ancho son tamaño de <strong>corte (sustrato)</strong>, ya con el canto restado — no el tamaño terminado. L1/L2 = canto en cada lado largo, C1/C2 = canto en cada lado corto. Los cambios se reflejan en el cálculo de láminas al instante.
     </p>
-    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
       <button id="addCutPieceBtn" class="secondary-btn" type="button">＋ Agregar pieza</button>
       <button id="regenCutPiecesBtn" class="secondary-btn" type="button">↻ Regenerar desde módulos</button>
+      <button id="deleteSelectedCutsBtn" class="secondary-btn danger" type="button">🗑 Borrar seleccionadas (<span id="selectedCutsCount">0</span>)</button>
+      <label style="display:flex;align-items:center;gap:4px;font-weight:400;font-size:.85rem"><input type="checkbox" id="selectAllCutsCheckbox">Seleccionar todo</label>
     </div>
     <div style="overflow-x:auto">
       <table class="quote-table cuts-editable">
-        <thead><tr><th>Mueble</th><th>Pieza</th><th>Ancho cm</th><th>Alto cm</th><th>Grosor</th><th>Canto▲</th><th>Canto▼</th><th>Canto◄</th><th>Canto►</th><th>Veta</th><th></th></tr></thead>
+        <thead><tr><th></th><th>Mueble</th><th>Pieza</th><th>Grosor</th><th title="Largo">Largo cm</th><th title="Ancho">Ancho cm</th><th title="Canto lado largo 1">L1</th><th title="Canto lado largo 2">L2</th><th title="Canto lado corto 1">C1</th><th title="Canto lado corto 2">C2</th><th>Veta</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
@@ -1834,7 +1900,8 @@ function recalcCutsLayout() {
         const rw = Math.max(8, scale(pl.w));
         const rh = Math.max(5, scaleH(pl.h));
         const label = (pl.piece.name || '').slice(0, 12);
-        const grainLines = pl.piece.grain ? (lineDir === "vertical"
+        const pieceLineDir = pl.piece.grainDirection === "ancho" ? "horizontal" : pl.piece.grainDirection === "largo" ? "vertical" : lineDir;
+        const grainLines = pl.piece.grain ? (pieceLineDir === "vertical"
           ? Array.from({ length: Math.max(2, Math.floor(rw / 6)) }, (_, gi) => {
               const gx = (rx + 3 + gi * 6).toFixed(1);
               if (Number(gx) >= rx + rw - 1) return "";
@@ -1924,6 +1991,40 @@ function recalcCutsLayout() {
 }
 
 // ── Manual drag/rotate in cuts SVG ──────────────────────────────────────────
+let _selectedCutPieceIds = new Set(); // selección para borrado múltiple en la tabla de cortes
+
+function updateSelectedCutsCount() {
+  const span = document.getElementById("selectedCutsCount");
+  if (span) span.textContent = _selectedCutPieceIds.size;
+}
+
+els.cutsOutput?.addEventListener("change", (e) => {
+  if (e.target.classList.contains("cut-select-row")) {
+    const id = e.target.dataset.selectId;
+    if (e.target.checked) _selectedCutPieceIds.add(id); else _selectedCutPieceIds.delete(id);
+    updateSelectedCutsCount();
+  }
+});
+document.addEventListener("change", (e) => {
+  if (e.target.id === "selectAllCutsCheckbox") {
+    _selectedCutPieceIds = e.target.checked ? new Set(state.editablePieces.map(p => p.id)) : new Set();
+    renderCutsPiecesTable();
+    updateSelectedCutsCount();
+  }
+});
+document.addEventListener("click", (e) => {
+  if (e.target.id === "deleteSelectedCutsBtn") {
+    if (!_selectedCutPieceIds.size) { toast("No has seleccionado ninguna pieza."); return; }
+    if (!confirm(`¿Eliminar ${_selectedCutPieceIds.size} pieza(s) seleccionada(s)?`)) return;
+    state.editablePieces = state.editablePieces.filter(p => !_selectedCutPieceIds.has(p.id));
+    state.manualPieces = state.manualPieces.filter(p => !_selectedCutPieceIds.has(p.id));
+    _selectedCutPieceIds = new Set();
+    renderCutsPiecesTable();
+    recalcCutsLayout();
+    toast("Piezas eliminadas ✓");
+  }
+});
+
 let _cutDrag = null; // { pieceId, svg, sheetIndex, sheetW, sheetH, startX, startY, origX, origY }
 
 function _svgPxToCm(svg, px, py) {
@@ -3371,61 +3472,61 @@ els.chatInput.addEventListener("keydown", event => {
 // sendDesignToQuoteBtn removed — now inline "📋 Enviar a cotización" button in chat
 // furnitureBrief / interpretFurnitureBtn / aiAddFurnitureBtn / aiAddAndCutsBtn removed v22
 
-document.getElementById("addQuoteItemBtn").addEventListener("click", () => {
-  const item = readItemFromForm();
-  if (!item.width || !item.height || !item.depth) {
-    toast("Ingresa al menos ancho, alto y profundidad.", "error");
-    return;
+// ── Materiales en cotización (ebanista) — reemplaza la creación de módulos ──
+function loadMaterialCatalogOptions() {
+  const sel = document.getElementById("materialCatalogSelect");
+  if (!sel) return;
+  const prices = tenantPrices();
+  const names = prices._names || {};
+  const standardKeys = Object.keys(defaultGlobalPrices);
+  const customItems = prices.customItems || [];
+  const opts = standardKeys
+    .filter(k => typeof prices[k] === "number")
+    .map(k => `<option value="std:${k}">${escapeHtml(names[k] || defaultPriceNames[k] || k)} — $${Number(prices[k]).toFixed(2)}</option>`)
+    .concat(customItems.map((c, i) => `<option value="custom:${i}">${escapeHtml(c.name)} — $${Number(c.price).toFixed(2)}</option>`));
+  sel.innerHTML = '<option value="">— Elegir material —</option>' + opts.join("");
+}
+
+document.getElementById("materialCatalogSelect")?.addEventListener("change", (e) => {
+  const val = e.target.value;
+  if (!val) return;
+  const prices = tenantPrices();
+  const names = prices._names || {};
+  let label = "", price = 0;
+  if (val.startsWith("std:")) {
+    const key = val.slice(4);
+    label = names[key] || defaultPriceNames[key] || key;
+    price = Number(prices[key]) || 0;
+  } else if (val.startsWith("custom:")) {
+    const c = (prices.customItems || [])[Number(val.slice(7))];
+    if (c) { label = c.name; price = Number(c.price) || 0; }
   }
-  if (state.editingItemId) {
-    state.draftItems = state.draftItems.map((d) => d.id === state.editingItemId ? { ...item, id: state.editingItemId } : d);
-  } else {
-    state.draftItems.push(item);
-  }
-  resetModuleForm(); // clear all fields + state.editingItemId = null
+  document.getElementById("materialManualDesc").value = label;
+  document.getElementById("materialPrice").value = price;
+});
+
+document.getElementById("addMaterialBtn")?.addEventListener("click", () => {
+  const description = document.getElementById("materialManualDesc").value.trim();
+  if (!description) { toast("Elige un material del catálogo o escribe una descripción.", "error"); return; }
+  state.materialCartItems.push({
+    id: crypto.randomUUID(),
+    description,
+    qty: Number(document.getElementById("materialQty").value) || 1,
+    unit: document.getElementById("materialUnit").value,
+    unitPrice: Number(document.getElementById("materialPrice").value) || 0
+  });
+  document.getElementById("materialCatalogSelect").value = "";
+  document.getElementById("materialManualDesc").value = "";
+  document.getElementById("materialQty").value = "1";
+  document.getElementById("materialPrice").value = "0";
   renderDraftItems();
-  // Collapse the panel
-  const panel = document.getElementById("moduleFormPanel");
-  const btn   = document.getElementById("toggleModuleFormBtn");
-  if (panel && btn) { panel.classList.add("hidden"); btn.textContent = "＋ Agregar módulo"; }
+  toast("Material agregado ✓");
 });
 
 els.quoteItemsList.addEventListener("click", (event) => {
-  const removeId    = event.target.dataset.removeItem;
-  const editId      = event.target.dataset.editItem;
-  const duplicateId = event.target.dataset.duplicateItem;
-
-  if (editId) {
-    const item = state.draftItems.find((d) => d.id === editId);
-    if (!item) return;
-    state.editingItemId = editId;
-    fillFormFromItem(item);
-    renderDraftItems();
-    // Expand the form panel
-    const panel = document.getElementById("moduleFormPanel");
-    const btn   = document.getElementById("toggleModuleFormBtn");
-    if (panel && btn) { panel.classList.remove("hidden"); btn.textContent = "▲ Cerrar formulario"; }
-    document.getElementById("addQuoteItemBtn").textContent = "Guardar cambios del módulo";
-    document.getElementById("itemName")?.focus();
-    return;
-  }
-
-  if (duplicateId) {
-    const item = state.draftItems.find((d) => d.id === duplicateId);
-    if (!item) return;
-    const copy = calculateItem({ ...item, id: crypto.randomUUID(), name: item.name + " (copia)" });
-    state.draftItems.push(copy);
-    renderDraftItems();
-    toast("Módulo duplicado ✓");
-    return;
-  }
-
+  const removeId = event.target.dataset.removeItem;
   if (!removeId) return;
-  state.draftItems = state.draftItems.filter((item) => item.id !== removeId);
-  if (state.editingItemId === removeId) {
-    state.editingItemId = null;
-    document.getElementById("addQuoteItemBtn").textContent = "Agregar módulo";
-  }
+  state.materialCartItems = state.materialCartItems.filter((item) => item.id !== removeId);
   renderDraftItems();
 });
 
@@ -3452,25 +3553,109 @@ els.assistantOutput?.addEventListener("click", (event) => {
   }
 });
 
-els.addManualPiecesBtn.addEventListener("click", () => {
-  const pieces = parseManualPieces(els.manualPiecesInput.value);
-  if (!pieces.length) { toast("Escribe al menos: nombre, ancho, alto (separados por coma)", "error"); return; }
+// ── Agregar pieza a Cortes: largo/ancho + canto por lado largo/corto + veta ──
+// Mapeo geométrico: largo = height (los lados "largo" corren vertical = left/right),
+//                    ancho = width  (los lados "corto" corren horizontal = top/bottom).
+function buildManualPieces({ furniture, name, largo, ancho, qty, thickness, cantoSides, cantoThickness, grain, grainDir }) {
+  const edgeSides = {
+    left:   cantoSides.l1 ? cantoThickness : null,
+    right:  cantoSides.l2 ? cantoThickness : null,
+    top:    cantoSides.c1 ? cantoThickness : null,
+    bottom: cantoSides.c2 ? cantoThickness : null
+  };
+  const substrate = applyEdgeThicknessToDimensions(ancho, largo, edgeSides);
+  const baseName = name || "Pieza";
+  return Array.from({ length: Math.max(1, qty) }, (_, i) => ({
+    id: crypto.randomUUID(),
+    furniture: furniture || "",
+    name: qty > 1 ? `${baseName} ${i + 1}` : baseName,
+    width: roundCm(substrate.width),
+    height: roundCm(substrate.height),
+    thickness,
+    edgeSides,
+    edge: describeEdgeSides(edgeSides),
+    grain: Boolean(grain),
+    grainDirection: grain ? (grainDir || "largo") : null,
+    area: roundCm(substrate.width * substrate.height)
+  }));
+}
+
+function addPiecesToCuts(pieces) {
   state.manualPieces = [...state.manualPieces, ...pieces];
-  els.manualPiecesInput.value = "";
-  renderManualPieces();
-  // Add directly to editable cuts table (no need to press "Calcular cortes")
-  const added = pieces.map(p => ({ ...p, id: p.id || crypto.randomUUID() }));
-  state.editablePieces = [...state.editablePieces, ...added];
+  state.editablePieces = [...state.editablePieces, ...pieces];
   renderCutsPiecesTable();
   recalcCutsLayout();
-  toast(`${added.length} pieza(s) agregada(s) a la tabla ✓`);
+}
+
+document.getElementById("addManualPieceBtn")?.addEventListener("click", () => {
+  const largo = Number(document.getElementById("mp_largo").value);
+  const ancho = Number(document.getElementById("mp_ancho").value);
+  if (!largo || !ancho) { toast("Ingresa largo y ancho.", "error"); return; }
+  const qty = Math.max(1, Number(document.getElementById("mp_qty").value) || 1);
+  const pieces = buildManualPieces({
+    furniture: document.getElementById("mp_furniture").value.trim(),
+    name: document.getElementById("mp_name").value.trim(),
+    largo, ancho, qty,
+    thickness: document.getElementById("mp_thickness").value,
+    cantoSides: {
+      l1: document.getElementById("mp_cantoL1").checked,
+      l2: document.getElementById("mp_cantoL2").checked,
+      c1: document.getElementById("mp_cantoC1").checked,
+      c2: document.getElementById("mp_cantoC2").checked
+    },
+    cantoThickness: document.getElementById("mp_cantoThickness").value,
+    grain: document.getElementById("mp_grain").checked,
+    grainDir: document.getElementById("mp_grainDir").value
+  });
+  addPiecesToCuts(pieces);
+  toast(`${pieces.length} pieza(s) agregada(s) ✓`);
+  document.getElementById("mp_name").value = "";
+  document.getElementById("mp_qty").value = "1";
 });
 
-els.manualPiecesList.addEventListener("click", (event) => {
-  const id = event.target.dataset.removeManualPiece;
-  if (!id) return;
-  state.manualPieces = state.manualPieces.filter((pieceItem) => pieceItem.id !== id);
-  renderManualPieces();
+// Texto libre: "4 piezas con 40mm de largo, 30 de ancho, canto de 1 lado corto".
+// Numero sin unidad = mm por defecto (asi suelen anotar las medidas); "cm" explicito se respeta.
+function parsePieceFromText(text) {
+  const t = String(text || "").toLowerCase();
+  const toCm = (val, unit) => unit === "cm" ? val : val / 10;
+
+  const largoMatch = t.match(/(\d+(?:[.,]\d+)?)\s*(mm|cm)?\s*(?:de\s*)?largo/);
+  const anchoMatch = t.match(/(\d+(?:[.,]\d+)?)\s*(mm|cm)?\s*(?:de\s*)?ancho/);
+  if (!largoMatch || !anchoMatch) return null;
+  const largo = toCm(Number(largoMatch[1].replace(",", ".")), largoMatch[2]);
+  const ancho = toCm(Number(anchoMatch[1].replace(",", ".")), anchoMatch[2]);
+
+  const qtyMatch = t.match(/(\d+)\s*piezas?/);
+  const qty = qtyMatch ? Number(qtyMatch[1]) : 1;
+
+  const sideCount = (word) => {
+    const re = new RegExp(`(\\d+)?\\s*lados?\\s*${word}s?`, "g");
+    let count = 0, m;
+    while ((m = re.exec(t))) count = Math.max(count, m[1] ? Number(m[1]) : 1);
+    return count;
+  };
+  const allSides = /todos los (cantos|lados)|4 cantos|canto en todo/.test(t);
+  const cortoCount = allSides ? 2 : sideCount("corto");
+  const largoCount = allSides ? 2 : sideCount("largo");
+  const cantoSides = { l1: largoCount >= 1, l2: largoCount >= 2, c1: cortoCount >= 1, c2: cortoCount >= 2 };
+
+  const grain = /veta/.test(t);
+  const grainDir = /veta.*ancho|ancho.*veta/.test(t) ? "ancho" : "largo";
+
+  return { furniture: "", name: "Pieza", largo, ancho, qty, thickness: "18 mm", cantoSides, cantoThickness: "1.00mm", grain, grainDir };
+}
+
+document.getElementById("parseManualPieceBtn")?.addEventListener("click", () => {
+  const input = document.getElementById("mp_naturalInput");
+  const parsed = parsePieceFromText(input.value);
+  if (!parsed) { toast('No entendí las medidas — usa algo como "40 de largo, 30 de ancho".', "error"); return; }
+  const pieces = buildManualPieces(parsed);
+  addPiecesToCuts(pieces);
+  toast(`${pieces.length} pieza(s) creada(s) desde el texto ✓`);
+  input.value = "";
+});
+document.getElementById("mp_naturalInput")?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") document.getElementById("parseManualPieceBtn").click();
 });
 
 // ── Editable cuts table — inline editing ──────────────────────────────────
@@ -3496,7 +3681,8 @@ els.cutsOutput.addEventListener("change", (e) => {
 
   const field = e.target.dataset.field;
   if (field === "thickness") { piece.thickness = e.target.value; recalcCutsLayout(); return; }
-  if (field === "grain") { piece.grain = e.target.checked; recalcCutsLayout(); return; }
+  if (field === "grain") { piece.grain = e.target.checked; renderCutsPiecesTable(); recalcCutsLayout(); return; }
+  if (field === "grainDirection") { piece.grainDirection = e.target.value; recalcCutsLayout(); return; }
 
   const side = e.target.dataset.edgeSide;
   if (side) {
@@ -3556,12 +3742,27 @@ els.quoteHistory.addEventListener("click", (e) => {
 els.quoteForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const tenant = currentTenant();
-  if (!isTenantActive(tenant) || !state.draftItems.length) return;
-
-  const quote = buildQuote(event.currentTarget);
+  if (!isTenantActive(tenant) || !state.materialCartItems.length) {
+    if (!state.materialCartItems.length) toast("Agrega al menos un material antes de generar.", "error");
+    return;
+  }
+  const validityDays = Number(document.getElementById("quoteValidity")?.value) || 15;
+  const quote = {
+    number: "C" + Date.now().toString().slice(-7),
+    date: new Date().toISOString().slice(0, 10),
+    dueDate: (() => { const d = new Date(); d.setDate(d.getDate() + validityDays); return d.toISOString().slice(0, 10); })(),
+    clientName: document.getElementById("finalClient")?.value.trim() || "",
+    location: document.getElementById("projectLocation")?.value.trim() || "",
+    notes: document.getElementById("clientNotes")?.value.trim() || "",
+    manoObra: Number(document.getElementById("manoObraField")?.value) || 0,
+    transport: Number(document.getElementById("transportField")?.value) || 0,
+    manualTotal: Number(document.getElementById("manualTotal")?.value) || 0,
+    items: state.materialCartItems,
+    createdAt: new Date().toISOString()
+  };
   state.quotes.unshift(quote);
   save();
-  renderQuotePaper(quote);
+  renderEbanistaMaterialQuotePaper(quote, tenant);
   renderClient();
   renderAdmin();
   toast("Cotización generada ✓");
@@ -3596,10 +3797,9 @@ document.getElementById("toggleModuleFormBtn")?.addEventListener("click", () => 
 
 // ── Clear all draft modules ───────────────────────────────────────────────
 document.getElementById("clearDraftBtn")?.addEventListener("click", () => {
-  if (!state.draftItems.length) return;
-  if (!confirm("¿Limpiar todos los módulos de esta cotización?")) return;
-  state.draftItems = [];
-  state.editingItemId = null;
+  if (!state.materialCartItems.length) return;
+  if (!confirm("¿Limpiar todos los materiales de esta cotización?")) return;
+  state.materialCartItems = [];
   renderDraftItems();
 });
 
