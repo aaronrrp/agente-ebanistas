@@ -115,6 +115,40 @@ function publicSeller(s) {
 
 let sellers = loadSellers();
 
+// ── Handoffs (envíos ebanista ↔ vendedor) ────────────────────────────────────
+const HANDOFFS_FILE = path.join(__dirname, "handoffs.json");
+
+function defaultHandoffs() { return []; }
+
+function loadHandoffs() {
+  try { return JSON.parse(fs.readFileSync(HANDOFFS_FILE, "utf-8")); }
+  catch { const h = defaultHandoffs(); saveHandoffs(h); return h; }
+}
+
+function saveHandoffs(list) {
+  try { fs.writeFileSync(HANDOFFS_FILE, JSON.stringify(list, null, 2)); } catch {}
+}
+
+let handoffs = loadHandoffs();
+
+function getCallerIdentity(req) {
+  const token = getToken(req);
+  const eb = getEbanistaSession(token);
+  if (eb) return { role: "ebanista", tenantId: eb.tenantId };
+  const se = getSellerSession(token);
+  if (se) return { role: "vendedor", sellerId: se.sellerId };
+  return null;
+}
+
+function canSeeHandoff(h, identity) {
+  if (identity.role === "ebanista") return h.ebanistaTenantId === identity.tenantId;
+  if (identity.role === "vendedor") {
+    if (h.routing.mode === "direct") return h.routing.sellerId === identity.sellerId;
+    return h.routing.claimedBySellerId === null || h.routing.claimedBySellerId === identity.sellerId;
+  }
+  return false;
+}
+
 // ── Prices ──────────────────────────────────────────────────────────────────
 const PRICES_FILE = path.join(__dirname, "prices.json");
 
@@ -927,6 +961,118 @@ function handleSellerByCode(req, res) {
   sendJson(res, 200, publicSeller(s));
 }
 
+async function handleCreateHandoff(req, res) {
+  const identity = getCallerIdentity(req);
+  if (!identity) { sendJson(res, 401, { error: "No autorizado." }); return; }
+  const body = await readBody(req);
+  const data = body ? JSON.parse(body) : {};
+  const tenant = identity.role === "ebanista" ? tenants.find(t => t.id === identity.tenantId) : null;
+  const ebanistaTenantId = identity.role === "ebanista" ? identity.tenantId : (data.ebanistaTenantId || null);
+  if (!ebanistaTenantId) { sendJson(res, 400, { error: "Falta el ebanista del envío." }); return; }
+  const authorName = identity.role === "ebanista"
+    ? (tenant?.companyName || "Ebanista")
+    : (sellers.find(s => s.id === identity.sellerId)?.name || "Vendedor");
+  const now = new Date().toISOString();
+  const handoff = {
+    id: crypto.randomUUID(),
+    type: data.type === "quote" ? "quote" : "cuts",
+    status: "pending",
+    routing: {
+      mode: data.routing?.mode === "direct" ? "direct" : "pool",
+      sellerId: data.routing?.mode === "direct" ? (data.routing.sellerId || null) : null,
+      claimedBySellerId: null
+    },
+    ebanistaTenantId,
+    ebanistaCompanyName: identity.role === "ebanista" ? (tenant?.companyName || "") : (data.ebanistaCompanyName || ""),
+    createdAt: now,
+    updatedAt: now,
+    messages: [{
+      id: crypto.randomUUID(),
+      from: identity.role === "ebanista" ? "ebanista" : "vendedor",
+      authorId: identity.role === "ebanista" ? identity.tenantId : identity.sellerId,
+      authorName,
+      createdAt: now,
+      note: data.note || "",
+      payload: data.payload || {}
+    }]
+  };
+  handoffs.push(handoff);
+  saveHandoffs(handoffs);
+  sendJson(res, 201, handoff);
+}
+
+function handleListHandoffs(req, res) {
+  const identity = getCallerIdentity(req);
+  if (!identity) { sendJson(res, 401, { error: "No autorizado." }); return; }
+  sendJson(res, 200, handoffs.filter(h => canSeeHandoff(h, identity) && h.status !== "closed"));
+}
+
+function handleGetHandoff(req, res, id) {
+  const identity = getCallerIdentity(req);
+  if (!identity) { sendJson(res, 401, { error: "No autorizado." }); return; }
+  const h = handoffs.find(h => h.id === id);
+  if (!h || !canSeeHandoff(h, identity)) { sendJson(res, 404, { error: "No encontrado." }); return; }
+  sendJson(res, 200, h);
+}
+
+function handleClaimHandoff(req, res, id) {
+  const identity = getCallerIdentity(req);
+  if (!identity || identity.role !== "vendedor") { sendJson(res, 401, { error: "Solo vendedores pueden reclamar envíos." }); return; }
+  const h = handoffs.find(h => h.id === id);
+  if (!h) { sendJson(res, 404, { error: "No encontrado." }); return; }
+  if (h.routing.mode !== "pool" || h.routing.claimedBySellerId !== null) {
+    sendJson(res, 409, { error: "Ya fue reclamado por otro vendedor." });
+    return;
+  }
+  h.routing.claimedBySellerId = identity.sellerId;
+  h.status = "claimed";
+  h.updatedAt = new Date().toISOString();
+  saveHandoffs(handoffs);
+  sendJson(res, 200, h);
+}
+
+async function handleAddHandoffMessage(req, res, id) {
+  const identity = getCallerIdentity(req);
+  if (!identity) { sendJson(res, 401, { error: "No autorizado." }); return; }
+  const h = handoffs.find(h => h.id === id);
+  if (!h || !canSeeHandoff(h, identity)) { sendJson(res, 404, { error: "No encontrado." }); return; }
+  const body = await readBody(req);
+  const data = body ? JSON.parse(body) : {};
+  const authorName = identity.role === "ebanista"
+    ? (tenants.find(t => t.id === identity.tenantId)?.companyName || "Ebanista")
+    : (sellers.find(s => s.id === identity.sellerId)?.name || "Vendedor");
+  h.messages.push({
+    id: crypto.randomUUID(),
+    from: identity.role === "ebanista" ? "ebanista" : "vendedor",
+    authorId: identity.role === "ebanista" ? identity.tenantId : identity.sellerId,
+    authorName,
+    createdAt: new Date().toISOString(),
+    note: data.note || "",
+    payload: data.payload || {}
+  });
+  h.status = identity.role === "vendedor" ? "responded" : "pending";
+  h.updatedAt = new Date().toISOString();
+  saveHandoffs(handoffs);
+  sendJson(res, 200, h);
+}
+
+function handleCloseHandoff(req, res, id) {
+  const identity = getCallerIdentity(req);
+  if (!identity) { sendJson(res, 401, { error: "No autorizado." }); return; }
+  const h = handoffs.find(h => h.id === id);
+  if (!h || !canSeeHandoff(h, identity)) { sendJson(res, 404, { error: "No encontrado." }); return; }
+  h.status = "closed";
+  h.updatedAt = new Date().toISOString();
+  saveHandoffs(handoffs);
+  sendJson(res, 200, h);
+}
+
+function handleListSellersActive(req, res) {
+  const identity = getCallerIdentity(req);
+  if (!identity) { sendJson(res, 401, { error: "No autorizado." }); return; }
+  sendJson(res, 200, sellers.filter(s => s.status === "active").map(s => ({ id: s.id, name: s.name, company: s.company })));
+}
+
 function handleTenantAccess(req, res, id) {
   const t = tenants.find(t => t.id === id);
   if (!t) { sendJson(res, 404, { error: "No encontrado." }); return; }
@@ -1026,6 +1172,19 @@ const server = http.createServer(async (req, res) => {
     // Seller self-service (must come before the generic /api/sellers/:id block)
     if (method === "GET" && p === "/api/sellers/me")          { handleSellerSelf(req, res); return; }
     if (method === "PUT" && p === "/api/sellers/me/password") { await handleSellerSelfPassword(req, res); return; }
+    if (method === "GET" && p === "/api/sellers/active")      { handleListSellersActive(req, res); return; }
+
+    // Handoffs (envíos ebanista ↔ vendedor)
+    if (method === "POST" && p === "/api/handoffs") { await handleCreateHandoff(req, res); return; }
+    if (method === "GET"  && p === "/api/handoffs") { handleListHandoffs(req, res); return; }
+    if (parts[0] === "api" && parts[1] === "handoffs" && parts[2]) {
+      const hid = parts[2];
+      const haction = parts[3];
+      if (method === "GET"  && !haction)               { handleGetHandoff(req, res, hid); return; }
+      if (method === "POST" && haction === "claim")    { handleClaimHandoff(req, res, hid); return; }
+      if (method === "POST" && haction === "messages") { await handleAddHandoffMessage(req, res, hid); return; }
+      if (method === "POST" && haction === "close")    { handleCloseHandoff(req, res, hid); return; }
+    }
 
     // Sellers (admin)
     if (method === "GET"  && p === "/api/sellers") { handleGetSellers(req, res); return; }

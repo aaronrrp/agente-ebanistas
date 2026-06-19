@@ -81,6 +81,7 @@
         <button class="nav-item" data-view="designerView" type="button">🤖 Diseñar IA</button>
         <button class="nav-item" data-view="quoteView" type="button">📋 Cotizar</button>
         <button class="nav-item" data-view="cutsView" type="button">✂️ Cortes</button>
+        <button class="nav-item" data-view="handoffsView" type="button">📨 Envíos</button>
       </nav>
 
       <div class="sidebar-note">
@@ -528,8 +529,55 @@ Tapa superior, 120, 55, 1, 18 mm, sin canto"></textarea>
           </section>
         </div>
       </section>
+      <section id="handoffsView" class="view">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Envíos</p>
+            <h2>Cortes y cotizaciones compartidas con vendedores</h2>
+          </div>
+          <div class="button-row" id="handoffEbanistaActions">
+            <select id="handoffNewType">
+              <option value="cuts">Cortes</option>
+              <option value="quote">Cotización</option>
+            </select>
+            <select id="handoffNewTarget"><option value="">Bandeja compartida</option></select>
+            <button id="sendHandoffBtn" class="primary-btn" type="button">Enviar lo que tengo ahora</button>
+          </div>
+        </div>
+
+        <div id="handoffSellerTabs" class="login-tabs hidden" role="tablist" style="max-width:320px;margin-bottom:1rem">
+          <button class="login-tab active" data-handoff-tab="mine" type="button">Asignados a mí</button>
+          <button class="login-tab" data-handoff-tab="pool" type="button">Bandeja compartida</button>
+        </div>
+
+        <div class="content-grid admin-grid-single">
+          <section class="panel">
+            <h3>Envíos activos</h3>
+            <div id="handoffList" class="tenant-list"></div>
+          </section>
+        </div>
+      </section>
     </main>
   </div><!-- end app-shell -->
+
+  <!-- ── MODAL: thread de un envío ──────────────────────────── -->
+  <div id="handoffThreadModal" class="modal-overlay hidden" role="dialog">
+    <div class="modal-card" style="max-width:560px">
+      <button id="closeHandoffThreadBtn" class="modal-close" type="button">✕</button>
+      <h3>Envío</h3>
+      <div id="handoffThreadMessages" style="max-height:340px;overflow-y:auto;margin-bottom:1rem"></div>
+      <div class="button-row" style="margin-bottom:.75rem">
+        <button id="handoffLoadCutsBtn" class="secondary-btn" type="button">Cargar en Cortes</button>
+        <button id="handoffLoadQuoteBtn" class="secondary-btn" type="button">Cargar en Cotización</button>
+        <button id="handoffClaimBtn" class="secondary-btn hidden" type="button">Tomar este envío</button>
+        <button id="handoffCloseBtn" class="tiny-btn danger" type="button">Cerrar envío</button>
+      </div>
+      <textarea id="handoffReplyNote" rows="2" placeholder="Nota / precio / correcciones…"></textarea>
+      <div class="form-actions" style="margin-top:.5rem">
+        <button id="handoffReplyBtn" class="primary-btn" type="button">Responder con lo que está en Cortes/Cotización ahora</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ── MODAL: link de acceso del ebanista ─────────────────────── -->
   <div id="linkModal" class="modal-overlay hidden" role="dialog" aria-modal="true">

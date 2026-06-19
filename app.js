@@ -514,6 +514,12 @@ function showView(viewId) {
   els.navItems.forEach((item) => item.classList.toggle("active", item.dataset.view === viewId));
   render();
   if (viewId === "sellersView" && AUTH.mode === "admin") loadSellersFromServer();
+  if (viewId === "handoffsView") {
+    document.getElementById("handoffEbanistaActions")?.classList.toggle("hidden", AUTH.mode !== "ebanista");
+    document.getElementById("handoffSellerTabs")?.classList.toggle("hidden", AUTH.mode !== "vendedor");
+    if (AUTH.mode === "ebanista") loadHandoffSellerOptions();
+    loadHandoffsFromServer();
+  }
 }
 
 function render() {
@@ -2567,6 +2573,203 @@ document.getElementById("sellerChangePasswordBtn")?.addEventListener("click", as
   } catch { toast("Sin conexión al servidor."); }
 });
 
+// ── Handoffs (envíos ebanista ↔ vendedor) ────────────────────────────────────
+let _handoffSellerTab = "mine";
+let _activeHandoffId = null;
+let _activeHandoffData = null;
+
+function handoffAuthHeader() {
+  const token = AUTH.mode === "ebanista" ? AUTH.ebToken : AUTH.mode === "vendedor" ? AUTH.sellerToken : null;
+  return token ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
+}
+
+async function loadHandoffSellerOptions() {
+  const sel = document.getElementById("handoffNewTarget");
+  if (!sel || AUTH.mode !== "ebanista") return;
+  try {
+    const res = await fetch("/api/sellers/active", { headers: handoffAuthHeader() });
+    if (!res.ok) return;
+    const list = await res.json();
+    sel.innerHTML = '<option value="">Bandeja compartida</option>' +
+      list.map(s => `<option value="${s.id}">${escapeHtml(s.name)}${s.company ? " — " + escapeHtml(s.company) : ""}</option>`).join("");
+  } catch {}
+}
+
+function handoffSummary(h) {
+  const last = h.messages[h.messages.length - 1];
+  const typeLabel = h.type === "quote" ? "Cotización" : "Cortes";
+  const pieceCount = last?.payload?.pieces?.length;
+  const itemCount = last?.payload?.items?.length;
+  const detail = pieceCount ? `${pieceCount} pieza(s)` : itemCount ? `${itemCount} módulo(s)` : "";
+  return `${typeLabel}${detail ? " · " + detail : ""}`;
+}
+
+async function loadHandoffsFromServer() {
+  if (window.location.protocol === "file:") return;
+  const list = document.getElementById("handoffList");
+  if (!list) return;
+  try {
+    const res = await fetch("/api/handoffs", { headers: handoffAuthHeader() });
+    if (!res.ok) { list.innerHTML = '<p class="muted">Inicia sesión para ver tus envíos.</p>'; return; }
+    let items = await res.json();
+    if (AUTH.mode === "vendedor") {
+      items = items.filter(h => _handoffSellerTab === "pool"
+        ? (h.routing.mode === "pool" && h.routing.claimedBySellerId === null)
+        : (h.routing.mode === "direct" || h.routing.claimedBySellerId === AUTH.sellerId));
+    }
+    if (!items.length) { list.innerHTML = '<p class="muted" style="padding:1.5rem 0">No hay envíos aquí todavía.</p>'; return; }
+    list.innerHTML = items.map(h => {
+      const last = h.messages[h.messages.length - 1];
+      const statusLabel = { pending: "Pendiente", claimed: "Tomado", responded: "Respondido", closed: "Cerrado" }[h.status] || h.status;
+      const who = AUTH.mode === "vendedor" ? h.ebanistaCompanyName : (last?.authorName || "");
+      return `
+        <article class="tenant-card">
+          <header>
+            <div>
+              <strong>${escapeHtml(who || "Envío")}</strong>
+              <p>${handoffSummary(h)} · último mensaje de ${escapeHtml(last?.authorName || "")}</p>
+            </div>
+            <span class="status-pill ${h.status === "responded" ? "status-active" : h.status === "pending" ? "status-past_due" : "status-suspended"}">${statusLabel}</span>
+          </header>
+          <div class="card-actions">
+            <button class="secondary-btn" type="button" data-open-handoff="${h.id}">Abrir</button>
+          </div>
+        </article>`;
+    }).join("");
+  } catch { list.innerHTML = '<p class="muted">Sin conexión al servidor.</p>'; }
+}
+
+function renderHandoffThread() {
+  const h = _activeHandoffData;
+  const box = document.getElementById("handoffThreadMessages");
+  if (!h || !box) return;
+  box.innerHTML = h.messages.map(m => `
+    <div style="margin-bottom:.75rem;padding:.6rem .75rem;border-radius:8px;background:${m.from === "vendedor" ? "#f0fdf4" : "#f8fafc"};border:1px solid #e2e8f0">
+      <p style="margin:0;font-size:.75rem;font-weight:700;color:#475569">${escapeHtml(m.authorName)} · ${new Date(m.createdAt).toLocaleString()}</p>
+      <p style="margin:.25rem 0 0;font-size:.85rem">${escapeHtml(m.note || "(sin nota)")}</p>
+    </div>
+  `).join("");
+  document.getElementById("handoffClaimBtn").classList.toggle("hidden",
+    !(AUTH.mode === "vendedor" && h.routing.mode === "pool" && h.routing.claimedBySellerId === null));
+}
+
+async function openHandoffThread(id) {
+  try {
+    const res = await fetch(`/api/handoffs/${id}`, { headers: handoffAuthHeader() });
+    if (!res.ok) { toast("No se pudo abrir el envío."); return; }
+    _activeHandoffId = id;
+    _activeHandoffData = await res.json();
+    renderHandoffThread();
+    document.getElementById("handoffThreadModal").classList.remove("hidden");
+  } catch { toast("Sin conexión al servidor."); }
+}
+
+function closeHandoffThreadModal() {
+  document.getElementById("handoffThreadModal").classList.add("hidden");
+  _activeHandoffId = null; _activeHandoffData = null;
+}
+
+document.getElementById("handoffList")?.addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-open-handoff]");
+  if (btn) openHandoffThread(btn.dataset.openHandoff);
+});
+
+document.getElementById("handoffSellerTabs")?.addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-handoff-tab]");
+  if (!btn) return;
+  document.querySelectorAll("#handoffSellerTabs [data-handoff-tab]").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  _handoffSellerTab = btn.dataset.handoffTab;
+  loadHandoffsFromServer();
+});
+
+document.getElementById("closeHandoffThreadBtn")?.addEventListener("click", closeHandoffThreadModal);
+document.getElementById("handoffThreadModal")?.addEventListener("click", e => {
+  if (e.target.id === "handoffThreadModal") closeHandoffThreadModal();
+});
+
+document.getElementById("sendHandoffBtn")?.addEventListener("click", async () => {
+  const type = document.getElementById("handoffNewType").value;
+  const targetId = document.getElementById("handoffNewTarget").value;
+  const payload = type === "cuts" ? { pieces: state.editablePieces } : { items: state.draftItems };
+  const count = type === "cuts" ? state.editablePieces.length : state.draftItems.length;
+  if (!count) { toast(type === "cuts" ? "No hay piezas en Cortes para enviar." : "No hay módulos en la cotización para enviar."); return; }
+  try {
+    const res = await fetch("/api/handoffs", {
+      method: "POST", headers: handoffAuthHeader(),
+      body: JSON.stringify({
+        type,
+        routing: targetId ? { mode: "direct", sellerId: targetId } : { mode: "pool" },
+        note: `Envío de ${type === "cuts" ? "cortes" : "cotización"}`,
+        payload
+      })
+    });
+    if (res.ok) { toast("Enviado ✓"); loadHandoffsFromServer(); }
+    else toast("No se pudo enviar.");
+  } catch { toast("Sin conexión al servidor."); }
+});
+
+document.getElementById("handoffClaimBtn")?.addEventListener("click", async () => {
+  if (!_activeHandoffId) return;
+  try {
+    const res = await fetch(`/api/handoffs/${_activeHandoffId}/claim`, { method: "POST", headers: handoffAuthHeader() });
+    if (res.ok) { _activeHandoffData = await res.json(); renderHandoffThread(); loadHandoffsFromServer(); toast("Envío tomado ✓"); }
+    else { const d = await res.json().catch(() => ({})); toast(d.error || "No se pudo tomar."); }
+  } catch { toast("Sin conexión al servidor."); }
+});
+
+document.getElementById("handoffCloseBtn")?.addEventListener("click", async () => {
+  if (!_activeHandoffId) return;
+  if (!confirm("¿Cerrar este envío? Ya no aparecerá en la lista activa.")) return;
+  try {
+    await fetch(`/api/handoffs/${_activeHandoffId}/close`, { method: "POST", headers: handoffAuthHeader() });
+    closeHandoffThreadModal();
+    loadHandoffsFromServer();
+  } catch { toast("Sin conexión al servidor."); }
+});
+
+document.getElementById("handoffReplyBtn")?.addEventListener("click", async () => {
+  if (!_activeHandoffId) return;
+  const note = document.getElementById("handoffReplyNote").value.trim();
+  if (!note) { toast("Escribe una nota antes de responder."); return; }
+  const payload = _activeHandoffData.type === "cuts" ? { pieces: state.editablePieces } : { items: state.draftItems };
+  try {
+    const res = await fetch(`/api/handoffs/${_activeHandoffId}/messages`, {
+      method: "POST", headers: handoffAuthHeader(), body: JSON.stringify({ note, payload })
+    });
+    if (res.ok) {
+      _activeHandoffData = await res.json();
+      renderHandoffThread();
+      document.getElementById("handoffReplyNote").value = "";
+      loadHandoffsFromServer();
+      toast("Respuesta enviada ✓");
+    } else toast("No se pudo responder.");
+  } catch { toast("Sin conexión al servidor."); }
+});
+
+document.getElementById("handoffLoadCutsBtn")?.addEventListener("click", () => {
+  const last = _activeHandoffData?.messages?.[_activeHandoffData.messages.length - 1];
+  const pieces = last?.payload?.pieces;
+  if (!pieces || !pieces.length) { toast("Este envío no tiene piezas de cortes."); return; }
+  state.editablePieces = pieces.map(p => ({ ...p, id: crypto.randomUUID() }));
+  closeHandoffThreadModal();
+  showView("cutsView");
+  renderCutsPiecesTable();
+  recalcCutsLayout();
+  toast("Piezas cargadas en Cortes ✓");
+});
+
+document.getElementById("handoffLoadQuoteBtn")?.addEventListener("click", () => {
+  const last = _activeHandoffData?.messages?.[_activeHandoffData.messages.length - 1];
+  const items = last?.payload?.items;
+  if (!items || !items.length) { toast("Este envío no tiene módulos de cotización."); return; }
+  state.draftItems = items.map(i => ({ ...i, id: crypto.randomUUID() }));
+  closeHandoffThreadModal();
+  showView("quoteView");
+  renderDraftItems();
+  toast("Módulos cargados en Cotización ✓");
+});
+
 els.addTenantBtn.addEventListener("click", () => openEbanistaModal(null));
 document.getElementById("closeEbanistaModalBtn")?.addEventListener("click", closeEbanistaModal);
 document.getElementById("cancelEbanistaModalBtn")?.addEventListener("click", closeEbanistaModal);
@@ -3204,6 +3407,8 @@ document.getElementById("loginAdminBtn")?.addEventListener("click", async () => 
   AUTH.mode = "admin";
   sessionStorage.setItem("ebAuthMode", "admin");
   document.querySelector('[data-view="adminView"]')?.classList.remove("hidden");
+  document.querySelector('[data-view="sellersView"]')?.classList.add("hidden");
+  document.querySelector('[data-view="handoffsView"]')?.classList.add("hidden");
   showApp();
   showView("adminView");
 
@@ -3470,6 +3675,8 @@ async function tryAutoLogin() {
         if (data?.valid) {
           AUTH.mode = "admin"; AUTH.token = savedToken;
           document.querySelector('[data-view="adminView"]')?.classList.remove("hidden");
+  document.querySelector('[data-view="sellersView"]')?.classList.add("hidden");
+  document.querySelector('[data-view="handoffsView"]')?.classList.add("hidden");
           showApp();
           showView("adminView");
           syncTenantsFromServer();
@@ -3479,6 +3686,8 @@ async function tryAutoLogin() {
       } catch {}
     } else {
       AUTH.mode = "admin";
+      document.querySelector('[data-view="sellersView"]')?.classList.add("hidden");
+      document.querySelector('[data-view="handoffsView"]')?.classList.add("hidden");
       showApp();
       showView("adminView");
       return;
