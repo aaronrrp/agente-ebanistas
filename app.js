@@ -521,9 +521,12 @@ function showView(viewId) {
   render();
   if (viewId === "sellersView" && AUTH.mode === "admin") loadSellersFromServer();
   if (viewId === "handoffsView") {
-    document.getElementById("handoffEbanistaActions")?.classList.toggle("hidden", AUTH.mode !== "ebanista");
+    const canSend = AUTH.mode === "ebanista" || AUTH.mode === "vendedor";
+    document.getElementById("handoffSendActions")?.classList.toggle("hidden", !canSend);
     document.getElementById("handoffSellerTabs")?.classList.toggle("hidden", AUTH.mode !== "vendedor");
-    if (AUTH.mode === "ebanista") loadHandoffSellerOptions();
+    const sendBtn = document.getElementById("sendHandoffBtn");
+    if (sendBtn) sendBtn.textContent = AUTH.mode === "vendedor" ? "Enviar al ebanista" : "Enviar lo que tengo ahora";
+    if (canSend) loadHandoffTargetOptions();
     loadHandoffsFromServer();
   }
 }
@@ -539,6 +542,7 @@ function render() {
   renderDraftItems();
   renderManualPieces();
   renderSellers();
+  updateSendButtonLabels();
 }
 
 function renderTenantSelect() {
@@ -1621,10 +1625,17 @@ function packPiecesFFDH(pieces, sheetW, sheetH, wastePct, kerfCm = 0.5) {
     return null;
   };
 
+  const oversized = [];
   sorted.forEach(piece => {
     const pw = Math.max(1, Number(piece.width)  || 1);
     const ph = Math.max(1, Number(piece.height) || 1);
     const allowRotate = !piece.grain;
+    // Si la pieza no cabe en una lámina vacía ni normal ni rotada, no tiene sentido
+    // seguir creando láminas para ella — se reporta aparte en vez de generar láminas vacías.
+    const fitsNormal = pw <= usableW && ph <= usableH;
+    const fitsRotated = allowRotate && ph <= usableW && pw <= usableH;
+    if (!fitsNormal && !fitsRotated) { oversized.push(piece); return; }
+
     let placed = false;
     for (const sheet of sheets) {
       const r = placePiece(sheet, pw, ph, allowRotate);
@@ -1633,10 +1644,11 @@ function packPiecesFFDH(pieces, sheetW, sheetH, wastePct, kerfCm = 0.5) {
     if (!placed) {
       const sheet = { number: sheets.length + 1, shelves: [], placements: [] };
       const r = placePiece(sheet, pw, ph, allowRotate);
-      if (r) sheet.placements.push({ piece, ...r });
-      sheets.push(sheet);
+      if (r) { sheet.placements.push({ piece, ...r }); sheets.push(sheet); }
+      else oversized.push(piece); // no debería pasar (ya se filtró arriba), pero por si acaso no se crea lámina vacía
     }
   });
+  sheets.oversized = oversized;
   return sheets;
 }
 
@@ -1665,6 +1677,7 @@ function recalcCutsLayout() {
     const autoPieces = pieces.filter(p => !p.manualPlacement);
     const manualPieces = pieces.filter(p => p.manualPlacement);
     const sheets = packPiecesFFDH(autoPieces, sheetW, sheetH, wastePct, kerfCm);
+    const oversized = sheets.oversized || [];
     manualPieces.forEach(p => {
       const si = Math.max(0, Number(p.manualPlacement.sheetIndex) || 0);
       while (sheets.length <= si) sheets.push({ number: sheets.length + 1, shelves: [], placements: [] });
@@ -1787,6 +1800,14 @@ function recalcCutsLayout() {
     .map(([t, m]) => `${t}: ${m.toFixed(2)}m`)
     .join(" · ") || "Sin canto";
 
+  const allOversized = allSheetGroups.flatMap(g => g.oversized || []);
+  const oversizedWarning = allOversized.length
+    ? `<div style="background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;padding:.75rem 1rem;margin-top:10px">
+        <strong style="color:#991B1B">⚠ ${allOversized.length} pieza(s) no caben en ninguna lámina (ni rotadas) y no se dibujaron:</strong>
+        <p style="margin:.35rem 0 0;font-size:.82rem;color:#7F1D1D">${allOversized.map(p => `${escapeHtml(p.name||'')} (${p.width}×${p.height}cm)`).join(", ")}. Revisa el tamaño de lámina o esa pieza — probablemente la medida está mal capturada.</p>
+      </div>`
+    : "";
+
   els.cutsLayoutOutput.innerHTML = `
     <div class="cuts-summary" style="margin-top:14px">
       <article><span>Piezas</span><strong>${state.editablePieces.length}</strong></article>
@@ -1796,6 +1817,7 @@ function recalcCutsLayout() {
       <article><span>Cortes estimados</span><strong>${estimatedCuts}</strong></article>
       <article><span>Canto total</span><strong>${totalCantoMeters.toFixed(2)} m</strong></article>
     </div>
+    ${oversizedWarning}
     <p style="font-size:.78rem;color:#6B7280;margin:6px 0 0">Canto por grosor: ${cantoBreakdown}${totalCantoMeters > 0 ? ` · costo estimado $${totalCantoCost.toFixed(2)}` : ""}. "Cortes estimados" asume corte por estantes (N piezas por lámina ≈ N-1 cortes guillotina) — es una estimación, no la secuencia exacta de corte.</p>
     <h4 style="margin:14px 0 6px">Distribución por grosor</h4>
     ${groupsHtml}`;
@@ -2863,15 +2885,24 @@ function handoffAuthHeader() {
   return token ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
 }
 
-async function loadHandoffSellerOptions() {
+async function loadHandoffTargetOptions() {
   const sel = document.getElementById("handoffNewTarget");
-  if (!sel || AUTH.mode !== "ebanista") return;
+  if (!sel) return;
   try {
-    const res = await fetch("/api/sellers/active", { headers: handoffAuthHeader() });
-    if (!res.ok) return;
-    const list = await res.json();
-    sel.innerHTML = '<option value="">Bandeja compartida</option>' +
-      list.map(s => `<option value="${s.id}">${escapeHtml(s.name)}${s.company ? " — " + escapeHtml(s.company) : ""}</option>`).join("");
+    if (AUTH.mode === "ebanista") {
+      const res = await fetch("/api/sellers/active", { headers: handoffAuthHeader() });
+      if (!res.ok) return;
+      const list = await res.json();
+      sel.innerHTML = '<option value="">Bandeja compartida</option>' +
+        list.map(s => `<option value="${s.id}">${escapeHtml(s.name)}${s.company ? " — " + escapeHtml(s.company) : ""}</option>`).join("");
+    } else if (AUTH.mode === "vendedor") {
+      const res = await fetch("/api/tenants/active", { headers: handoffAuthHeader() });
+      if (!res.ok) return;
+      const list = await res.json();
+      sel.innerHTML = list.length
+        ? list.map(t => `<option value="${t.id}">${escapeHtml(t.companyName)}</option>`).join("")
+        : '<option value="">No hay ebanistas activos</option>';
+    }
   } catch {}
 }
 
@@ -2969,7 +3000,7 @@ document.getElementById("handoffThreadModal")?.addEventListener("click", e => {
 });
 
 function goToHandoffWithType(type) {
-  if (AUTH.mode !== "ebanista") { toast("Solo el ebanista puede enviar a vendedores desde aquí."); return; }
+  if (AUTH.mode !== "ebanista" && AUTH.mode !== "vendedor") { toast("Inicia sesión como ebanista o vendedor para enviar."); return; }
   showView("handoffsView");
   const typeSel = document.getElementById("handoffNewType");
   if (typeSel) typeSel.value = type;
@@ -2978,22 +3009,42 @@ function goToHandoffWithType(type) {
 document.getElementById("sendQuoteToSellerBtn")?.addEventListener("click", () => goToHandoffWithType("quote"));
 document.getElementById("sendCutsToSellerBtn")?.addEventListener("click", () => goToHandoffWithType("cuts"));
 
+function updateSendButtonLabels() {
+  const label = AUTH.mode === "vendedor" ? "📨 Enviar a ebanista" : "📨 Enviar a vendedor";
+  const qBtn = document.getElementById("sendQuoteToSellerBtn");
+  const cBtn = document.getElementById("sendCutsToSellerBtn");
+  if (qBtn) qBtn.textContent = label;
+  if (cBtn) cBtn.textContent = label;
+}
+
 document.getElementById("sendHandoffBtn")?.addEventListener("click", async () => {
   const type = document.getElementById("handoffNewType").value;
   const targetId = document.getElementById("handoffNewTarget").value;
   const payload = type === "cuts" ? { pieces: state.editablePieces } : { items: state.draftItems };
   const count = type === "cuts" ? state.editablePieces.length : state.draftItems.length;
   if (!count) { toast(type === "cuts" ? "No hay piezas en Cortes para enviar." : "No hay módulos en la cotización para enviar."); return; }
+
+  let body;
+  if (AUTH.mode === "vendedor") {
+    if (!targetId) { toast("Elige a qué ebanista enviar."); return; }
+    body = {
+      type,
+      ebanistaTenantId: targetId,
+      routing: { mode: "direct", sellerId: AUTH.sellerId },
+      note: `Envío de ${type === "cuts" ? "cortes" : "cotización"}`,
+      payload
+    };
+  } else {
+    body = {
+      type,
+      routing: targetId ? { mode: "direct", sellerId: targetId } : { mode: "pool" },
+      note: `Envío de ${type === "cuts" ? "cortes" : "cotización"}`,
+      payload
+    };
+  }
+
   try {
-    const res = await fetch("/api/handoffs", {
-      method: "POST", headers: handoffAuthHeader(),
-      body: JSON.stringify({
-        type,
-        routing: targetId ? { mode: "direct", sellerId: targetId } : { mode: "pool" },
-        note: `Envío de ${type === "cuts" ? "cortes" : "cotización"}`,
-        payload
-      })
-    });
+    const res = await fetch("/api/handoffs", { method: "POST", headers: handoffAuthHeader(), body: JSON.stringify(body) });
     if (res.ok) { toast("Enviado ✓"); loadHandoffsFromServer(); }
     else toast("No se pudo enviar.");
   } catch { toast("Sin conexión al servidor."); }

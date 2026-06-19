@@ -1086,6 +1086,12 @@ function handleListSellersActive(req, res) {
   sendJson(res, 200, sellers.filter(s => s.status === "active").map(s => ({ id: s.id, name: s.name, company: s.company })));
 }
 
+function handleListTenantsActive(req, res) {
+  const identity = getCallerIdentity(req);
+  if (!identity) { sendJson(res, 401, { error: "No autorizado." }); return; }
+  sendJson(res, 200, tenants.filter(isTenantActive).map(t => ({ id: t.id, companyName: t.companyName })));
+}
+
 function handleTenantAccess(req, res, id) {
   const t = tenants.find(t => t.id === id);
   if (!t) { sendJson(res, 404, { error: "No encontrado." }); return; }
@@ -1186,6 +1192,7 @@ const server = http.createServer(async (req, res) => {
     if (method === "GET" && p === "/api/sellers/me")          { handleSellerSelf(req, res); return; }
     if (method === "PUT" && p === "/api/sellers/me/password") { await handleSellerSelfPassword(req, res); return; }
     if (method === "GET" && p === "/api/sellers/active")      { handleListSellersActive(req, res); return; }
+    if (method === "GET" && p === "/api/tenants/active")      { handleListTenantsActive(req, res); return; }
 
     // Handoffs (envíos ebanista ↔ vendedor)
     if (method === "POST" && p === "/api/handoffs") { await handleCreateHandoff(req, res); return; }
