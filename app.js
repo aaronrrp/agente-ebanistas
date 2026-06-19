@@ -701,7 +701,7 @@ function renderClient() {
 
   // In ebanista mode: hide tenant switcher so they can't switch to other profiles
   const switcher = document.getElementById("tenantSwitcher");
-  if (switcher) switcher.style.display = AUTH.mode === "ebanista" ? "none" : "";
+  if (switcher) switcher.style.display = (AUTH.mode === "ebanista" || AUTH.mode === "vendedor") ? "none" : "";
 
   // Apply tenant theme only in ebanista mode — admin UI must not change when switching profiles
   if (AUTH.mode === "ebanista") {
@@ -1657,7 +1657,9 @@ function recalcCutsLayout() {
     byThickness[t].push(p);
   });
 
-  const kerfCm = (Number(tenantPrices()?.kerf_mm) || 5) / 10;
+  const kerfMmInput = document.getElementById("kerfMm");
+  const kerfCm = (Number(kerfMmInput?.value) || Number(tenantPrices()?.kerf_mm) || 5) / 10;
+  const grainDir = document.getElementById("sheetGrainDirection")?.value || "";
   const allSheetGroups = Object.entries(byThickness).map(([thickness, pieces]) => {
     // Piezas con manualPlacement no entran al auto-nesting — se reservan en su posición fija.
     const autoPieces = pieces.filter(p => !p.manualPlacement);
@@ -1697,6 +1699,21 @@ function recalcCutsLayout() {
       </div>`;
     }).join('');
 
+    const kerfPxV = Math.max(0.6, scale(kerfCm));
+    const kerfPxH = Math.max(0.6, scaleH(kerfCm));
+    const lineDir = grainDir === "horizontal" ? "horizontal" : "vertical"; // dirección de las líneas de veta de pieza, default vertical
+
+    const sheetGrainBg = (() => {
+      if (!grainDir) return "";
+      const lines = [];
+      if (grainDir === "vertical") {
+        for (let x = 8; x < SW - 4; x += 12) lines.push(`<line x1="${x}" y1="2" x2="${x}" y2="${SH-2}" stroke="#E5E7EB" stroke-width="0.6"/>`);
+      } else {
+        for (let y = 8; y < SH - 4; y += 12) lines.push(`<line x1="2" y1="${y}" x2="${SW-2}" y2="${y}" stroke="#E5E7EB" stroke-width="0.6"/>`);
+      }
+      return `<g class="sheet-grain-bg" style="pointer-events:none">${lines.join('')}</g>`;
+    })();
+
     const svgs = sheets.map((sh, si) => {
       const rects = sh.placements.map((pl, pi) => {
         const rx = 2 + scale(pl.x);
@@ -1704,12 +1721,24 @@ function recalcCutsLayout() {
         const rw = Math.max(8, scale(pl.w));
         const rh = Math.max(5, scaleH(pl.h));
         const label = (pl.piece.name || '').slice(0, 12);
-        const grainLines = pl.piece.grain ? Array.from({ length: Math.max(2, Math.floor(rw / 6)) }, (_, gi) => {
-          const gx = (rx + 3 + gi * 6).toFixed(1);
-          if (Number(gx) >= rx + rw - 1) return "";
-          return `<line x1="${gx}" y1="${(ry+1.5).toFixed(1)}" x2="${gx}" y2="${(ry+rh-1.5).toFixed(1)}" stroke="#9CA3AF" stroke-width="0.3"/>`;
-        }).join('') : '';
+        const grainLines = pl.piece.grain ? (lineDir === "vertical"
+          ? Array.from({ length: Math.max(2, Math.floor(rw / 6)) }, (_, gi) => {
+              const gx = (rx + 3 + gi * 6).toFixed(1);
+              if (Number(gx) >= rx + rw - 1) return "";
+              return `<line x1="${gx}" y1="${(ry+1.5).toFixed(1)}" x2="${gx}" y2="${(ry+rh-1.5).toFixed(1)}" stroke="#9CA3AF" stroke-width="0.3"/>`;
+            }).join('')
+          : Array.from({ length: Math.max(2, Math.floor(rh / 6)) }, (_, gi) => {
+              const gy = (ry + 3 + gi * 6).toFixed(1);
+              if (Number(gy) >= ry + rh - 1) return "";
+              return `<line x1="${(rx+1.5).toFixed(1)}" y1="${gy}" x2="${(rx+rw-1.5).toFixed(1)}" y2="${gy}" stroke="#9CA3AF" stroke-width="0.3"/>`;
+            }).join('')
+        ) : '';
+        // Franjas rojas: representan el kerf (lo que se pierde al cortar) a la derecha y abajo de cada pieza.
+        const kerfStripes = `
+          <rect x="${(rx+rw).toFixed(1)}" y="${ry.toFixed(1)}" width="${kerfPxV.toFixed(1)}" height="${rh.toFixed(1)}" fill="#EF4444" opacity="0.55"/>
+          <rect x="${rx.toFixed(1)}" y="${(ry+rh).toFixed(1)}" width="${rw.toFixed(1)}" height="${kerfPxH.toFixed(1)}" fill="#EF4444" opacity="0.55"/>`;
         return `<g class="cut-piece-g" data-piece-id="${pl.piece.id}" data-rotated="${pl.rotated ? 1 : 0}" style="cursor:move">
+          ${kerfStripes}
           <rect x="${rx.toFixed(1)}" y="${ry.toFixed(1)}" width="${rw.toFixed(1)}" height="${rh.toFixed(1)}"
           fill="${colors[pi % colors.length]}" stroke="${pl.piece.grain ? "#374151" : "#6B7280"}" stroke-width="${pl.piece.grain ? 0.9 : 0.4}"
           stroke-dasharray="${pl.manual ? "2,1.5" : "none"}" rx="1"/>
@@ -1721,7 +1750,7 @@ function recalcCutsLayout() {
       return `<div style="display:inline-block;margin:.3rem;vertical-align:top">
         <p style="font-size:.72rem;font-weight:600;margin:0 0 3px">Lámina ${sh.number} — ${thickness}</p>
         <svg width="${SW}" height="${SH}" data-thickness="${thickness}" data-sheet-index="${si}" data-sheet-w="${sheetW}" data-sheet-h="${sheetH}"
-          style="border:1px solid #D1D5DB;border-radius:5px;background:#F9FAFB;touch-action:none">${rects}</svg>
+          style="border:1px solid #D1D5DB;border-radius:5px;background:#F9FAFB;touch-action:none">${sheetGrainBg}${rects}</svg>
       </div>`;
     }).join('');
 
@@ -1791,6 +1820,21 @@ function _eventToSvgPoint(svg, e) {
   return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
 }
 
+let _lastPieceClick = null; // { pieceId, time } — usado para detectar doble clic a mano
+
+function rotatePieceManually(piece, g, svg) {
+  if (piece.grain && !confirm("Esta pieza tiene veta marcada — rotarla manualmente puede no calzar con el resto. ¿Rotar igual?")) return;
+  const sheetIndex = Number(svg.dataset.sheetIndex) || 0;
+  if (piece.manualPlacement) {
+    piece.manualPlacement.rotated = !piece.manualPlacement.rotated;
+  } else {
+    const rectEl = g.querySelector("rect");
+    const { cmX, cmY } = _svgPxToCm(svg, Number(rectEl.getAttribute("x")), Number(rectEl.getAttribute("y")));
+    piece.manualPlacement = { sheetIndex, x: cmX, y: cmY, rotated: g.dataset.rotated !== "1" };
+  }
+  recalcCutsLayout();
+}
+
 els.cutsLayoutOutput?.addEventListener("pointerdown", (e) => {
   const g = e.target.closest(".cut-piece-g");
   if (!g) return;
@@ -1800,20 +1844,24 @@ els.cutsLayoutOutput?.addEventListener("pointerdown", (e) => {
   const pt = _eventToSvgPoint(svg, e);
   _cutDrag = {
     pieceId: g.dataset.pieceId,
-    svg,
+    svg, g,
     sheetIndex: Number(svg.dataset.sheetIndex) || 0,
     startX: pt.x, startY: pt.y,
     origX: Number(rectEl.getAttribute("x")), origY: Number(rectEl.getAttribute("y")),
-    rectEl, textEl: g.querySelector("text")
+    rectEl, textEl: g.querySelector("text"), moved: false
   };
   g.setPointerCapture?.(e.pointerId);
-  e.preventDefault();
+  // No preventDefault aquí: en eventos de puntero, cancelar pointerdown suprime
+  // los eventos de mouse de compatibilidad (click/dblclick) — por eso el doble
+  // clic para rotar se detecta a mano (ver pointerup) en vez de usar "dblclick".
 });
 
 els.cutsLayoutOutput?.addEventListener("pointermove", (e) => {
   if (!_cutDrag) return;
   const pt = _eventToSvgPoint(_cutDrag.svg, e);
   const dx = pt.x - _cutDrag.startX, dy = pt.y - _cutDrag.startY;
+  if (Math.abs(dx) > 2 || Math.abs(dy) > 2) _cutDrag.moved = true;
+  if (!_cutDrag.moved) return;
   const newX = _cutDrag.origX + dx, newY = _cutDrag.origY + dy;
   _cutDrag.rectEl.setAttribute("x", newX.toFixed(1));
   _cutDrag.rectEl.setAttribute("y", newY.toFixed(1));
@@ -1826,32 +1874,30 @@ els.cutsLayoutOutput?.addEventListener("pointermove", (e) => {
 
 els.cutsLayoutOutput?.addEventListener("pointerup", (e) => {
   if (!_cutDrag) return;
-  const piece = state.editablePieces.find(p => p.id === _cutDrag.pieceId);
-  const rectEl = _cutDrag.rectEl;
+  const { pieceId, svg, g, moved, rectEl, sheetIndex } = _cutDrag;
+  const piece = state.editablePieces.find(p => p.id === pieceId);
+
+  if (!moved) {
+    // Clic sin arrastre — si es el segundo clic rápido sobre la misma pieza, rotar.
+    const now = Date.now();
+    if (_lastPieceClick && _lastPieceClick.pieceId === pieceId && now - _lastPieceClick.time < 400) {
+      _lastPieceClick = null;
+      _cutDrag = null;
+      if (piece) rotatePieceManually(piece, g, svg);
+      return;
+    }
+    _lastPieceClick = { pieceId, time: now };
+    _cutDrag = null;
+    return;
+  }
+
+  _lastPieceClick = null;
   if (piece && rectEl) {
-    const { cmX, cmY } = _svgPxToCm(_cutDrag.svg, Number(rectEl.getAttribute("x")), Number(rectEl.getAttribute("y")));
-    const wasRotated = piece.manualPlacement?.rotated ?? (_cutDrag.svg.querySelector(`[data-piece-id="${piece.id}"]`)?.dataset.rotated === "1");
-    piece.manualPlacement = { sheetIndex: _cutDrag.sheetIndex, x: cmX, y: cmY, rotated: Boolean(wasRotated) };
+    const { cmX, cmY } = _svgPxToCm(svg, Number(rectEl.getAttribute("x")), Number(rectEl.getAttribute("y")));
+    const wasRotated = piece.manualPlacement?.rotated ?? (g.dataset.rotated === "1");
+    piece.manualPlacement = { sheetIndex, x: cmX, y: cmY, rotated: Boolean(wasRotated) };
   }
   _cutDrag = null;
-  recalcCutsLayout();
-});
-
-els.cutsLayoutOutput?.addEventListener("dblclick", (e) => {
-  const g = e.target.closest(".cut-piece-g");
-  if (!g) return;
-  const piece = state.editablePieces.find(p => p.id === g.dataset.pieceId);
-  if (!piece) return;
-  if (piece.grain && !confirm("Esta pieza tiene veta marcada — rotarla manualmente puede no calzar con el resto. ¿Rotar igual?")) return;
-  const svg = g.closest("svg");
-  const sheetIndex = Number(svg.dataset.sheetIndex) || 0;
-  if (piece.manualPlacement) {
-    piece.manualPlacement.rotated = !piece.manualPlacement.rotated;
-  } else {
-    const rectEl = g.querySelector("rect");
-    const { cmX, cmY } = _svgPxToCm(svg, Number(rectEl.getAttribute("x")), Number(rectEl.getAttribute("y")));
-    piece.manualPlacement = { sheetIndex, x: cmX, y: cmY, rotated: g.dataset.rotated !== "1" };
-  }
   recalcCutsLayout();
 });
 
@@ -2921,6 +2967,16 @@ document.getElementById("closeHandoffThreadBtn")?.addEventListener("click", clos
 document.getElementById("handoffThreadModal")?.addEventListener("click", e => {
   if (e.target.id === "handoffThreadModal") closeHandoffThreadModal();
 });
+
+function goToHandoffWithType(type) {
+  if (AUTH.mode !== "ebanista") { toast("Solo el ebanista puede enviar a vendedores desde aquí."); return; }
+  showView("handoffsView");
+  const typeSel = document.getElementById("handoffNewType");
+  if (typeSel) typeSel.value = type;
+  document.getElementById("handoffNewTarget")?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+}
+document.getElementById("sendQuoteToSellerBtn")?.addEventListener("click", () => goToHandoffWithType("quote"));
+document.getElementById("sendCutsToSellerBtn")?.addEventListener("click", () => goToHandoffWithType("cuts"));
 
 document.getElementById("sendHandoffBtn")?.addEventListener("click", async () => {
   const type = document.getElementById("handoffNewType").value;
