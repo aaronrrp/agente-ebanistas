@@ -3625,7 +3625,7 @@ document.getElementById("loginAdminBtn")?.addEventListener("click", async () => 
   AUTH.mode = "admin";
   sessionStorage.setItem("ebAuthMode", "admin");
   document.querySelector('[data-view="adminView"]')?.classList.remove("hidden");
-  document.querySelector('[data-view="sellersView"]')?.classList.add("hidden");
+  document.querySelector('[data-view="sellersView"]')?.classList.remove("hidden");
   document.querySelector('[data-view="handoffsView"]')?.classList.add("hidden");
   showApp();
   showView("adminView");
@@ -3893,8 +3893,8 @@ async function tryAutoLogin() {
         if (data?.valid) {
           AUTH.mode = "admin"; AUTH.token = savedToken;
           document.querySelector('[data-view="adminView"]')?.classList.remove("hidden");
-  document.querySelector('[data-view="sellersView"]')?.classList.add("hidden");
-  document.querySelector('[data-view="handoffsView"]')?.classList.add("hidden");
+          document.querySelector('[data-view="sellersView"]')?.classList.remove("hidden");
+          document.querySelector('[data-view="handoffsView"]')?.classList.add("hidden");
           showApp();
           showView("adminView");
           syncTenantsFromServer();
@@ -3904,7 +3904,7 @@ async function tryAutoLogin() {
       } catch {}
     } else {
       AUTH.mode = "admin";
-      document.querySelector('[data-view="sellersView"]')?.classList.add("hidden");
+      document.querySelector('[data-view="sellersView"]')?.classList.remove("hidden");
       document.querySelector('[data-view="handoffsView"]')?.classList.add("hidden");
       showApp();
       showView("adminView");
