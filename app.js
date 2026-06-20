@@ -846,6 +846,7 @@ function openEbanistaModal(editId) {
   document.getElementById("em_fee").value = t?.monthlyFee || "";
   document.getElementById("em_margin").value = t?.margin ?? 30;
   document.getElementById("em_expires").value = t?.expiresAt || addDays(30);
+  document.getElementById("em_password").value = "";
   // Theme fields
   const theme = t?.theme || {};
   document.getElementById("em_accentColor").value       = theme.accentColor       || "#6366F1";
@@ -937,23 +938,24 @@ async function saveEbanistaFromModal() {
     }
   };
 
-  const isNew = !existing;
   if (existing) { Object.assign(existing, tenantData); }
   else { state.tenants.unshift(tenantData); state.selectedTenantId = id; }
   save(); render();
 
-  // Server sync: new tenants must be awaited — the server is the one generating
-  // and hashing the password, so we need its response to show it to the admin.
+  // La contraseña en texto plano nunca se guarda en tenantData/state — solo se manda
+  // al servidor en este request. Si se deja en blanco, el servidor genera una (ebanista
+  // nuevo) o no toca la actual (ebanista existente).
+  const newPassword = document.getElementById("em_password")?.value.trim() || "";
+  const bodyWithPassword = newPassword ? { ...tenantData, password: newPassword } : tenantData;
+
+  // Server sync: siempre se espera la respuesta — el servidor es el que genera/cambia
+  // y hashea la contraseña, así que su respuesta es la única forma de mostrársela al admin.
   let passwordPlain = "";
   if (window.location.protocol !== "file:" && AUTH.token) {
-    if (isNew) {
-      try {
-        const res = await fetch(`/api/tenants/${id}`, { method: "PUT", headers: adminApiHeader(), body: JSON.stringify(tenantData) });
-        if (res.ok) { const data = await res.json(); passwordPlain = data.passwordPlain || ""; }
-      } catch {}
-    } else {
-      fetch(`/api/tenants/${id}`, { method: "PUT", headers: adminApiHeader(), body: JSON.stringify(tenantData) }).catch(() => {});
-    }
+    try {
+      const res = await fetch(`/api/tenants/${id}`, { method: "PUT", headers: adminApiHeader(), body: JSON.stringify(bodyWithPassword) });
+      if (res.ok) { const data = await res.json(); passwordPlain = data.passwordPlain || ""; }
+    } catch {}
   }
 
   const link = getTenantLink(tenantData);

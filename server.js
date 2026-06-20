@@ -838,25 +838,34 @@ async function handleUpdateTenant(req, res, id) {
   if (!requireAdmin(req, res)) return;
   const body = await readBody(req);
   const data = body ? JSON.parse(body) : {};
-  delete data.passwordHash; delete data.passwordSalt; // password solo cambia via set-password
+  delete data.passwordHash; delete data.passwordSalt; // hash siempre se deriva de data.password, nunca se acepta directo
   const idx = tenants.findIndex(t => t.id === id);
   if (idx === -1) {
     // Upsert: this is the path the UI actually uses to create a tenant
     // (it PUTs a client-generated id instead of calling POST /api/tenants).
     const tenant = { ...data, id };
     if (!tenant.accessCode) tenant.accessCode = makeCode(tenant.companyName || "ebanista");
-    const passwordPlain = generatePassword();
+    const passwordPlain = (data.password && String(data.password).trim()) || generatePassword();
     const { salt, hash } = hashPassword(passwordPlain);
     tenant.passwordSalt = salt;
     tenant.passwordHash = hash;
+    delete tenant.password;
     tenants.push(tenant);
     saveTenants(tenants);
     sendJson(res, 200, { ...publicTenant(tenant), passwordPlain });
     return;
   }
+  let passwordPlain;
+  if (data.password && String(data.password).trim()) {
+    passwordPlain = String(data.password).trim();
+    const { salt, hash } = hashPassword(passwordPlain);
+    tenants[idx].passwordSalt = salt;
+    tenants[idx].passwordHash = hash;
+  }
+  delete data.password;
   tenants[idx] = { ...tenants[idx], ...data, id };
   saveTenants(tenants);
-  sendJson(res, 200, publicTenant(tenants[idx]));
+  sendJson(res, 200, passwordPlain ? { ...publicTenant(tenants[idx]), passwordPlain } : publicTenant(tenants[idx]));
 }
 
 function handleToggleTenant(req, res, id) {
