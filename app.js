@@ -2920,6 +2920,7 @@ function renderSellers() {
   const wrap = document.getElementById("sellerListWrap");
   const selfPanel = document.getElementById("sellerSelfPanel");
   if (!wrap || !selfPanel) return;
+  document.getElementById("addSellerBtn")?.classList.toggle("hidden", AUTH.mode !== "admin");
 
   if (AUTH.mode === "vendedor") {
     wrap.classList.add("hidden");
