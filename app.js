@@ -524,6 +524,7 @@ function showView(viewId) {
   if (viewId === "sellersView" && AUTH.mode === "admin") loadSellersFromServer();
   if (viewId === "quoteView" && AUTH.mode === "vendedor") loadSellerQuoteClientOptions();
   if (viewId === "quoteView" && AUTH.mode === "ebanista") loadMaterialCatalogOptions();
+  if (viewId === "cutsView" && (AUTH.mode === "ebanista" || AUTH.mode === "vendedor")) loadSheetCatalogOptions();
   if (viewId === "handoffsView") {
     const canSend = AUTH.mode === "ebanista" || AUTH.mode === "vendedor";
     document.getElementById("handoffSendActions")?.classList.toggle("hidden", !canSend);
@@ -1967,6 +1968,9 @@ function recalcCutsLayout() {
     .map(([t, m]) => `${t}: ${m.toFixed(2)}m`)
     .join(" · ") || "Sin canto";
 
+  // Guardado para "Enviar materiales a cotización" — evita recalcular el layout otra vez.
+  state.lastCutsSummary = { totalSheets, cantoMetersByThickness, cantoPriceByThickness };
+
   const allOversized = allSheetGroups.flatMap(g => g.oversized || []);
   const oversizedWarning = allOversized.length
     ? `<div style="background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;padding:.75rem 1rem;margin-top:10px">
@@ -2233,25 +2237,14 @@ async function sendToAI() {
     if (items.length > 0) {
       const normalized = items.map(it => normalizeAssistantItem(it, message));
       state.lastDesignItems = normalized;
-      const aiActions = Array.isArray(data.actions) ? data.actions : [];
-      const wantsCuts  = aiActions.includes("calculate_cuts");
-      const wantsQuote = aiActions.includes("add_to_quote") || !wantsCuts;
+      // Un mueble ya no se "cotiza" directo (Cotizar es solo materiales) — se manda a
+      // Cortes para sacarle las piezas; de ahí el ebanista envía láminas/canto a la cotización.
       pending.appendChild(document.createElement("br"));
-      if (wantsQuote) {
-        const btn = document.createElement("button");
-        btn.className = "chat-quote-btn";
-        btn.textContent = "📋 Enviar a cotización";
-        btn.onclick = () => { addItemsToQuote(normalized); showView("quoteView"); };
-        pending.appendChild(btn);
-      }
-      if (wantsCuts) {
-        const btn = document.createElement("button");
-        btn.className = "chat-quote-btn";
-        if (wantsQuote) btn.style.marginLeft = "6px";
-        btn.textContent = "✂️ Ir a cortes";
-        btn.onclick = () => { addItemsToQuote(normalized); showView("cutsView"); renderCuts(); };
-        pending.appendChild(btn);
-      }
+      const cutsBtn = document.createElement("button");
+      cutsBtn.className = "chat-quote-btn";
+      cutsBtn.textContent = "✂️ Ir a cortes";
+      cutsBtn.onclick = () => { addItemsToQuote(normalized); showView("cutsView"); renderCuts(); };
+      pending.appendChild(cutsBtn);
     }
 
     // ── IA agrega materiales al carrito de Cotizar ──────────────────────────
@@ -3322,20 +3315,66 @@ document.getElementById("generateSellerQuoteBtn")?.addEventListener("click", () 
 document.getElementById("sendQuoteToSellerBtn")?.addEventListener("click", () => goToHandoffWithType("quote"));
 document.getElementById("sendCutsToSellerBtn")?.addEventListener("click", () => goToHandoffWithType("cuts"));
 
+document.getElementById("sendCutsToQuoteBtn")?.addEventListener("click", () => {
+  if (AUTH.mode !== "ebanista") { toast("Esta opción es solo para la cotización del ebanista.", "error"); return; }
+  if (!state.editablePieces.length) { toast("No hay piezas en Cortes para enviar.", "error"); return; }
+  if (!state.lastCutsSummary) recalcCutsLayout();
+  const summary = state.lastCutsSummary || {};
+  const totalSheets = summary.totalSheets || 0;
+  const cantoMetersByThickness = summary.cantoMetersByThickness || {};
+  const cantoPriceByThickness = summary.cantoPriceByThickness || {};
+  let added = 0;
+
+  if (totalSheets > 0) {
+    if (state.cutsSheetPrice != null) {
+      state.materialCartItems.push({
+        id: crypto.randomUUID(),
+        description: state.cutsSheetLabel || "Lámina",
+        qty: totalSheets,
+        unit: "Unidades",
+        unitPrice: state.cutsSheetPrice
+      });
+      added++;
+    } else {
+      toast("Elige una lámina de precios del mercado arriba para incluir su costo.", "error");
+    }
+  }
+
+  Object.entries(cantoMetersByThickness).forEach(([thickness, meters]) => {
+    if (meters > 0.01) {
+      state.materialCartItems.push({
+        id: crypto.randomUUID(),
+        description: `Canto ${thickness}`,
+        qty: Math.round(meters * 100) / 100,
+        unit: "m",
+        unitPrice: cantoPriceByThickness[thickness] || 0
+      });
+      added++;
+    }
+  });
+
+  if (!added) { toast("Nada para enviar — revisa la lámina elegida y el canto de las piezas.", "error"); return; }
+  renderDraftItems();
+  toast(`${added} línea(s) de materiales enviada(s) a la cotización ✓`);
+  showView("quoteView");
+});
+
 function updateSendButtonLabels() {
   const label = AUTH.mode === "vendedor" ? "📨 Enviar a ebanista" : "📨 Enviar a vendedor";
   const qBtn = document.getElementById("sendQuoteToSellerBtn");
   const cBtn = document.getElementById("sendCutsToSellerBtn");
   if (qBtn) qBtn.textContent = label;
   if (cBtn) cBtn.textContent = label;
+  document.getElementById("sendCutsToQuoteBtn")?.classList.toggle("hidden", AUTH.mode !== "ebanista");
 }
 
 document.getElementById("sendHandoffBtn")?.addEventListener("click", async () => {
   const type = document.getElementById("handoffNewType").value;
   const targetId = document.getElementById("handoffNewTarget").value;
-  const payload = type === "cuts" ? { pieces: state.editablePieces } : { items: state.draftItems };
-  const count = type === "cuts" ? state.editablePieces.length : state.draftItems.length;
-  if (!count) { toast(type === "cuts" ? "No hay piezas en Cortes para enviar." : "No hay módulos en la cotización para enviar."); return; }
+  const quoteItems = AUTH.mode === "vendedor" ? state.sellerQuoteItems : state.materialCartItems;
+  const payload = type === "cuts" ? { pieces: state.editablePieces } : { items: quoteItems };
+  const count = type === "cuts" ? state.editablePieces.length : quoteItems.length;
+  if (!count) { toast(type === "cuts" ? "No hay piezas en Cortes para enviar." : "No hay materiales en la cotización para enviar."); return; }
 
   let body;
   if (AUTH.mode === "vendedor") {
@@ -3518,52 +3557,58 @@ els.chatInput.addEventListener("keydown", event => {
 // furnitureBrief / interpretFurnitureBtn / aiAddFurnitureBtn / aiAddAndCutsBtn removed v22
 
 // ── Materiales en cotización (ebanista) — reemplaza la creación de módulos ──
+// Llaves del catálogo estándar que NO son materiales que se agreguen como línea
+// (son ajustes de cálculo o ya tienen su propio campo en la cotización).
+const NON_MATERIAL_PRICE_KEYS = ["kerf_mm", "install_hour", "transport_base", "transport_km"];
+
+function catalogEntryFromValue(val) {
+  if (!val) return null;
+  const prices = tenantPrices();
+  const names = prices._names || {};
+  if (val.startsWith("std:")) {
+    const key = val.slice(4);
+    return { description: names[key] || defaultPriceNames[key] || key, unitPrice: Number(prices[key]) || 0 };
+  }
+  if (val.startsWith("custom:")) {
+    const c = (prices.customItems || [])[Number(val.slice(7))];
+    if (c) return { description: c.name, unitPrice: Number(c.price) || 0 };
+  }
+  return null;
+}
+
 function loadMaterialCatalogOptions() {
   const sel = document.getElementById("materialCatalogSelect");
   if (!sel) return;
   const prices = tenantPrices();
   const names = prices._names || {};
-  const standardKeys = Object.keys(defaultGlobalPrices);
+  const standardKeys = Object.keys(defaultGlobalPrices).filter(k => !NON_MATERIAL_PRICE_KEYS.includes(k));
   const customItems = prices.customItems || [];
   const opts = standardKeys
     .filter(k => typeof prices[k] === "number")
     .map(k => `<option value="std:${k}">${escapeHtml(names[k] || defaultPriceNames[k] || k)} — $${Number(prices[k]).toFixed(2)}</option>`)
     .concat(customItems.map((c, i) => `<option value="custom:${i}">${escapeHtml(c.name)} — $${Number(c.price).toFixed(2)}</option>`));
   sel.innerHTML = '<option value="">— Elegir material —</option>' + opts.join("");
+  document.getElementById("materialPriceDisplay").textContent = "—";
 }
 
 document.getElementById("materialCatalogSelect")?.addEventListener("change", (e) => {
-  const val = e.target.value;
-  if (!val) return;
-  const prices = tenantPrices();
-  const names = prices._names || {};
-  let label = "", price = 0;
-  if (val.startsWith("std:")) {
-    const key = val.slice(4);
-    label = names[key] || defaultPriceNames[key] || key;
-    price = Number(prices[key]) || 0;
-  } else if (val.startsWith("custom:")) {
-    const c = (prices.customItems || [])[Number(val.slice(7))];
-    if (c) { label = c.name; price = Number(c.price) || 0; }
-  }
-  document.getElementById("materialManualDesc").value = label;
-  document.getElementById("materialPrice").value = price;
+  const entry = catalogEntryFromValue(e.target.value);
+  document.getElementById("materialPriceDisplay").textContent = entry ? `$${entry.unitPrice.toFixed(2)}` : "—";
 });
 
 document.getElementById("addMaterialBtn")?.addEventListener("click", () => {
-  const description = document.getElementById("materialManualDesc").value.trim();
-  if (!description) { toast("Elige un material del catálogo o escribe una descripción.", "error"); return; }
+  const entry = catalogEntryFromValue(document.getElementById("materialCatalogSelect").value);
+  if (!entry) { toast("Elige un material de la lista de precios del mercado.", "error"); return; }
   state.materialCartItems.push({
     id: crypto.randomUUID(),
-    description,
+    description: entry.description,
     qty: Number(document.getElementById("materialQty").value) || 1,
     unit: document.getElementById("materialUnit").value,
-    unitPrice: Number(document.getElementById("materialPrice").value) || 0
+    unitPrice: entry.unitPrice
   });
   document.getElementById("materialCatalogSelect").value = "";
-  document.getElementById("materialManualDesc").value = "";
+  document.getElementById("materialPriceDisplay").textContent = "—";
   document.getElementById("materialQty").value = "1";
-  document.getElementById("materialPrice").value = "0";
   renderDraftItems();
   toast("Material agregado ✓");
 });
@@ -3701,6 +3746,24 @@ document.getElementById("parseManualPieceBtn")?.addEventListener("click", () => 
 });
 document.getElementById("mp_naturalInput")?.addEventListener("keydown", (e) => {
   if (e.key === "Enter") document.getElementById("parseManualPieceBtn").click();
+});
+
+// ── Dictado por voz para la descripción en una sola línea ───────────────────
+const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+document.getElementById("mp_voiceBtn")?.addEventListener("click", () => {
+  if (!SpeechRecognitionImpl) { toast("Tu navegador no soporta dictado por voz — usa Chrome o Edge.", "error"); return; }
+  const input = document.getElementById("mp_naturalInput");
+  const btn = document.getElementById("mp_voiceBtn");
+  const recognition = new SpeechRecognitionImpl();
+  recognition.lang = "es";
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+  btn.textContent = "🔴";
+  btn.disabled = true;
+  recognition.onresult = (e) => { input.value = e.results[0][0].transcript; };
+  recognition.onerror = () => toast("No se entendió el audio, intenta otra vez.", "error");
+  recognition.onend = () => { btn.textContent = "🎤"; btn.disabled = false; };
+  recognition.start();
 });
 
 // ── Editable cuts table — inline editing ──────────────────────────────────
@@ -3851,27 +3914,63 @@ document.getElementById("clearDraftBtn")?.addEventListener("click", () => {
 // CSV export
 document.getElementById("exportCutsBtn")?.addEventListener("click", exportCutsCSV);
 
-function applySheetPreset() {
-  if (els.sheetPreset.value === "custom") {
-    if (state.draftItems.length || state.manualPieces.length) renderCuts();
-    return;
-  }
-  const [width, height] = els.sheetPreset.value.split(",");
-  els.sheetWidth.value = width;
-  els.sheetHeight.value = height;
-  if (state.draftItems.length || state.manualPieces.length) renderCuts();
+// ── Lámina: catálogo de precios del mercado (estándar + items "madera" del ebanista) ──
+const STANDARD_SHEET_DIMENSIONS_CM = { melamina_std: [244, 122], melamina_lg: [275, 183] };
+
+function loadSheetCatalogOptions() {
+  const sel = els.sheetPreset;
+  if (!sel) return;
+  const prevVal = sel.value;
+  const prices = tenantPrices();
+  const names = prices._names || {};
+  const customItems = prices.customItems || [];
+  const opts = Object.keys(STANDARD_SHEET_DIMENSIONS_CM)
+    .filter(k => typeof prices[k] === "number")
+    .map(k => `<option value="std:${k}">${escapeHtml(names[k] || defaultPriceNames[k] || k)} — $${Number(prices[k]).toFixed(2)}</option>`)
+    .concat(customItems
+      .map((c, i) => ({ c, i }))
+      .filter(({ c }) => (c.category || "madera") === "madera")
+      .map(({ c, i }) => `<option value="custom:${i}">${escapeHtml(c.name)} — $${Number(c.price).toFixed(2)}</option>`))
+    .concat(['<option value="manual">Personalizado (sin precio de catálogo)</option>']);
+  sel.innerHTML = opts.join("");
+  if (prevVal && sel.querySelector(`option[value="${prevVal}"]`)) sel.value = prevVal;
+  applySheetCatalogSelection(false);
 }
 
-els.sheetPreset.addEventListener("change", () => {
-  if (els.sheetPreset.value === "custom") {
-    els.sheetWidth.focus();
+function applySheetCatalogSelection(triggerRecalc = true) {
+  const val = els.sheetPreset?.value;
+  const display = document.getElementById("sheetPriceDisplay");
+  if (!val || val === "manual") {
+    state.cutsSheetPrice = null;
+    state.cutsSheetLabel = "";
+    if (display) display.textContent = "—";
     return;
   }
-  applySheetPreset();
-});
+  const prices = tenantPrices();
+  const names = prices._names || {};
+  if (val.startsWith("std:")) {
+    const key = val.slice(4);
+    const dims = STANDARD_SHEET_DIMENSIONS_CM[key];
+    if (dims) { els.sheetWidth.value = dims[0]; els.sheetHeight.value = dims[1]; }
+    state.cutsSheetPrice = Number(prices[key]) || 0;
+    state.cutsSheetLabel = names[key] || defaultPriceNames[key] || key;
+  } else if (val.startsWith("custom:")) {
+    const c = (prices.customItems || [])[Number(val.slice(7))];
+    if (c) {
+      state.cutsSheetPrice = Number(c.price) || 0;
+      state.cutsSheetLabel = c.name;
+      const m = String(c.name).match(/(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+(?:[.,]\d+)?)/i);
+      if (m) { els.sheetWidth.value = Number(m[1].replace(",", ".")); els.sheetHeight.value = Number(m[2].replace(",", ".")); }
+    }
+  }
+  if (display) display.textContent = state.cutsSheetPrice != null ? `$${state.cutsSheetPrice.toFixed(2)}` : "—";
+  if (triggerRecalc && state.editablePieces.length) recalcCutsLayout();
+}
+
+els.sheetPreset.addEventListener("change", () => applySheetCatalogSelection(true));
 
 els.applySheetPresetBtn.addEventListener("click", () => {
-  applySheetPreset();
+  if (state.editablePieces.length) recalcCutsLayout();
 });
 
 els.generateCutsBtn.addEventListener("click", renderCuts);

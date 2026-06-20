@@ -335,20 +335,17 @@
                 <div class="subsection">
                   <h4>Agregar material</h4>
                   <div class="form-grid compact-grid">
-                    <label class="span-2">Del catálogo de precios
+                    <label class="span-2">Material (de precios del mercado)
                       <select id="materialCatalogSelect"><option value="">— Elegir material —</option></select>
-                    </label>
-                    <label class="span-2">O descripción manual (si no está en el catálogo)
-                      <input id="materialManualDesc" placeholder="Ej: Bisagra cierre suave especial">
                     </label>
                     <label>Cantidad<input id="materialQty" type="number" min="0.01" step="0.5" value="1"></label>
                     <label>Unidad
                       <select id="materialUnit"><option>Unidades</option><option>m²</option><option>m</option><option>kg</option><option>par</option></select>
                     </label>
-                    <label>Precio unitario USD<input id="materialPrice" type="number" min="0" step="0.01" value="0"></label>
+                    <p class="span-2" style="margin:0;font-size:.82rem;color:#6B7280">Precio unitario: <strong id="materialPriceDisplay">—</strong> (tomado de precios del mercado)</p>
                     <button id="addMaterialBtn" class="secondary-btn span-2" type="button">＋ Agregar material</button>
                   </div>
-                  <p class="form-help" style="margin-top:8px">También puedes pedírselo a la IA en el chat de Diseñar IA: "agrega 6 bisagras de cierre suave".</p>
+                  <p class="form-help" style="margin-top:8px">¿No está en la lista? Agrégalo primero en Precios del mercado. También puedes pedírselo a la IA en el chat de Diseñar IA: "agrega 6 bisagras de cierre suave".</p>
                 </div>
               </div>
 
@@ -434,6 +431,7 @@
             <button id="generateCutsBtn" class="primary-btn" type="button">Calcular cortes</button>
             <button id="exportCutsBtn" class="secondary-btn" type="button">⬇ Exportar CSV</button>
             <button id="resetCutPlacementsBtn" class="secondary-btn" type="button">↺ Reiniciar posiciones automáticas</button>
+            <button id="sendCutsToQuoteBtn" class="secondary-btn" type="button">📋 Enviar materiales a cotización</button>
             <button id="sendCutsToSellerBtn" class="secondary-btn" type="button">📨 Enviar a vendedor</button>
           </div>
         </div>
@@ -447,14 +445,10 @@
           <section class="panel">
             <h3>Tamaño de lámina</h3>
             <div class="form-grid">
-              <label>Preset de lámina
-                <select id="sheetPreset">
-                  <option value="244,122">244 x 122 cm</option>
-                  <option value="275,183">275 x 183 cm</option>
-                  <option value="305,183">305 x 183 cm</option>
-                  <option value="custom">Personalizado</option>
-                </select>
+              <label class="span-2">Lámina (de precios del mercado)
+                <select id="sheetPreset"></select>
               </label>
+              <p class="span-2" style="margin:0;font-size:.82rem;color:#6B7280">Precio: <strong id="sheetPriceDisplay">—</strong> · este precio se usa al enviar los cortes a la cotización</p>
               <label>Desperdicio %
                 <input id="wastePercent" type="number" min="0" max="50" step="1" value="12">
               </label>
@@ -474,7 +468,7 @@
                   <option value="horizontal">Horizontal (a lo ancho)</option>
                 </select>
               </label>
-              <button id="applySheetPresetBtn" class="secondary-btn span-2" type="button">Aplicar tamaño de lámina</button>
+              <button id="applySheetPresetBtn" class="secondary-btn span-2" type="button">Recalcular con este tamaño</button>
             </div>
 
             <div class="cut-note">
@@ -510,9 +504,10 @@
                 <button id="addManualPieceBtn" class="secondary-btn span-2" type="button">＋ Agregar pieza a Cortes</button>
               </div>
 
-              <p class="form-help" style="margin-top:10px;margin-bottom:4px">O descríbela en una sola línea:</p>
+              <p class="form-help" style="margin-top:10px;margin-bottom:4px">O descríbela en una sola línea (escribiendo o hablando):</p>
               <div style="display:flex;gap:6px">
                 <input id="mp_naturalInput" placeholder="Ej: 4 piezas con 40 de largo, 30 de ancho, canto de 1 lado corto">
+                <button id="mp_voiceBtn" class="secondary-btn" type="button" title="Dictar por voz">🎤</button>
                 <button id="parseManualPieceBtn" class="secondary-btn" type="button">Crear</button>
               </div>
             </div>
