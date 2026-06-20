@@ -319,17 +319,22 @@ un precio exacto, estima uno razonable y dilo en assistantText. Cada material:
 { "description": "Bisagra cierre suave", "qty": 6, "unit": "Unidades", "unitPrice": 7.00 }
 
 ══ AGREGAR PIEZAS A CORTES ══
-Si el usuario pide crear piezas para la lista de cortes (ej: "necesito 3 piezas de 50 de largo por 50 de
-ancho, canto en 1 ancho y 2 largos", "agrega una pieza 90x55 con veta al largo"), NO generes un mueble —
-responde con actions: ["add_pieces"] y un array "pieces". El número de piezas puede venir en dígito o en
-palabra ("cuatro piezas" = qty 4, comun en dictado por voz). Cada número SIN unidad explícita = milímetros
-(convierte tú a cm dividiendo entre 10); si dice "cm" explícito, úsalo directo. "Largo" y "ancho" son las dos
-dimensiones de la pieza (no necesariamente largo > ancho). Los cantos van en 4 posibles lados: dos lados
-"largo" (largo1/largo2) y dos lados "ancho" (ancho1/ancho2, el nombre que usa la UI para lo que antes se
-llamaba "corto") — si el usuario dice "canto en 1 ancho" marca solo ancho1; "2 largos" marca largo1 y largo2;
-"canto en los anchos"/"ambos anchos" marca ancho1 y ancho2; "todos los cantos" marca los 4. Veta: boolean + dirección
-"largo" o "ancho" (a qué eje corre la veta), default "largo" si solo dice "con veta" sin especificar. Cada pieza:
-{ "furniture": "", "name": "Pieza", "largo": 50, "ancho": 50, "qty": 3, "thickness": "18 mm",
+Si el usuario pide crear piezas para la lista de cortes (ej: "necesito 3 piezas de 900 de largo por 550 de
+ancho, grosor 15mm, canto en 1 ancho y 2 largos", "agrega una pieza 900x550 con veta al largo"), NO generes
+un mueble — responde con actions: ["add_pieces"] y un array "pieces". El número de piezas puede venir en
+dígito o en palabra ("cuatro piezas" = qty 4, comun en dictado por voz). Cortes trabaja TODO en milímetros:
+cada número SIN unidad explícita ya está en mm (no lo dividas ni conviertas); si dice "cm"/"centímetros"
+explícito, multiplica por 10 antes de poner el valor en el JSON. "Largo" y "ancho" son las dos dimensiones de
+la pieza (no necesariamente largo > ancho). Grosor de la pieza: si dice "grosor de 15"/"15mm de grosor"/
+"15 milímetros de grosor", usa el valor más cercano entre 15|18|25|36 → "15 mm"|"18 mm"|"25 mm"|"36 mm doble
+laminado" (default "18 mm" si no lo menciona). Canto: grosor del canto si lo menciona ("canto de 0.45mm",
+"1 milímetro de canto") → el más cercano entre 0.45|1.00|2.00 → "0.45mm"|"1.00mm"|"2.00mm" (default "1.00mm").
+Los cantos van en 4 posibles lados: dos lados "largo" (largo1/largo2) y dos lados "ancho" (ancho1/ancho2, el
+nombre que usa la UI para lo que antes se llamaba "corto") — si el usuario dice "canto en 1 ancho" marca solo
+ancho1; "2 largos" marca largo1 y largo2; "canto en los anchos"/"ambos anchos" marca ancho1 y ancho2; "todos
+los cantos" marca los 4. Veta: boolean + dirección "largo" o "ancho" (a qué eje corre la veta), default
+"largo" si solo dice "con veta" sin especificar. Cada pieza:
+{ "furniture": "", "name": "Pieza", "largo": 900, "ancho": 550, "qty": 3, "thickness": "15 mm",
   "cantoSides": { "l1": false, "l2": false, "c1": true, "c2": false }, "cantoThickness": "1.00mm",
   "grain": false, "grainDirection": "largo" }
 

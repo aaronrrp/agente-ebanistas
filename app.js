@@ -1488,20 +1488,22 @@ function renderEbanistaMaterialQuotePaper(quote, tenant) {
   `;
 }
 
+// item llega en cm (pipeline de muebles de IA) — Cortes trabaja en mm, así que se
+// convierte aquí, en el límite entre los dos mundos.
 function piece(item, name, width, height, qty = 1) {
   const edgeSides = computeEdgeSides(name, item.edgeBanding);
-  const substrate = applyEdgeThicknessToDimensions(width, height, edgeSides);
+  const substrate = applyEdgeThicknessToDimensions(width * 10, height * 10, edgeSides);
   return Array.from({ length: qty }, (_, index) => ({
     id: crypto.randomUUID(),
     furniture: item.name,
     name: qty > 1 ? `${name} ${index + 1}` : name,
-    width: roundCm(substrate.width),
-    height: roundCm(substrate.height),
+    width: roundMm(substrate.width),
+    height: roundMm(substrate.height),
     thickness: item.melamineThickness,
     edgeSides,
     edge: describeEdgeSides(edgeSides),
     grain: false,
-    area: roundCm(substrate.width * substrate.height)
+    area: roundMm(substrate.width * substrate.height)
   }));
 }
 
@@ -1516,6 +1518,14 @@ function thicknessCm(value) {
 
 function safeDimension(value) {
   return Math.max(0.1, roundCm(value));
+}
+
+// Cortes trabaja en mm (a diferencia del pipeline de muebles de IA, que sigue en cm).
+function roundMm(value) {
+  return Math.max(0, Math.round(Number(value || 0) * 10) / 10);
+}
+function safeDimensionMm(value) {
+  return Math.max(1, roundMm(value));
 }
 
 const EDGE_THICKNESS_OPTIONS = ["0.45mm", "1.00mm", "2.00mm"];
@@ -1554,14 +1564,15 @@ function describeEdgeSides(edgeSides) {
   return `Canto en ${sides.map(([, label]) => label).join("/")} (${sides.map(([key]) => edgeSides[key]).join("/")})`;
 }
 
-// Resta el grosor de canto (mm→cm) de los lados que lo llevan. width pierde left+right, height pierde top+bottom.
+// Resta el grosor de canto de los lados que lo llevan. width pierde left+right, height pierde top+bottom.
+// width/height y el resultado están en mm — igual que el grosor de canto ("1.00mm" etc).
 function applyEdgeThicknessToDimensions(width, height, edgeSides) {
   const mm = (label) => label ? Number(String(label).replace("mm", "")) : 0;
-  const wReduction = (mm(edgeSides.left) + mm(edgeSides.right)) / 10;
-  const hReduction = (mm(edgeSides.top) + mm(edgeSides.bottom)) / 10;
+  const wReduction = mm(edgeSides.left) + mm(edgeSides.right);
+  const hReduction = mm(edgeSides.top) + mm(edgeSides.bottom);
   return {
-    width: safeDimension(width - wReduction),
-    height: safeDimension(height - hReduction)
+    width: safeDimensionMm(width - wReduction),
+    height: safeDimensionMm(height - hReduction)
   };
 }
 
@@ -1715,8 +1726,8 @@ function renderCutsPiecesTable() {
       <td><input class="cut-input" data-field="furniture" value="${escapeHtml(p.furniture||'')}" placeholder="Mueble"></td>
       <td><input class="cut-input" data-field="name" value="${escapeHtml(p.name||'')}" placeholder="Pieza"></td>
       <td><select class="cut-input" data-field="thickness">${thick.map(t=>`<option${p.thickness===t?' selected':''}>${t}</option>`).join('')}</select></td>
-      <td><input class="cut-input cut-num" data-field="height" type="number" min="1" step="0.5" value="${p.height||''}" title="Largo cm"></td>
-      <td><input class="cut-input cut-num" data-field="width" type="number" min="1" step="0.5" value="${p.width||''}" title="Ancho cm"></td>
+      <td><input class="cut-input cut-num" data-field="height" type="number" min="1" step="1" value="${p.height||''}" title="Largo mm"></td>
+      <td><input class="cut-input cut-num" data-field="width" type="number" min="1" step="1" value="${p.width||''}" title="Ancho mm"></td>
       <td><select class="cut-input" data-edge-side="left" title="Canto lado largo 1">${edgeOpts(es.left)}</select></td>
       <td><select class="cut-input" data-edge-side="right" title="Canto lado largo 2">${edgeOpts(es.right)}</select></td>
       <td><select class="cut-input" data-edge-side="top" title="Canto lado ancho 1">${edgeOpts(es.top)}</select></td>
@@ -1744,16 +1755,16 @@ function renderCutsPiecesTable() {
     </div>
     <div style="overflow-x:auto">
       <table class="quote-table cuts-editable">
-        <thead><tr><th></th><th>Mueble</th><th>Pieza</th><th>Grosor</th><th title="Largo">Largo cm</th><th title="Ancho">Ancho cm</th><th title="Canto lado largo 1">L1</th><th title="Canto lado largo 2">L2</th><th title="Canto lado ancho 1">A1</th><th title="Canto lado ancho 2">A2</th><th>Veta</th><th></th></tr></thead>
+        <thead><tr><th></th><th>Mueble</th><th>Pieza</th><th>Grosor</th><th title="Largo">Largo mm</th><th title="Ancho">Ancho mm</th><th title="Canto lado largo 1">L1</th><th title="Canto lado largo 2">L2</th><th title="Canto lado ancho 1">A1</th><th title="Canto lado ancho 2">A2</th><th>Veta</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
 }
 
 // ── BFDH 2D bin packing (Best Fit Decreasing + rotation) ────────────────────
-function packPiecesFFDH(pieces, sheetW, sheetH, wastePct, kerfCm = 0.5) {
-  const kerf = kerfCm;
-  const marginX = 2, marginY = 2;
+function packPiecesFFDH(pieces, sheetW, sheetH, wastePct, kerfMm = 5) {
+  const kerf = kerfMm;
+  const marginX = 20, marginY = 20;
   const usableW = sheetW - marginX * 2;
   const usableH = sheetH - marginY * 2;
 
@@ -1832,8 +1843,8 @@ function recalcCutsLayout() {
   if (!els.cutsLayoutOutput) return;
   if (!state.editablePieces.length) { els.cutsLayoutOutput.innerHTML = ""; return; }
 
-  const sheetW   = Number(document.getElementById("sheetWidth")?.value  || 244);
-  const sheetH   = Number(document.getElementById("sheetHeight")?.value || 122);
+  const sheetW   = Number(document.getElementById("sheetWidth")?.value  || 2440);
+  const sheetH   = Number(document.getElementById("sheetHeight")?.value || 1220);
   const wastePct = Number(document.getElementById("wastePercent")?.value || 12) / 100;
   const totalArea = state.editablePieces.reduce((s, p) => s + (Number(p.width)||0)*(Number(p.height)||0), 0);
 
@@ -1846,13 +1857,13 @@ function recalcCutsLayout() {
   });
 
   const kerfMmInput = document.getElementById("kerfMm");
-  const kerfCm = (Number(kerfMmInput?.value) || Number(tenantPrices()?.kerf_mm) || 5) / 10;
+  const kerfMm = Number(kerfMmInput?.value) || Number(tenantPrices()?.kerf_mm) || 5;
   const grainDir = document.getElementById("sheetGrainDirection")?.value || "";
   const allSheetGroups = Object.entries(byThickness).map(([thickness, pieces]) => {
     // Piezas con manualPlacement no entran al auto-nesting — se reservan en su posición fija.
     const autoPieces = pieces.filter(p => !p.manualPlacement);
     const manualPieces = pieces.filter(p => p.manualPlacement);
-    const sheets = packPiecesFFDH(autoPieces, sheetW, sheetH, wastePct, kerfCm);
+    const sheets = packPiecesFFDH(autoPieces, sheetW, sheetH, wastePct, kerfMm);
     const oversized = sheets.oversized || [];
     manualPieces.forEach(p => {
       const si = Math.max(0, Number(p.manualPlacement.sheetIndex) || 0);
@@ -1888,8 +1899,8 @@ function recalcCutsLayout() {
       </div>`;
     }).join('');
 
-    const kerfPxV = Math.max(0.6, scale(kerfCm));
-    const kerfPxH = Math.max(0.6, scaleH(kerfCm));
+    const kerfPxV = Math.max(0.6, scale(kerfMm));
+    const kerfPxH = Math.max(0.6, scaleH(kerfMm));
     const lineDir = grainDir === "horizontal" ? "horizontal" : "vertical"; // dirección de las líneas de veta de pieza, default vertical
 
     const sheetGrainBg = (() => {
@@ -1964,10 +1975,10 @@ function recalcCutsLayout() {
   const cantoMetersByThickness = { "0.45mm": 0, "1.00mm": 0, "2.00mm": 0 };
   state.editablePieces.forEach(p => {
     const es = p.edgeSides || {};
-    if (es.top)    cantoMetersByThickness[es.top]    = (cantoMetersByThickness[es.top]    || 0) + (Number(p.width)  || 0) / 100;
-    if (es.bottom) cantoMetersByThickness[es.bottom] = (cantoMetersByThickness[es.bottom] || 0) + (Number(p.width)  || 0) / 100;
-    if (es.left)   cantoMetersByThickness[es.left]   = (cantoMetersByThickness[es.left]   || 0) + (Number(p.height) || 0) / 100;
-    if (es.right)  cantoMetersByThickness[es.right]  = (cantoMetersByThickness[es.right]  || 0) + (Number(p.height) || 0) / 100;
+    if (es.top)    cantoMetersByThickness[es.top]    = (cantoMetersByThickness[es.top]    || 0) + (Number(p.width)  || 0) / 1000;
+    if (es.bottom) cantoMetersByThickness[es.bottom] = (cantoMetersByThickness[es.bottom] || 0) + (Number(p.width)  || 0) / 1000;
+    if (es.left)   cantoMetersByThickness[es.left]   = (cantoMetersByThickness[es.left]   || 0) + (Number(p.height) || 0) / 1000;
+    if (es.right)  cantoMetersByThickness[es.right]  = (cantoMetersByThickness[es.right]  || 0) + (Number(p.height) || 0) / 1000;
   });
   const totalCantoMeters = Object.values(cantoMetersByThickness).reduce((s, v) => s + v, 0);
   const totalCantoCost = Object.entries(cantoMetersByThickness)
@@ -1984,7 +1995,7 @@ function recalcCutsLayout() {
   const oversizedWarning = allOversized.length
     ? `<div style="background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;padding:.75rem 1rem;margin-top:10px">
         <strong style="color:#991B1B">⚠ ${allOversized.length} pieza(s) no caben en ninguna lámina (ni rotadas) y no se dibujaron:</strong>
-        <p style="margin:.35rem 0 0;font-size:.82rem;color:#7F1D1D">${allOversized.map(p => `${escapeHtml(p.name||'')} (${p.width}×${p.height}cm)`).join(", ")}. Revisa el tamaño de lámina o esa pieza — probablemente la medida está mal capturada.</p>
+        <p style="margin:.35rem 0 0;font-size:.82rem;color:#7F1D1D">${allOversized.map(p => `${escapeHtml(p.name||'')} (${p.width}×${p.height}mm)`).join(", ")}. Revisa el tamaño de lámina o esa pieza — probablemente la medida está mal capturada.</p>
       </div>`
     : "";
 
@@ -1992,8 +2003,8 @@ function recalcCutsLayout() {
     <div class="cuts-summary" style="margin-top:14px">
       <article><span>Piezas</span><strong>${state.editablePieces.length}</strong></article>
       <article><span>Láminas totales</span><strong>${totalSheets}</strong></article>
-      <article><span>Área total</span><strong>${(totalArea/10000).toFixed(2)} m²</strong></article>
-      <article><span>Lámina</span><strong>${sheetW}×${sheetH} cm</strong></article>
+      <article><span>Área total</span><strong>${(totalArea/1000000).toFixed(2)} m²</strong></article>
+      <article><span>Lámina</span><strong>${sheetW}×${sheetH} mm</strong></article>
       <article><span>Cortes estimados</span><strong>${estimatedCuts}</strong></article>
       <article><span>Canto total</span><strong>${totalCantoMeters.toFixed(2)} m</strong></article>
     </div>
@@ -2152,7 +2163,7 @@ function exportCutsCSV() {
     return all;
   })();
   if (!pieces.length) { toast("Calcula los cortes primero.", "error"); return; }
-  const rows = [["Mueble","Pieza","Ancho cm (sustrato)","Alto cm (sustrato)","Grosor","Canto arriba","Canto abajo","Canto izq","Canto der","Veta","Canto (resumen)"]];
+  const rows = [["Mueble","Pieza","Ancho mm (sustrato)","Alto mm (sustrato)","Grosor","Canto arriba","Canto abajo","Canto izq","Canto der","Veta","Canto (resumen)"]];
   pieces.forEach(p => {
     const es = p.edgeSides || {};
     rows.push([p.furniture||'', p.name, p.width, p.height, p.thickness||'18 mm',
@@ -3789,14 +3800,14 @@ function buildManualPieces({ furniture, name, largo, ancho, qty, thickness, cant
     id: crypto.randomUUID(),
     furniture: furniture || "",
     name: qty > 1 ? `${baseName} ${i + 1}` : baseName,
-    width: roundCm(substrate.width),
-    height: roundCm(substrate.height),
+    width: roundMm(substrate.width),
+    height: roundMm(substrate.height),
     thickness,
     edgeSides,
     edge: describeEdgeSides(edgeSides),
     grain: Boolean(grain),
     grainDirection: grain ? (grainDir || "largo") : null,
-    area: roundCm(substrate.width * substrate.height)
+    area: roundMm(substrate.width * substrate.height)
   }));
 }
 
@@ -3866,17 +3877,47 @@ function sideCount(t, words) {
   return 0;
 }
 
+// Cortes trabaja todo en mm. Unidad hablada/escrita: sin unidad o "mm"/"milimetros" = ya
+// está en mm; "cm"/"centimetros" se pasa a mm (×10). Acepta abreviado o palabra completa
+// porque el dictado por voz casi siempre transcribe la palabra completa, no "cm"/"mm".
+const UNIT_WORD = "(mm|mil[ií]metros?|cm|cent[ií]metros?)";
+function toMm(val, unitWord) {
+  const u = String(unitWord || "").toLowerCase();
+  return (u.startsWith("cm") || u.startsWith("cent")) ? val * 10 : val;
+}
+
+function extractThickness(t) {
+  const THICKNESS_OPTS = [15, 18, 25, 36];
+  let m = t.match(new RegExp(`grosor\\s*(?:de\\s*)?(\\d+(?:[.,]\\d+)?)\\s*${UNIT_WORD}?`, "i"))
+    || t.match(new RegExp(`(\\d+(?:[.,]\\d+)?)\\s*${UNIT_WORD}?\\s*(?:de\\s*)?grosor`, "i"));
+  if (!m) return "18 mm";
+  const val = toMm(Number(m[1].replace(",", ".")), m[2]);
+  const nearest = THICKNESS_OPTS.reduce((a, b) => Math.abs(b - val) < Math.abs(a - val) ? b : a);
+  return nearest === 36 ? "36 mm doble laminado" : `${nearest} mm`;
+}
+
+function extractCantoThickness(t) {
+  const CANTO_OPTS = [0.45, 1.00, 2.00];
+  let m = t.match(new RegExp(`canto\\s*(?:de\\s*)?(\\d+(?:[.,]\\d+)?)\\s*${UNIT_WORD}?`, "i"))
+    || t.match(new RegExp(`(\\d+(?:[.,]\\d+)?)\\s*${UNIT_WORD}?\\s*(?:de\\s*)?canto`, "i"));
+  if (!m) return "1.00mm";
+  const val = toMm(Number(m[1].replace(",", ".")), m[2]);
+  const nearest = CANTO_OPTS.reduce((a, b) => Math.abs(b - val) < Math.abs(a - val) ? b : a);
+  return nearest.toFixed(2) + "mm";
+}
+
 function parsePieceFromText(text) {
   const t = String(text || "").toLowerCase();
-  const toCm = (val, unit) => unit === "cm" ? val : val / 10;
 
-  const largoMatch = t.match(/(\d+(?:[.,]\d+)?)\s*(mm|cm)?\s*(?:de\s*)?largo/);
-  const anchoMatch = t.match(/(\d+(?:[.,]\d+)?)\s*(mm|cm)?\s*(?:de\s*)?ancho/);
+  const largoMatch = t.match(new RegExp(`(\\d+(?:[.,]\\d+)?)\\s*${UNIT_WORD}?\\s*(?:de\\s*)?largo`, "i"));
+  const anchoMatch = t.match(new RegExp(`(\\d+(?:[.,]\\d+)?)\\s*${UNIT_WORD}?\\s*(?:de\\s*)?ancho`, "i"));
   if (!largoMatch || !anchoMatch) return null;
-  const largo = toCm(Number(largoMatch[1].replace(",", ".")), largoMatch[2]);
-  const ancho = toCm(Number(anchoMatch[1].replace(",", ".")), anchoMatch[2]);
+  const largo = toMm(Number(largoMatch[1].replace(",", ".")), largoMatch[2]);
+  const ancho = toMm(Number(anchoMatch[1].replace(",", ".")), anchoMatch[2]);
 
   const qty = extractQuantity(t);
+  const thickness = extractThickness(t);
+  const cantoThickness = extractCantoThickness(t);
 
   const allSides = /todos los (cantos|lados)|4 cantos|canto en todo|canto por todos lados/.test(t);
   const largoCount = allSides ? 2 : sideCount(t, ["largo"]);
@@ -3887,7 +3928,7 @@ function parsePieceFromText(text) {
   const grain = /veta/.test(t);
   const grainDir = /veta.*ancho|ancho.*veta/.test(t) ? "ancho" : "largo";
 
-  return { furniture: "", name: "Pieza", largo, ancho, qty, thickness: "18 mm", cantoSides, cantoThickness: "1.00mm", grain, grainDir };
+  return { furniture: "", name: "Pieza", largo, ancho, qty, thickness, cantoSides, cantoThickness, grain, grainDir };
 }
 
 document.getElementById("parseManualPieceBtn")?.addEventListener("click", () => {
@@ -4003,9 +4044,9 @@ els.cutsOutput.addEventListener("click", (e) => {
   if (e.target.id === "addCutPieceBtn") {
     state.editablePieces.push({
       id: crypto.randomUUID(), furniture: "", name: "Pieza nueva",
-      width: 60, height: 60, thickness: "18 mm",
+      width: 600, height: 600, thickness: "18 mm",
       edgeSides: { top: null, bottom: null, left: null, right: null }, edge: "Sin canto",
-      grain: false, area: 3600
+      grain: false, area: 360000
     });
     renderCutsPiecesTable();
     recalcCutsLayout();
@@ -4107,7 +4148,7 @@ document.getElementById("clearDraftBtn")?.addEventListener("click", () => {
 document.getElementById("exportCutsBtn")?.addEventListener("click", exportCutsCSV);
 
 // ── Lámina: catálogo de precios del mercado (estándar + items "madera" del ebanista) ──
-const STANDARD_SHEET_DIMENSIONS_CM = { melamina_std: [244, 122], melamina_lg: [275, 183] };
+const STANDARD_SHEET_DIMENSIONS_MM = { melamina_std: [2440, 1220], melamina_lg: [2750, 1830] };
 
 function loadSheetCatalogOptions() {
   const sel = els.sheetPreset;
@@ -4116,7 +4157,7 @@ function loadSheetCatalogOptions() {
   const prices = tenantPrices();
   const names = prices._names || {};
   const customItems = prices.customItems || [];
-  const opts = Object.keys(STANDARD_SHEET_DIMENSIONS_CM)
+  const opts = Object.keys(STANDARD_SHEET_DIMENSIONS_MM)
     .filter(k => typeof prices[k] === "number")
     .map(k => `<option value="std:${k}">${escapeHtml(names[k] || defaultPriceNames[k] || k)} — $${Number(prices[k]).toFixed(2)}</option>`)
     .concat(customItems
@@ -4142,7 +4183,7 @@ function applySheetCatalogSelection(triggerRecalc = true) {
   const names = prices._names || {};
   if (val.startsWith("std:")) {
     const key = val.slice(4);
-    const dims = STANDARD_SHEET_DIMENSIONS_CM[key];
+    const dims = STANDARD_SHEET_DIMENSIONS_MM[key];
     if (dims) { els.sheetWidth.value = dims[0]; els.sheetHeight.value = dims[1]; }
     state.cutsSheetPrice = Number(prices[key]) || 0;
     state.cutsSheetLabel = names[key] || defaultPriceNames[key] || key;

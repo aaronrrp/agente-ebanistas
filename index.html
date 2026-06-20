@@ -455,11 +455,11 @@
               <label>Desperdicio %
                 <input id="wastePercent" type="number" min="0" max="50" step="1" value="12">
               </label>
-              <label>Ancho lámina cm
-                <input id="sheetWidth" type="number" min="1" step="1" value="244">
+              <label>Ancho lámina mm
+                <input id="sheetWidth" type="number" min="1" step="1" value="2440">
               </label>
-              <label>Alto lámina cm
-                <input id="sheetHeight" type="number" min="1" step="1" value="122">
+              <label>Alto lámina mm
+                <input id="sheetHeight" type="number" min="1" step="1" value="1220">
               </label>
               <label>Kerf disco (mm) <span style="font-size:.7rem;color:#6B7280">— lo que come la sierra en cada corte</span>
                 <input id="kerfMm" type="number" min="0" max="20" step="0.5" value="5">
@@ -484,8 +484,8 @@
               <div class="form-grid compact-grid">
                 <label>Mueble<input id="mp_furniture" placeholder="Opcional"></label>
                 <label>Pieza<input id="mp_name" placeholder="Ej: Lateral izquierdo"></label>
-                <label>Largo cm<input id="mp_largo" type="number" min="0.5" step="0.5" placeholder="Ej: 90"></label>
-                <label>Ancho cm<input id="mp_ancho" type="number" min="0.5" step="0.5" placeholder="Ej: 55"></label>
+                <label>Largo mm<input id="mp_largo" type="number" min="1" step="1" placeholder="Ej: 900"></label>
+                <label>Ancho mm<input id="mp_ancho" type="number" min="1" step="1" placeholder="Ej: 550"></label>
                 <label>Cantidad<input id="mp_qty" type="number" min="1" step="1" value="1"></label>
                 <label>Grosor
                   <select id="mp_thickness"><option>15 mm</option><option selected>18 mm</option><option>25 mm</option><option>36 mm doble laminado</option></select>
@@ -509,7 +509,7 @@
 
               <p class="form-help" style="margin-top:10px;margin-bottom:4px">O descríbela en una sola línea (escribiendo o hablando):</p>
               <div style="display:flex;gap:6px">
-                <input id="mp_naturalInput" placeholder="Ej: 4 piezas con 40 de largo, 30 de ancho, canto en los anchos">
+                <input id="mp_naturalInput" placeholder="Ej: 4 piezas con 900 de largo, 550 de ancho, grosor 15mm, canto en los anchos">
                 <button id="mp_voiceBtn" class="secondary-btn" type="button" title="Dictar por voz">🎤</button>
                 <button id="parseManualPieceBtn" class="secondary-btn" type="button">Crear</button>
               </div>
