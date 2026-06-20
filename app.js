@@ -3083,7 +3083,11 @@ async function saveSellerFromModal() {
     const res = _sellerModalEditId
       ? await fetch(`/api/sellers/${_sellerModalEditId}`, { method: "PUT", headers: adminApiHeader(), body: JSON.stringify(payload) })
       : await fetch("/api/sellers", { method: "POST", headers: adminApiHeader(), body: JSON.stringify(payload) });
-    if (!res.ok) { toast("No se pudo guardar el vendedor."); btn.textContent = "Guardar y ver link →"; btn.disabled = false; return; }
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      toast(`No se pudo guardar el vendedor${errBody.error ? ": " + errBody.error : ` (error ${res.status})`}`, "error");
+      btn.textContent = "Guardar y ver link →"; btn.disabled = false; return;
+    }
     const data = await res.json();
     await loadSellersFromServer();
 
