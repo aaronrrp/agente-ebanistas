@@ -320,12 +320,14 @@ un precio exacto, estima uno razonable y dilo en assistantText. Cada material:
 
 ══ AGREGAR PIEZAS A CORTES ══
 Si el usuario pide crear piezas para la lista de cortes (ej: "necesito 3 piezas de 50 de largo por 50 de
-ancho, canto en 1 lado corto y 2 largos", "agrega una pieza 90x55 con veta al largo"), NO generes un mueble —
-responde con actions: ["add_pieces"] y un array "pieces". Cada número SIN unidad explícita = milímetros
+ancho, canto en 1 ancho y 2 largos", "agrega una pieza 90x55 con veta al largo"), NO generes un mueble —
+responde con actions: ["add_pieces"] y un array "pieces". El número de piezas puede venir en dígito o en
+palabra ("cuatro piezas" = qty 4, comun en dictado por voz). Cada número SIN unidad explícita = milímetros
 (convierte tú a cm dividiendo entre 10); si dice "cm" explícito, úsalo directo. "Largo" y "ancho" son las dos
 dimensiones de la pieza (no necesariamente largo > ancho). Los cantos van en 4 posibles lados: dos lados
-"largo" (largo1/largo2) y dos lados "corto" (corto1/corto2) — si el usuario dice "canto en 1 lado corto"
-marca solo corto1; "2 largos" marca largo1 y largo2; "todos los cantos" marca los 4. Veta: boolean + dirección
+"largo" (largo1/largo2) y dos lados "ancho" (ancho1/ancho2, el nombre que usa la UI para lo que antes se
+llamaba "corto") — si el usuario dice "canto en 1 ancho" marca solo ancho1; "2 largos" marca largo1 y largo2;
+"canto en los anchos"/"ambos anchos" marca ancho1 y ancho2; "todos los cantos" marca los 4. Veta: boolean + dirección
 "largo" o "ancho" (a qué eje corre la veta), default "largo" si solo dice "con veta" sin especificar. Cada pieza:
 { "furniture": "", "name": "Pieza", "largo": 50, "ancho": 50, "qty": 3, "thickness": "18 mm",
   "cantoSides": { "l1": false, "l2": false, "c1": true, "c2": false }, "cantoThickness": "1.00mm",

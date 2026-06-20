@@ -172,6 +172,13 @@ if (!state.selectedTenantId || !state.tenants.some((tenant) => tenant.id === sta
 let _tenantPrices = null; // working copy for ebanista editing their own prices
 let _modalPrices  = null; // working copy for admin modal per-tenant prices
 
+// Recuerda la última contraseña en texto plano que se mostró por ebanista/vendedor,
+// SOLO en memoria de esta carga de página (nunca a localStorage ni al servidor) — el
+// servidor solo guarda el hash y no puede devolverla, así que esto es lo único que
+// permite volver a verla si cierras un modal sin copiarla, sin guardar contraseñas
+// en texto plano en ningún lado persistente. Se pierde al recargar la página.
+const _lastShownPasswords = {};
+
 const els = {
   navItems: document.querySelectorAll(".nav-item"),
   views: document.querySelectorAll(".view"),
@@ -953,8 +960,10 @@ async function saveEbanistaFromModal() {
   document.getElementById("em_link").value = link;
   const pwRow = document.getElementById("em_passwordRow");
   if (pwRow) {
-    if (passwordPlain) { document.getElementById("em_passwordDisplay").value = passwordPlain; pwRow.classList.remove("hidden"); }
-    else pwRow.classList.add("hidden");
+    const shown = passwordPlain || _lastShownPasswords[id] || "";
+    if (passwordPlain) _lastShownPasswords[id] = passwordPlain;
+    if (shown) { document.getElementById("em_passwordDisplay").value = shown; pwRow.classList.remove("hidden"); }
+    else { document.getElementById("em_passwordDisplay").value = ""; pwRow.classList.add("hidden"); }
   }
   document.getElementById("em_result").classList.remove("hidden");
   document.getElementById("em_actions").style.display = "none";
@@ -1710,8 +1719,8 @@ function renderCutsPiecesTable() {
       <td><input class="cut-input cut-num" data-field="width" type="number" min="1" step="0.5" value="${p.width||''}" title="Ancho cm"></td>
       <td><select class="cut-input" data-edge-side="left" title="Canto lado largo 1">${edgeOpts(es.left)}</select></td>
       <td><select class="cut-input" data-edge-side="right" title="Canto lado largo 2">${edgeOpts(es.right)}</select></td>
-      <td><select class="cut-input" data-edge-side="top" title="Canto lado corto 1">${edgeOpts(es.top)}</select></td>
-      <td><select class="cut-input" data-edge-side="bottom" title="Canto lado corto 2">${edgeOpts(es.bottom)}</select></td>
+      <td><select class="cut-input" data-edge-side="top" title="Canto lado ancho 1">${edgeOpts(es.top)}</select></td>
+      <td><select class="cut-input" data-edge-side="bottom" title="Canto lado ancho 2">${edgeOpts(es.bottom)}</select></td>
       <td>
         <label style="display:flex;align-items:center;gap:2px;font-size:.72rem;font-weight:400"><input type="checkbox" data-field="grain" ${p.grain ? "checked" : ""}>veta</label>
         <select class="cut-input" data-field="grainDirection" style="margin-top:2px" ${p.grain ? "" : "disabled"}>
@@ -1725,7 +1734,7 @@ function renderCutsPiecesTable() {
 
   els.cutsOutput.innerHTML = `
     <p style="font-size:.8rem;color:#6B7280;margin:0 0 8px">
-      ✏️ Haz clic en cualquier celda para editar. Largo/Ancho son tamaño de <strong>corte (sustrato)</strong>, ya con el canto restado — no el tamaño terminado. L1/L2 = canto en cada lado largo, C1/C2 = canto en cada lado corto. Los cambios se reflejan en el cálculo de láminas al instante.
+      ✏️ Haz clic en cualquier celda para editar. Largo/Ancho son tamaño de <strong>corte (sustrato)</strong>, ya con el canto restado — no el tamaño terminado. L1/L2 = canto en cada lado largo, A1/A2 = canto en cada lado ancho. Los cambios se reflejan en el cálculo de láminas al instante.
     </p>
     <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
       <button id="addCutPieceBtn" class="secondary-btn" type="button">＋ Agregar pieza</button>
@@ -1735,7 +1744,7 @@ function renderCutsPiecesTable() {
     </div>
     <div style="overflow-x:auto">
       <table class="quote-table cuts-editable">
-        <thead><tr><th></th><th>Mueble</th><th>Pieza</th><th>Grosor</th><th title="Largo">Largo cm</th><th title="Ancho">Ancho cm</th><th title="Canto lado largo 1">L1</th><th title="Canto lado largo 2">L2</th><th title="Canto lado corto 1">C1</th><th title="Canto lado corto 2">C2</th><th>Veta</th><th></th></tr></thead>
+        <thead><tr><th></th><th>Mueble</th><th>Pieza</th><th>Grosor</th><th title="Largo">Largo cm</th><th title="Ancho">Ancho cm</th><th title="Canto lado largo 1">L1</th><th title="Canto lado largo 2">L2</th><th title="Canto lado ancho 1">A1</th><th title="Canto lado ancho 2">A2</th><th>Veta</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
@@ -2867,6 +2876,7 @@ els.tenantList.addEventListener("click", async (event) => {
   }
 
   if (linkId) {
+    await syncTenantsFromServer();
     openEbanistaModal(linkId);
     // After modal opens, also show the link immediately
     const t = state.tenants.find(t => t.id === linkId);
@@ -2876,11 +2886,20 @@ els.tenantList.addEventListener("click", async (event) => {
       document.getElementById("em_result").classList.remove("hidden");
       document.getElementById("em_actions").style.display = "none";
       document.getElementById("saveEbanistaModalBtn").textContent = "Guardado ✓";
+      // La contraseña en texto plano solo existe en memoria justo después de generarse —
+      // si ya se mostró para este ebanista en esta sesión del navegador, se vuelve a
+      // mostrar; si no, se oculta (nunca se debe arrastrar la de otro ebanista visto antes).
+      const pwRow = document.getElementById("em_passwordRow");
+      const cached = _lastShownPasswords[linkId];
+      if (pwRow) {
+        if (cached) { document.getElementById("em_passwordDisplay").value = cached; pwRow.classList.remove("hidden"); }
+        else { document.getElementById("em_passwordDisplay").value = ""; pwRow.classList.add("hidden"); }
+      }
     }
     return;
   }
 
-  if (editId) { openEbanistaModal(editId); return; }
+  if (editId) { await syncTenantsFromServer(); openEbanistaModal(editId); return; }
 
   if (toggleId) {
     const t = state.tenants.find(t => t.id === toggleId);
@@ -2992,6 +3011,18 @@ function openSellerModal(editId) {
   if (btn) { btn.textContent = "Guardar y ver link →"; btn.disabled = false; }
   document.getElementById("sellerModal").classList.remove("hidden");
   setTimeout(() => document.getElementById("sm_name").focus(), 80);
+
+  // Si ya se generó/mostró una contraseña para este vendedor en esta misma sesión del
+  // navegador (al crearlo o al regenerarla), se vuelve a mostrar en vez de perderla.
+  const cached = editId && _lastShownPasswords[editId];
+  if (cached) {
+    document.getElementById("sm_link").value = getSellerLink(s);
+    document.getElementById("sm_passwordDisplay").value = cached;
+    document.getElementById("sm_passwordRow")?.classList.remove("hidden");
+    document.getElementById("sm_result").classList.remove("hidden");
+    document.getElementById("sm_actions").style.display = "none";
+    if (btn) btn.textContent = "Guardado ✓";
+  }
 }
 
 function closeSellerModal() {
@@ -3044,8 +3075,10 @@ async function saveSellerFromModal() {
 
     document.getElementById("sm_link").value = getSellerLink(data);
     const pwRow = document.getElementById("sm_passwordRow");
-    if (data.passwordPlain) { document.getElementById("sm_passwordDisplay").value = data.passwordPlain; pwRow.classList.remove("hidden"); }
-    else pwRow.classList.add("hidden");
+    if (data.passwordPlain) _lastShownPasswords[data.id] = data.passwordPlain;
+    const shownSm = data.passwordPlain || _lastShownPasswords[data.id] || "";
+    if (shownSm) { document.getElementById("sm_passwordDisplay").value = shownSm; pwRow.classList.remove("hidden"); }
+    else { document.getElementById("sm_passwordDisplay").value = ""; pwRow.classList.add("hidden"); }
     document.getElementById("sm_result").classList.remove("hidden");
     document.getElementById("sm_actions").style.display = "none";
     btn.textContent = "Guardado ✓";
@@ -3085,8 +3118,9 @@ document.getElementById("sellerList")?.addEventListener("click", async (event) =
       const res = await fetch(`/api/sellers/${passId}/set-password`, { method: "POST", headers: adminApiHeader(), body: JSON.stringify({}) });
       if (res.ok) {
         const data = await res.json();
+        _lastShownPasswords[passId] = data.passwordPlain;
         await navigator.clipboard.writeText(data.passwordPlain).catch(() => {});
-        alert(`Nueva contraseña (ya copiada al portapapeles):\n\n${data.passwordPlain}\n\nNo se volverá a mostrar.`);
+        alert(`Nueva contraseña (ya copiada al portapapeles):\n\n${data.passwordPlain}\n\nSi cierras esto sin copiarla, puedes volver a verla abriendo "Editar" — pero solo mientras no recargues la página.`);
       } else toast("No se pudo generar la contraseña.");
     } catch { toast("Sin conexión al servidor."); }
     return;
@@ -3798,8 +3832,39 @@ document.getElementById("addManualPieceBtn")?.addEventListener("click", () => {
   document.getElementById("mp_qty").value = "1";
 });
 
-// Texto libre: "4 piezas con 40mm de largo, 30 de ancho, canto de 1 lado corto".
+// Texto libre (escrito o dictado por voz): "4 piezas con 40mm de largo, 30 de ancho, canto en los anchos".
 // Numero sin unidad = mm por defecto (asi suelen anotar las medidas); "cm" explicito se respeta.
+const SPANISH_NUMBER_WORDS = {
+  un: 1, una: 1, uno: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10,
+  once: 11, doce: 12, trece: 13, catorce: 14, quince: 15, dieciseis: 16, diecisiete: 17, dieciocho: 18, diecinueve: 19, veinte: 20
+};
+
+// El dictado por voz a veces transcribe los números como palabras ("cuatro" en vez de "4")
+// y mete comas en las pausas — por eso se acepta dígito o palabra, con puntuación opcional.
+function extractQuantity(t) {
+  const digitMatch = t.match(/(\d+)\s*,?\s*piezas?/);
+  if (digitMatch) return Number(digitMatch[1]);
+  const wordPattern = new RegExp(`\\b(${Object.keys(SPANISH_NUMBER_WORDS).join("|")})\\b\\s*,?\\s*piezas?`, "i");
+  const wordMatch = t.match(wordPattern);
+  if (wordMatch) return SPANISH_NUMBER_WORDS[wordMatch[1].toLowerCase()];
+  return 1;
+}
+
+// Cuenta cuántos lados "largo" o "ancho/corto" lleva canto, aceptando varias formas naturales
+// de decirlo: número explícito ("2 anchos"), "un/una X", "ambos/los/las X" (plural = los dos),
+// o el plural suelto ("anchos") que en este contexto siempre significa los dos lados de ese tipo.
+// "ancho" como palabra de canto nunca choca con la medida ("30 de ancho") porque esa es singular
+// y sin esos cuantificadores alrededor.
+function sideCount(t, words) {
+  const alt = words.join("|");
+  const explicitNum = t.match(new RegExp(`(\\d+)\\s*(?:lados?\\s*)?(?:${alt})s?\\b`, "i"));
+  if (explicitNum) return Math.min(2, Number(explicitNum[1]));
+  if (new RegExp(`\\bun[ao]?\\s*(?:lado\\s*)?(?:${alt})\\b`, "i").test(t)) return 1;
+  if (new RegExp(`\\b(ambo[sa]s|los|las|dos)\\s*(?:lados?\\s*)?(?:${alt})s\\b`, "i").test(t)) return 2;
+  if (new RegExp(`\\b(?:${alt})s\\b`, "i").test(t)) return 2; // plural suelto = ambos lados
+  return 0;
+}
+
 function parsePieceFromText(text) {
   const t = String(text || "").toLowerCase();
   const toCm = (val, unit) => unit === "cm" ? val : val / 10;
@@ -3810,19 +3875,13 @@ function parsePieceFromText(text) {
   const largo = toCm(Number(largoMatch[1].replace(",", ".")), largoMatch[2]);
   const ancho = toCm(Number(anchoMatch[1].replace(",", ".")), anchoMatch[2]);
 
-  const qtyMatch = t.match(/(\d+)\s*piezas?/);
-  const qty = qtyMatch ? Number(qtyMatch[1]) : 1;
+  const qty = extractQuantity(t);
 
-  const sideCount = (word) => {
-    const re = new RegExp(`(\\d+)?\\s*lados?\\s*${word}s?`, "g");
-    let count = 0, m;
-    while ((m = re.exec(t))) count = Math.max(count, m[1] ? Number(m[1]) : 1);
-    return count;
-  };
-  const allSides = /todos los (cantos|lados)|4 cantos|canto en todo/.test(t);
-  const cortoCount = allSides ? 2 : sideCount("corto");
-  const largoCount = allSides ? 2 : sideCount("largo");
-  const cantoSides = { l1: largoCount >= 1, l2: largoCount >= 2, c1: cortoCount >= 1, c2: cortoCount >= 2 };
+  const allSides = /todos los (cantos|lados)|4 cantos|canto en todo|canto por todos lados/.test(t);
+  const largoCount = allSides ? 2 : sideCount(t, ["largo"]);
+  // "ancho" es el nombre nuevo del lado corto — se acepta "corto" tambien por si lo dicen asi.
+  const anchoSideCount = allSides ? 2 : sideCount(t, ["ancho", "corto"]);
+  const cantoSides = { l1: largoCount >= 1, l2: largoCount >= 2, c1: anchoSideCount >= 1, c2: anchoSideCount >= 2 };
 
   const grain = /veta/.test(t);
   const grainDir = /veta.*ancho|ancho.*veta/.test(t) ? "ancho" : "largo";
@@ -4496,7 +4555,10 @@ function openLinkModal(tenantId) {
   const url = getTenantLink(tenant);
   document.getElementById("linkModalDesc").textContent = `Link de acceso para ${tenant.companyName}:`;
   document.getElementById("linkModalUrl").value = url;
-  document.getElementById("linkModalPassword").value = "";
+  // Si ya se generó una contraseña para este ebanista en esta misma sesión del navegador,
+  // se vuelve a mostrar en vez de dejarla en blanco — el servidor no puede devolverla (solo
+  // guarda el hash), así que esta es la única forma de no perderla si cerraste el modal sin copiarla.
+  document.getElementById("linkModalPassword").value = _lastShownPasswords[tenantId] || "";
   document.getElementById("linkModal").classList.remove("hidden");
 }
 
@@ -4532,6 +4594,7 @@ document.getElementById("generatePasswordBtn")?.addEventListener("click", async 
     if (res.ok) {
       const data = await res.json();
       document.getElementById("linkModalPassword").value = data.passwordPlain;
+      _lastShownPasswords[id] = data.passwordPlain;
       const tenant = state.tenants.find(t => t.id === id);
       if (tenant) { tenant.hasPassword = true; save(); }
       toast("Nueva contraseña generada — cópiala ahora ✓");
