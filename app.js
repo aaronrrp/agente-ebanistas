@@ -4847,6 +4847,10 @@ document.getElementById("tenantAddPriceBtn")?.addEventListener("click", () => {
 document.getElementById("saveTenantPricesBtn")?.addEventListener("click", async () => {
   if (!_tenantPrices) return;
   await saveTenantPrices(_tenantPrices);
+  // El panel de precios vive dentro de quoteView — no hay cambio de vista que dispare
+  // el refresco de los selectores de materiales/lámina, así que se hace a mano aquí.
+  loadMaterialCatalogOptions();
+  loadSheetCatalogOptions();
 });
 
 document.getElementById("resetTenantPricesBtn")?.addEventListener("click", () => {
