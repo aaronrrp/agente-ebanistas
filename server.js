@@ -792,7 +792,8 @@ function handleGetTenants(req, res) {
     phone: t.phone, email: t.email, plan: t.plan, status: t.status,
     expiresAt: t.expiresAt, margin: t.margin, accessCode: t.accessCode,
     hasPassword: Boolean(t.passwordHash),
-    active: isTenantActive(t)
+    active: isTenantActive(t),
+    prices: t.prices
   })));
 }
 

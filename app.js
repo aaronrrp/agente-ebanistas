@@ -523,7 +523,7 @@ function showView(viewId) {
   render();
   if (viewId === "sellersView" && AUTH.mode === "admin") loadSellersFromServer();
   if (viewId === "quoteView" && AUTH.mode === "vendedor") loadSellerQuoteClientOptions();
-  if (viewId === "quoteView" && AUTH.mode === "ebanista") loadMaterialCatalogOptions();
+  if (viewId === "quoteView" && AUTH.mode === "ebanista") resetMaterialCombo();
   if (viewId === "cutsView" && (AUTH.mode === "ebanista" || AUTH.mode === "vendedor")) loadSheetCatalogOptions();
   if (viewId === "handoffsView") {
     const canSend = AUTH.mode === "ebanista" || AUTH.mode === "vendedor";
@@ -3561,53 +3561,148 @@ els.chatInput.addEventListener("keydown", event => {
 // (son ajustes de cálculo o ya tienen su propio campo en la cotización).
 const NON_MATERIAL_PRICE_KEYS = ["kerf_mm", "install_hour", "transport_base", "transport_km"];
 
-function catalogEntryFromValue(val) {
-  if (!val) return null;
-  const prices = tenantPrices();
-  const names = prices._names || {};
-  if (val.startsWith("std:")) {
-    const key = val.slice(4);
-    return { description: names[key] || defaultPriceNames[key] || key, unitPrice: Number(prices[key]) || 0 };
-  }
-  if (val.startsWith("custom:")) {
-    const c = (prices.customItems || [])[Number(val.slice(7))];
-    if (c) return { description: c.name, unitPrice: Number(c.price) || 0 };
-  }
-  return null;
-}
+const MATERIAL_CATEGORIES = {
+  madera:    "🪵 Madera / Melamina",
+  canto:     "🔄 Canto PVC",
+  bisagras:  "🔩 Bisagras y correderas",
+  jaladores: "🪝 Jaladores",
+  mano:      "🚚 Mano de obra"
+};
+const STANDARD_KEY_CATEGORY = {
+  melamina_std: "madera", melamina_lg: "madera", backing_m2: "madera",
+  canto_pvc: "canto", canto_grueso: "canto",
+  canto_045mm_metro: "canto", canto_100mm_metro: "canto", canto_200mm_metro: "canto",
+  bisagra_std: "bisagras", bisagra_sc: "bisagras", corredera_std: "bisagras", corredera_sc: "bisagras",
+  jalador_chico: "jaladores", jalador_grande: "jaladores", jalador_premium: "jaladores"
+};
 
-function loadMaterialCatalogOptions() {
-  const sel = document.getElementById("materialCatalogSelect");
-  if (!sel) return;
+function getMaterialCatalogEntries() {
   const prices = tenantPrices();
   const names = prices._names || {};
   const standardKeys = Object.keys(defaultGlobalPrices).filter(k => !NON_MATERIAL_PRICE_KEYS.includes(k));
-  const customItems = prices.customItems || [];
-  const opts = standardKeys
+  const entries = standardKeys
     .filter(k => typeof prices[k] === "number")
-    .map(k => `<option value="std:${k}">${escapeHtml(names[k] || defaultPriceNames[k] || k)} — $${Number(prices[k]).toFixed(2)}</option>`)
-    .concat(customItems.map((c, i) => `<option value="custom:${i}">${escapeHtml(c.name)} — $${Number(c.price).toFixed(2)}</option>`));
-  sel.innerHTML = '<option value="">— Elegir material —</option>' + opts.join("");
-  document.getElementById("materialPriceDisplay").textContent = "—";
+    .map(k => ({
+      value: `std:${k}`,
+      category: STANDARD_KEY_CATEGORY[k] || "madera",
+      description: names[k] || defaultPriceNames[k] || k,
+      unitPrice: Number(prices[k]) || 0
+    }));
+  (prices.customItems || []).forEach((c, i) => {
+    entries.push({
+      value: `custom:${i}`,
+      category: MATERIAL_CATEGORIES[c.category] ? c.category : "madera",
+      description: c.name,
+      unitPrice: Number(c.price) || 0
+    });
+  });
+  return entries;
 }
 
-document.getElementById("materialCatalogSelect")?.addEventListener("change", (e) => {
-  const entry = catalogEntryFromValue(e.target.value);
-  document.getElementById("materialPriceDisplay").textContent = entry ? `$${entry.unitPrice.toFixed(2)}` : "—";
+let _selectedMaterialEntry = null;
+let _materialComboCategory = null; // null = lista de categorías; key = ya entró a una categoría
+
+function materialComboItemRow(entry, query, matchIdx) {
+  const desc = entry.description;
+  let nameHtml = escapeHtml(desc);
+  if (query && matchIdx !== -1) {
+    nameHtml = escapeHtml(desc.slice(0, matchIdx)) + "<mark>" + escapeHtml(desc.slice(matchIdx, matchIdx + query.length)) + "</mark>" + escapeHtml(desc.slice(matchIdx + query.length));
+  }
+  return `<div class="material-combo-item" data-combo-value="${entry.value}"><span class="name">${nameHtml}</span><span class="price">$${entry.unitPrice.toFixed(2)}</span></div>`;
+}
+
+function renderMaterialCombo(query) {
+  const panel = document.getElementById("materialSearchResults");
+  if (!panel) return;
+  const entries = getMaterialCatalogEntries();
+  const q = (query || "").trim().toLowerCase();
+
+  if (q) {
+    const matches = entries
+      .map(e => ({ e, idx: e.description.toLowerCase().indexOf(q) }))
+      .filter(x => x.idx !== -1)
+      .sort((a, b) => a.idx - b.idx || a.e.description.length - b.e.description.length);
+    panel.innerHTML = matches.length
+      ? matches.map(({ e, idx }) => materialComboItemRow(e, q, idx)).join("")
+      : `<p class="material-combo-empty">Sin resultados — agrégalo primero en Precios del mercado.</p>`;
+    return;
+  }
+
+  if (_materialComboCategory) {
+    const items = entries.filter(e => e.category === _materialComboCategory);
+    panel.innerHTML = `<div class="material-combo-back" data-combo-back="1">← Categorías</div>` +
+      (items.length
+        ? items.map(e => materialComboItemRow(e, "", -1)).join("")
+        : `<p class="material-combo-empty">Sin materiales en esta categoría todavía.</p>`);
+    return;
+  }
+
+  panel.innerHTML = Object.entries(MATERIAL_CATEGORIES).map(([key, label]) => {
+    const count = entries.filter(e => e.category === key).length;
+    return `<div class="material-combo-cat-row" data-combo-cat="${key}"><span>${label}</span><span class="count">${count}</span></div>`;
+  }).join("");
+}
+
+function resetMaterialCombo() {
+  _selectedMaterialEntry = null;
+  _materialComboCategory = null;
+  const input = document.getElementById("materialSearchInput");
+  if (input) input.value = "";
+  const display = document.getElementById("materialPriceDisplay");
+  if (display) display.textContent = "—";
+  document.getElementById("materialSearchResults")?.classList.add("hidden");
+}
+
+document.getElementById("materialSearchInput")?.addEventListener("focus", (e) => {
+  _materialComboCategory = null;
+  document.getElementById("materialSearchResults").classList.remove("hidden");
+  renderMaterialCombo(e.target.value);
+});
+
+document.getElementById("materialSearchInput")?.addEventListener("input", (e) => {
+  _selectedMaterialEntry = null;
+  document.getElementById("materialPriceDisplay").textContent = "—";
+  _materialComboCategory = null;
+  document.getElementById("materialSearchResults").classList.remove("hidden");
+  renderMaterialCombo(e.target.value);
+});
+
+document.getElementById("materialSearchInput")?.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { document.getElementById("materialSearchResults").classList.add("hidden"); e.target.blur(); }
+});
+
+document.getElementById("materialSearchInput")?.addEventListener("blur", () => {
+  setTimeout(() => document.getElementById("materialSearchResults")?.classList.add("hidden"), 120);
+});
+
+document.getElementById("materialSearchResults")?.addEventListener("mousedown", (e) => {
+  e.preventDefault(); // evita que el input pierda foco antes de procesar el click
+  const catEl = e.target.closest("[data-combo-cat]");
+  if (catEl) { _materialComboCategory = catEl.dataset.comboCat; renderMaterialCombo(""); return; }
+  const backEl = e.target.closest("[data-combo-back]");
+  if (backEl) { _materialComboCategory = null; renderMaterialCombo(""); return; }
+  const itemEl = e.target.closest("[data-combo-value]");
+  if (itemEl) {
+    const entry = getMaterialCatalogEntries().find(en => en.value === itemEl.dataset.comboValue);
+    if (entry) {
+      _selectedMaterialEntry = entry;
+      document.getElementById("materialSearchInput").value = entry.description;
+      document.getElementById("materialPriceDisplay").textContent = `$${entry.unitPrice.toFixed(2)}`;
+    }
+    document.getElementById("materialSearchResults").classList.add("hidden");
+  }
 });
 
 document.getElementById("addMaterialBtn")?.addEventListener("click", () => {
-  const entry = catalogEntryFromValue(document.getElementById("materialCatalogSelect").value);
-  if (!entry) { toast("Elige un material de la lista de precios del mercado.", "error"); return; }
+  if (!_selectedMaterialEntry) { toast("Elige un material de la lista de precios del mercado.", "error"); return; }
   state.materialCartItems.push({
     id: crypto.randomUUID(),
-    description: entry.description,
+    description: _selectedMaterialEntry.description,
     qty: Number(document.getElementById("materialQty").value) || 1,
     unit: document.getElementById("materialUnit").value,
-    unitPrice: entry.unitPrice
+    unitPrice: _selectedMaterialEntry.unitPrice
   });
-  document.getElementById("materialCatalogSelect").value = "";
-  document.getElementById("materialPriceDisplay").textContent = "—";
+  resetMaterialCombo();
   document.getElementById("materialQty").value = "1";
   renderDraftItems();
   toast("Material agregado ✓");
@@ -3749,21 +3844,58 @@ document.getElementById("mp_naturalInput")?.addEventListener("keydown", (e) => {
 });
 
 // ── Dictado por voz para la descripción en una sola línea ───────────────────
+// Modo "press to toggle": queda escuchando (incluso a través de pausas/silencios)
+// hasta que el usuario vuelve a presionar el botón — no se detiene solo.
 const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+let _mpVoiceRecognition = null;
+let _mpVoiceListening = false;
+
 document.getElementById("mp_voiceBtn")?.addEventListener("click", () => {
   if (!SpeechRecognitionImpl) { toast("Tu navegador no soporta dictado por voz — usa Chrome o Edge.", "error"); return; }
-  const input = document.getElementById("mp_naturalInput");
   const btn = document.getElementById("mp_voiceBtn");
+
+  if (_mpVoiceListening) {
+    _mpVoiceListening = false; // el onend que dispare este stop() ya no debe reiniciar solo
+    _mpVoiceRecognition?.stop();
+    return;
+  }
+
+  const input = document.getElementById("mp_naturalInput");
   const recognition = new SpeechRecognitionImpl();
+  _mpVoiceRecognition = recognition;
   recognition.lang = "es";
-  recognition.interimResults = false;
-  recognition.maxAlternatives = 1;
-  btn.textContent = "🔴";
-  btn.disabled = true;
-  recognition.onresult = (e) => { input.value = e.results[0][0].transcript; };
-  recognition.onerror = () => toast("No se entendió el audio, intenta otra vez.", "error");
-  recognition.onend = () => { btn.textContent = "🎤"; btn.disabled = false; };
+  recognition.continuous = true;
+  recognition.interimResults = true;
+
+  let finalText = "";
+  recognition.onresult = (e) => {
+    let interim = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const transcript = e.results[i][0].transcript;
+      if (e.results[i].isFinal) finalText += transcript + " ";
+      else interim += transcript;
+    }
+    input.value = (finalText + interim).trim();
+  };
+  recognition.onerror = (event) => {
+    if (event.error === "not-allowed") {
+      _mpVoiceListening = false;
+      toast("Permiso de micrófono denegado — actívalo en el navegador.", "error");
+    } else if (event.error !== "no-speech" && event.error !== "aborted") {
+      toast("Error de micrófono: " + event.error, "error");
+    }
+    // "no-speech"/"aborted" no apagan el modo escucha — onend decide si reinicia solo.
+  };
+  recognition.onend = () => {
+    if (_mpVoiceListening) { try { recognition.start(); } catch { _mpVoiceListening = false; } }
+    if (!_mpVoiceListening) { btn.textContent = "🎤"; btn.classList.remove("recording"); btn.title = "Dictar por voz"; }
+  };
+
   recognition.start();
+  _mpVoiceListening = true;
+  btn.textContent = "⏹";
+  btn.classList.add("recording");
+  btn.title = "Detener dictado";
 });
 
 // ── Editable cuts table — inline editing ──────────────────────────────────
@@ -4304,11 +4436,34 @@ document.getElementById("logoutBtn")?.addEventListener("click", async () => {
   showLogin();
 });
 
-// ── Sync tenants — push local first (localStorage = source of truth) ─────────
+// ── Sync tenants — pull prices first, then push local (admin sigue siendo dueño del resto) ──
 async function syncTenantsFromServer() {
   if (window.location.protocol === "file:" || !AUTH.token) return;
   try {
-    // 1. Push every local tenant to server (local = source of truth)
+    // 1. Pull server tenants first. "prices" lo edita el ebanista directo contra el
+    //    servidor (PUT /api/ebanista-prices), sin pasar por el localStorage del admin —
+    //    así que la versión del servidor de ESE campo siempre debe ganar antes de que
+    //    el paso 2 empuje la copia local del admin, o se pierde lo que el ebanista guardó.
+    const res = await fetch("/api/tenants", { headers: { Authorization: `Bearer ${AUTH.token}` } });
+    if (res.ok) {
+      const serverTenants = await res.json();
+      let changed = false;
+      serverTenants.forEach(st => {
+        const local = state.tenants.find(t => t.id === st.id);
+        if (!local) {
+          state.tenants.push({ ...st, catalog: st.catalog || cloneCatalog() });
+          changed = true;
+        } else if (st.prices && JSON.stringify(local.prices || {}) !== JSON.stringify(st.prices)) {
+          // st.prices ausente = el servidor no lo mandó (endpoint viejo/caído) — nunca
+          // lo tratamos como "el ebanista lo vació", o se borraría lo que sí había local.
+          local.prices = st.prices;
+          changed = true;
+        }
+      });
+      if (changed) { save(); render(); }
+    }
+
+    // 2. Push every local tenant to server (admin sigue siendo dueño del resto de los campos)
     await Promise.all(state.tenants.map(async t => {
       const r = await fetch(`/api/tenants/${t.id}`, {
         method: "PUT",
@@ -4324,19 +4479,6 @@ async function syncTenantsFromServer() {
         }).catch(() => {});
       }
     }));
-
-    // 2. Pull server tenants to add any not in local
-    const res = await fetch("/api/tenants", { headers: { Authorization: `Bearer ${AUTH.token}` } });
-    if (!res.ok) return;
-    const serverTenants = await res.json();
-    let changed = false;
-    serverTenants.forEach(st => {
-      if (!state.tenants.find(t => t.id === st.id)) {
-        state.tenants.push({ ...st, catalog: st.catalog || cloneCatalog() });
-        changed = true;
-      }
-    });
-    if (changed) { save(); render(); }
   } catch {}
 }
 
@@ -4847,9 +4989,9 @@ document.getElementById("tenantAddPriceBtn")?.addEventListener("click", () => {
 document.getElementById("saveTenantPricesBtn")?.addEventListener("click", async () => {
   if (!_tenantPrices) return;
   await saveTenantPrices(_tenantPrices);
-  // El panel de precios vive dentro de quoteView — no hay cambio de vista que dispare
-  // el refresco de los selectores de materiales/lámina, así que se hace a mano aquí.
-  loadMaterialCatalogOptions();
+  // El selector de lámina (sheetPreset) precarga sus <option> — hay que refrescarlo a mano
+  // porque el panel de precios vive dentro de quoteView (no hay cambio de vista que lo dispare).
+  // El buscador de materiales no necesita esto: lee el catálogo en vivo en cada render.
   loadSheetCatalogOptions();
 });
 
