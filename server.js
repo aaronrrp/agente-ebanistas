@@ -22,7 +22,7 @@ const mimeTypes = {
   ".svg":  "image/svg+xml"
 };
 
-const allowedActions = ["fill_form", "add_to_quote", "calculate_cuts", "enhance_image", "mock_3d"];
+const allowedActions = ["fill_form", "add_to_quote", "calculate_cuts", "enhance_image", "mock_3d", "add_materials", "add_pieces"];
 
 // ── Tenant helpers ──────────────────────────────────────────────────────────
 function makeCode(companyName) {
@@ -310,6 +310,27 @@ IMPORTANTE sobre la hora: NO puedes saber la hora exacta actual — no tienes re
 - Pide cotizar, precio, presupuesto → ["fill_form", "add_to_quote"]
 - Pide cortes, despiece, tabla de cortes → ["fill_form", "add_to_quote", "calculate_cuts"]
 
+══ AGREGAR MATERIALES AL CARRITO DE COTIZACIÓN ══
+Si el usuario pide agregar un material/herraje a su cotización (ej: "agrega 6 bisagras de cierre suave",
+"ponme 2 láminas de melamina estándar", "necesito tapacanto de 1mm"), NO generes un mueble — responde con
+actions: ["add_materials"] y un array "materials". Busca el precio en la lista de PRECIOS ACTUALES que se
+te da en el contexto (ej: "Bisagra cierre suave: $7.00/un" → unitPrice 7, unit "Unidades"). Si no encuentras
+un precio exacto, estima uno razonable y dilo en assistantText. Cada material:
+{ "description": "Bisagra cierre suave", "qty": 6, "unit": "Unidades", "unitPrice": 7.00 }
+
+══ AGREGAR PIEZAS A CORTES ══
+Si el usuario pide crear piezas para la lista de cortes (ej: "necesito 3 piezas de 50 de largo por 50 de
+ancho, canto en 1 lado corto y 2 largos", "agrega una pieza 90x55 con veta al largo"), NO generes un mueble —
+responde con actions: ["add_pieces"] y un array "pieces". Cada número SIN unidad explícita = milímetros
+(convierte tú a cm dividiendo entre 10); si dice "cm" explícito, úsalo directo. "Largo" y "ancho" son las dos
+dimensiones de la pieza (no necesariamente largo > ancho). Los cantos van en 4 posibles lados: dos lados
+"largo" (largo1/largo2) y dos lados "corto" (corto1/corto2) — si el usuario dice "canto en 1 lado corto"
+marca solo corto1; "2 largos" marca largo1 y largo2; "todos los cantos" marca los 4. Veta: boolean + dirección
+"largo" o "ancho" (a qué eje corre la veta), default "largo" si solo dice "con veta" sin especificar. Cada pieza:
+{ "furniture": "", "name": "Pieza", "largo": 50, "ancho": 50, "qty": 3, "thickness": "18 mm",
+  "cantoSides": { "l1": false, "l2": false, "c1": true, "c2": false }, "cantoThickness": "1.00mm",
+  "grain": false, "grainDirection": "largo" }
+
 ══ REGLAS TÉCNICAS ══
 - Fondo interno/embutido: resta grosor melamina a profundidad de repisas y gavetas internas.
 - Fondo exterior/sobrepuesto o sin fondo: NO restes profundidad a repisas internas.
@@ -365,8 +386,13 @@ Responde SOLO JSON válido:
       "manualPrice": 0
     }
   ],
+  "materials": null,
+  "pieces": null,
   "designPrompt": null
 }
+
+Si la accion es "add_materials", "items" va null/vacio y "materials" lleva el array descrito arriba.
+Si la accion es "add_pieces", "items" va null/vacio y "pieces" lleva el array descrito arriba.
 `.trim();
 
 function getAiText(data) {
@@ -394,12 +420,16 @@ function normalizeAi(payload, fallback) {
   } else if (payload?.item) {
     items = [payload.item];
   }
+  const materials = Array.isArray(payload?.materials) ? payload.materials : null;
+  const pieces = Array.isArray(payload?.pieces) ? payload.pieces : null;
   return {
     source: "openai",
     assistantText: payload?.assistantText || fallback || "Propuesta generada.",
     actions: actions.length ? actions : ["fill_form"],
     items,
     item: items ? items[0] : null,
+    materials,
+    pieces,
     designPrompt: payload?.designPrompt || null
   };
 }

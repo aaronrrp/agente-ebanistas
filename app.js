@@ -2254,6 +2254,51 @@ async function sendToAI() {
       }
     }
 
+    // ── IA agrega materiales al carrito de Cotizar ──────────────────────────
+    if (Array.isArray(data.materials) && data.materials.length) {
+      data.materials.forEach(m => {
+        state.materialCartItems.push({
+          id: crypto.randomUUID(),
+          description: m.description || "Material",
+          qty: Number(m.qty) || 1,
+          unit: m.unit || "Unidades",
+          unitPrice: Number(m.unitPrice) || 0
+        });
+      });
+      renderDraftItems();
+      pending.appendChild(document.createElement("br"));
+      const btn = document.createElement("button");
+      btn.className = "chat-quote-btn";
+      btn.textContent = "📋 Ver en Cotizar";
+      btn.onclick = () => showView("quoteView");
+      pending.appendChild(btn);
+      toast(`${data.materials.length} material(es) agregado(s) por la IA ✓`);
+    }
+
+    // ── IA crea piezas y las manda a Cortes ─────────────────────────────────
+    if (Array.isArray(data.pieces) && data.pieces.length) {
+      const allPieces = data.pieces.flatMap(p => buildManualPieces({
+        furniture: p.furniture || "",
+        name: p.name || "Pieza",
+        largo: Number(p.largo) || 1,
+        ancho: Number(p.ancho) || 1,
+        qty: Math.max(1, Number(p.qty) || 1),
+        thickness: p.thickness || "18 mm",
+        cantoSides: p.cantoSides || { l1: false, l2: false, c1: false, c2: false },
+        cantoThickness: p.cantoThickness || "1.00mm",
+        grain: Boolean(p.grain),
+        grainDir: p.grainDirection || "largo"
+      }));
+      addPiecesToCuts(allPieces);
+      pending.appendChild(document.createElement("br"));
+      const btn = document.createElement("button");
+      btn.className = "chat-quote-btn";
+      btn.textContent = "✂️ Ver en Cortes";
+      btn.onclick = () => showView("cutsView");
+      pending.appendChild(btn);
+      toast(`${allPieces.length} pieza(s) creada(s) por la IA ✓`);
+    }
+
     // Image renders removed — generateConceptImage disabled
 
   } catch (e) {
