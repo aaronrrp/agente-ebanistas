@@ -1747,7 +1747,7 @@ function renderCutsPiecesTable() {
 
   els.cutsOutput.innerHTML = `
     <p style="font-size:.8rem;color:#6B7280;margin:0 0 8px">
-      ✏️ Haz clic en cualquier celda para editar. Largo/Ancho son tamaño de <strong>corte (sustrato)</strong>, ya con el canto restado — no el tamaño terminado. L1/L2 = canto en cada lado largo, A1/A2 = canto en cada lado ancho. Los cambios se reflejan en el cálculo de láminas al instante.
+      ✏️ Haz clic en cualquier celda para editar. Largo/Ancho son la medida exacta de corte — el canto no le resta nada. L1/L2 = canto en cada lado largo, A1/A2 = canto en cada lado ancho. Los cambios se reflejan en el cálculo de láminas al instante.
     </p>
     <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
       <button id="addCutPieceBtn" class="secondary-btn" type="button">＋ Agregar pieza</button>
@@ -3800,20 +3800,20 @@ function buildManualPieces({ furniture, name, largo, ancho, qty, thickness, cant
     top:    cantoSides.c1 ? cantoThickness : null,
     bottom: cantoSides.c2 ? cantoThickness : null
   };
-  const substrate = applyEdgeThicknessToDimensions(ancho, largo, edgeSides);
+  // La medida que da el ebanista es la medida de corte exacta — el canto no se resta de nada.
   const baseName = name || "Pieza";
   return Array.from({ length: Math.max(1, qty) }, (_, i) => ({
     id: crypto.randomUUID(),
     furniture: furniture || "",
     name: qty > 1 ? `${baseName} ${i + 1}` : baseName,
-    width: roundMm(substrate.width),
-    height: roundMm(substrate.height),
+    width: roundMm(ancho),
+    height: roundMm(largo),
     thickness,
     edgeSides,
     edge: describeEdgeSides(edgeSides),
     grain: Boolean(grain),
     grainDirection: grain ? (grainDir || "largo") : null,
-    area: roundMm(substrate.width * substrate.height)
+    area: roundMm(ancho * largo)
   }));
 }
 
