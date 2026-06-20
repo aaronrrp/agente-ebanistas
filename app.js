@@ -3935,6 +3935,10 @@ document.getElementById("parseManualPieceBtn")?.addEventListener("click", () => 
   const input = document.getElementById("mp_naturalInput");
   const parsed = parsePieceFromText(input.value);
   if (!parsed) { toast('No entendí las medidas — usa algo como "40 de largo, 30 de ancho".', "error"); return; }
+  // Grosor de lámina y de canto vienen de los selectores, no del texto — más confiable que
+  // detectarlos de lo que se dijo/escribió.
+  parsed.thickness = document.getElementById("mp_voiceThickness").value;
+  parsed.cantoThickness = document.getElementById("mp_voiceCantoThickness").value;
   const pieces = buildManualPieces(parsed);
   addPiecesToCuts(pieces);
   toast(`${pieces.length} pieza(s) creada(s) desde el texto ✓`);
