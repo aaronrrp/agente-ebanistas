@@ -507,10 +507,14 @@
                 <button id="addManualPieceBtn" class="secondary-btn span-2" type="button">＋ Agregar pieza a Cortes</button>
               </div>
 
-              <p class="form-help" style="margin-top:10px;margin-bottom:4px">O descríbela en una sola línea (escribiendo o hablando) — elige grosor de lámina y de canto aquí, el resto (largo, ancho, cantidad, lados con canto, veta) lo dices o escribes:</p>
-              <div style="display:flex;gap:6px;margin-bottom:6px">
-                <select id="mp_voiceThickness" style="width:auto"><option>15 mm</option><option selected>18 mm</option><option>25 mm</option><option>36 mm doble laminado</option></select>
-                <select id="mp_voiceCantoThickness" style="width:auto"><option>0.45mm</option><option selected>1.00mm</option><option>2.00mm</option></select>
+              <p class="form-help" style="margin-top:10px;margin-bottom:4px">O descríbela en una sola línea (escribiendo o hablando) — elige grosor de lámina y de canto abajo, el resto (largo, ancho, cantidad, lados con canto, veta) lo dices o escribes:</p>
+              <div class="form-grid compact-grid" style="margin-bottom:8px">
+                <label>Grosor de lámina
+                  <select id="mp_voiceThickness"><option>15 mm</option><option selected>18 mm</option><option>25 mm</option><option>36 mm doble laminado</option></select>
+                </label>
+                <label>Grosor de canto
+                  <select id="mp_voiceCantoThickness"><option>0.45mm</option><option selected>1.00mm</option><option>2.00mm</option></select>
+                </label>
               </div>
               <div style="display:flex;gap:6px">
                 <input id="mp_naturalInput" placeholder="Ej: 4 piezas con 900 de largo, 550 de ancho, canto en los anchos">
