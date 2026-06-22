@@ -237,7 +237,6 @@ const els = {
   sheetPreset: document.getElementById("sheetPreset"),
   sheetWidth: document.getElementById("sheetWidth"),
   sheetHeight: document.getElementById("sheetHeight"),
-  wastePercent: document.getElementById("wastePercent"),
   applySheetPresetBtn: document.getElementById("applySheetPresetBtn"),
   generateCutsBtn: document.getElementById("generateCutsBtn"),
   cutsOutput: document.getElementById("cutsOutput"),
@@ -1668,48 +1667,6 @@ function generatePiecesForItem(item) {
   return pieces;
 }
 
-function calculateCuts() {
-  const sheetWidth = Number(els.sheetWidth.value || 244);
-  const sheetHeight = Number(els.sheetHeight.value || 122);
-  const wastePercent = Number(els.wastePercent.value || 0);
-  const sheetArea = sheetWidth * sheetHeight;
-  const pieces = [
-    ...state.draftItems.flatMap(generatePiecesForItem),
-    ...state.manualPieces
-  ];
-  const usableArea = sheetArea * (1 - (wastePercent / 100));
-  const sheets = packPiecesByArea(pieces, usableArea);
-  const totalArea = pieces.reduce((sum, item) => sum + item.area, 0);
-
-  return {
-    pieces,
-    sheetWidth,
-    sheetHeight,
-    wastePercent,
-    sheetArea,
-    usableArea,
-    sheets,
-    totalArea
-  };
-}
-
-function packPiecesByArea(pieces, usableArea) {
-  const sorted = [...pieces].sort((a, b) => b.area - a.area);
-  const sheets = [];
-
-  sorted.forEach((pieceItem) => {
-    let target = sheets.find((sheet) => sheet.used + pieceItem.area <= usableArea);
-    if (!target) {
-      target = { number: sheets.length + 1, used: 0, pieces: [] };
-      sheets.push(target);
-    }
-    target.used += pieceItem.area;
-    target.pieces.push(pieceItem);
-  });
-
-  return sheets;
-}
-
 function renderCuts() {
   if (!state.draftItems.length && !state.manualPieces.length && !state.editablePieces.length) {
     els.cutsOutput.innerHTML = `<p class="muted">Agrega módulos en Cotizar y presiona Calcular cortes.</p>`;
@@ -1780,7 +1737,7 @@ function renderCutsPiecesTable() {
 }
 
 // ── BFDH 2D bin packing (Best Fit Decreasing + rotation) ────────────────────
-function packPiecesFFDH(pieces, sheetW, sheetH, wastePct, kerfMm = 5) {
+function packPiecesFFDH(pieces, sheetW, sheetH, kerfMm = 5) {
   const kerf = kerfMm;
   const marginX = 20, marginY = 20;
   const usableW = sheetW - marginX * 2;
@@ -1886,7 +1843,6 @@ function recalcCutsLayout() {
 
   const sheetW   = Number(document.getElementById("sheetWidth")?.value  || 2440);
   const sheetH   = Number(document.getElementById("sheetHeight")?.value || 1220);
-  const wastePct = Number(document.getElementById("wastePercent")?.value || 12) / 100;
   const totalArea = state.editablePieces.reduce((s, p) => s + (Number(p.width)||0)*(Number(p.height)||0), 0);
 
   // Group by thickness for separate sheet stacks
@@ -1904,7 +1860,7 @@ function recalcCutsLayout() {
     // Piezas con manualPlacement no entran al auto-nesting — se reservan en su posición fija.
     const autoPieces = pieces.filter(p => !p.manualPlacement);
     const manualPieces = pieces.filter(p => p.manualPlacement);
-    const sheets = packPiecesFFDH(autoPieces, sheetW, sheetH, wastePct, kerfMm);
+    const sheets = packPiecesFFDH(autoPieces, sheetW, sheetH, kerfMm);
     const oversized = sheets.oversized || [];
     manualPieces.forEach(p => {
       const si = Math.max(0, Number(p.manualPlacement.sheetIndex) || 0);
@@ -1931,7 +1887,7 @@ function recalcCutsLayout() {
   const groupsHtml = allSheetGroups.map(({ thickness, sheets }) => {
     const sheetCards = sheets.map((sh, si) => {
       const usedArea = sh.placements.reduce((s, p) => s + p.w * p.h, 0);
-      const pct = Math.min(100, Math.round(usedArea / (sheetW * sheetH * (1 - wastePct)) * 100));
+      const pct = Math.min(100, Math.round(usedArea / (sheetW * sheetH) * 100));
       const cls = pct > 90 ? "full" : pct > 75 ? "warn" : "";
       return `<div class="sheet-card">
         <strong>Lámina ${sh.number} (${thickness})</strong>
