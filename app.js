@@ -1819,20 +1819,35 @@ function packPiecesFFDH(pieces, sheetW, sheetH, kerfMm = 5) {
 // de recorte por cada pieza más baja que el alto de su banda (separarla del sobrante).
 // Las piezas con posición manual no tienen una banda conocida — se cuentan 1 a 1 como
 // aproximación simple, ya que su secuencia real de corte no se puede inferir.
-function countGuillotineCuts(sheet) {
+// N piezas en fila necesitan N-1 cortes para separarse ENTRE ellas, pero si la última no
+// llega hasta el borde útil de la lámina (queda sobrante detrás), separarla de ese sobrante
+// es un corte más → N cortes, no N-1. Lo mismo aplica entre bandas (shelves) y el sobrante
+// de abajo. marginX/marginY deben coincidir con los que usa packPiecesFFDH.
+function countGuillotineCuts(sheet, sheetW, sheetH) {
   const autoPlacements = sheet.placements.filter(p => !p.manual);
   const manualCount = sheet.placements.length - autoPlacements.length;
   if (!autoPlacements.length) return manualCount;
 
+  const marginX = 20, marginY = 20, tol = 0.5;
+  const usableRight = sheetW - marginX;
+  const usableBottom = sheetH - marginY;
+
   const byY = {};
   autoPlacements.forEach(p => { (byY[p.y] = byY[p.y] || []).push(p); });
-  const shelfYs = Object.keys(byY);
-  let cuts = shelfYs.length > 1 ? shelfYs.length - 1 : 0;
+  const shelfYs = Object.keys(byY).map(Number).sort((a, b) => a - b);
+
+  let cuts = Math.max(0, shelfYs.length - 1);
+  const lastShelfY = shelfYs[shelfYs.length - 1];
+  const lastShelfH = Math.max(...byY[lastShelfY].map(p => p.h));
+  if (lastShelfY + lastShelfH < usableBottom - tol) cuts += 1; // sobra alto debajo de la última banda
+
   shelfYs.forEach(y => {
-    const piecesInShelf = byY[y];
-    if (piecesInShelf.length > 1) cuts += piecesInShelf.length - 1;
+    const piecesInShelf = [...byY[y]].sort((a, b) => a.x - b.x);
+    cuts += Math.max(0, piecesInShelf.length - 1);
+    const lastPiece = piecesInShelf[piecesInShelf.length - 1];
+    if (lastPiece.x + lastPiece.w < usableRight - tol) cuts += 1; // sobra ancho a la derecha de la última pieza
     const shelfHeight = Math.max(...piecesInShelf.map(p => p.h));
-    cuts += piecesInShelf.filter(p => p.h < shelfHeight - 0.01).length;
+    cuts += piecesInShelf.filter(p => p.h < shelfHeight - tol).length; // recorte de piezas más bajas que su banda
   });
   return cuts + manualCount;
 }
@@ -1958,7 +1973,7 @@ function recalcCutsLayout() {
   }).join('<hr style="margin:12px 0;border-color:#E5E7EB">');
 
   const estimatedCuts = allSheetGroups.reduce((sum, g) =>
-    sum + g.sheets.reduce((s, sh) => s + countGuillotineCuts(sh), 0), 0);
+    sum + g.sheets.reduce((s, sh) => s + countGuillotineCuts(sh, sheetW, sheetH), 0), 0);
 
   // Canto total: suma la longitud de cada lado con canto (arriba/abajo = ancho, izq/der = alto),
   // agrupado por grosor, con costo estimado usando los precios por metro ya configurados.
