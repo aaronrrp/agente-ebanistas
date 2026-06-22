@@ -1122,7 +1122,7 @@ function renderDraftItems() {
       <header>
         <div>
           <strong>${index + 1}. ${escapeHtml(item.description)}</strong>
-          <p>${item.qty} ${escapeHtml(item.unit)} × $${Number(item.unitPrice).toFixed(2)}</p>
+          <p>${item.qty} ${escapeHtml(item.unit)} × $<input type="number" class="price-edit-input" min="0" step="0.01" value="${Number(item.unitPrice).toFixed(2)}" data-edit-price="${item.id}" title="Precio del catálogo — edítalo si quieres usar otro para esta cotización"></p>
         </div>
         <span class="item-price">$${(item.qty * item.unitPrice).toFixed(2)}</span>
       </header>
@@ -1433,6 +1433,15 @@ function renderSellerQuotePaper(quote, seller) {
 
 // Cotización de materiales del ebanista — mismo formato que renderSellerQuotePaper,
 // pero con el branding del ebanista (tenant) en vez del vendedor.
+// Fecha formal con día de la semana, ej. "lunes, 22 de junio de 2026".
+function formatQuoteDate(isoDate) {
+  if (!isoDate) return "";
+  const d = new Date(isoDate + "T00:00:00");
+  if (isNaN(d)) return isoDate;
+  const text = d.toLocaleDateString("es-PA", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 function renderEbanistaMaterialQuotePaper(quote, tenant) {
   const theme = tenant?.theme || {};
   const logoHtml = (theme.logoBase64 || tenant?.logoBase64)
@@ -1441,6 +1450,7 @@ function renderEbanistaMaterialQuotePaper(quote, tenant) {
 
   const subtotal = quote.items.reduce((s, it) => s + it.qty * it.unitPrice, 0);
   const total = quote.manualTotal > 0 ? quote.manualTotal : (subtotal + (quote.manoObra || 0) + (quote.transport || 0));
+  const validityDays = Math.max(1, Math.round((new Date(quote.dueDate) - new Date(quote.date)) / 86400000));
 
   els.quotePaper.innerHTML = `
     <article class="quote-doc">
@@ -1448,7 +1458,7 @@ function renderEbanistaMaterialQuotePaper(quote, tenant) {
         <div class="quote-brand">
           ${logoHtml}
           <strong>${escapeHtml(tenant?.companyName || "")}</strong>
-          <span>${escapeHtml(tenant?.terms ? "" : "")}</span>
+          ${theme.tagline ? `<span>${escapeHtml(theme.tagline)}</span>` : ""}
         </div>
         <div class="quote-meta">
           ${quote.clientName ? `<strong>${escapeHtml(quote.clientName)}</strong>` : "Cliente sin asignar"}
@@ -1460,9 +1470,11 @@ function renderEbanistaMaterialQuotePaper(quote, tenant) {
       <table class="quote-table" style="margin-bottom:1rem">
         <tbody>
           <tr><th>Fecha de cotización</th><th>Vencimiento</th><th>Contacto</th></tr>
-          <tr><td>${quote.date}</td><td>${quote.dueDate}</td><td>${escapeHtml(tenant?.contactName || "")}</td></tr>
+          <tr><td>${formatQuoteDate(quote.date)}</td><td>${formatQuoteDate(quote.dueDate)}</td><td>${escapeHtml(tenant?.contactName || "")}</td></tr>
         </tbody>
       </table>
+
+      ${tenant?.materials ? `<h4>Resumen</h4><p>${escapeHtml(tenant.materials)}</p>` : ""}
 
       <table class="quote-table">
         <thead><tr><th>Descripción</th><th>Cantidad</th><th>Precio unitario</th><th>Importe</th></tr></thead>
@@ -1484,6 +1496,10 @@ function renderEbanistaMaterialQuotePaper(quote, tenant) {
       </div>
 
       ${quote.notes ? `<h4>Notas</h4><p>${escapeHtml(quote.notes)}</p>` : ""}
+
+      <h4>Condiciones</h4>
+      <p>Validez de la oferta: ${validityDays} día(s), hasta el ${formatQuoteDate(quote.dueDate)}.</p>
+      ${tenant?.terms ? `<p>${escapeHtml(tenant.terms)}</p>` : ""}
 
       <p class="muted" style="font-size:.78rem;margin-top:1rem">${escapeHtml(tenant?.contactName || "")}${tenant?.phone ? ` · ${escapeHtml(tenant.phone)}` : ""}${tenant?.email ? ` · ${escapeHtml(tenant.email)}` : ""}</p>
     </article>
@@ -3765,6 +3781,21 @@ els.quoteItemsList.addEventListener("click", (event) => {
   if (!removeId) return;
   state.materialCartItems = state.materialCartItems.filter((item) => item.id !== removeId);
   renderDraftItems();
+});
+
+// Precio editable por línea — actualiza solo los totales en pantalla, sin re-render
+// completo, para no perder el foco del input mientras se escribe.
+els.quoteItemsList.addEventListener("input", (event) => {
+  const editId = event.target.dataset.editPrice;
+  if (!editId) return;
+  const item = state.materialCartItems.find((it) => it.id === editId);
+  if (!item) return;
+  item.unitPrice = Number(event.target.value) || 0;
+  const card = event.target.closest(".quote-item-card");
+  if (card) card.querySelector(".item-price").textContent = `$${(item.qty * item.unitPrice).toFixed(2)}`;
+  const subtotal = state.materialCartItems.reduce((s, it) => s + it.qty * it.unitPrice, 0);
+  const subtotalEl = els.quoteItemsList.querySelector(".draft-subtotal strong");
+  if (subtotalEl) subtotalEl.textContent = `$${subtotal.toFixed(2)}`;
 });
 
 els.assistantOutput?.addEventListener("click", (event) => {
