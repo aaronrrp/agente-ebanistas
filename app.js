@@ -1857,6 +1857,29 @@ function packPiecesFFDH(pieces, sheetW, sheetH, wastePct, kerfMm = 5) {
   return sheets;
 }
 
+// Cuenta cortes guillotina para una lámina ya empacada: 1 corte horizontal entre cada
+// banda (shelf), 1 corte vertical entre cada pieza dentro de una banda, y 1 corte extra
+// de recorte por cada pieza más baja que el alto de su banda (separarla del sobrante).
+// Las piezas con posición manual no tienen una banda conocida — se cuentan 1 a 1 como
+// aproximación simple, ya que su secuencia real de corte no se puede inferir.
+function countGuillotineCuts(sheet) {
+  const autoPlacements = sheet.placements.filter(p => !p.manual);
+  const manualCount = sheet.placements.length - autoPlacements.length;
+  if (!autoPlacements.length) return manualCount;
+
+  const byY = {};
+  autoPlacements.forEach(p => { (byY[p.y] = byY[p.y] || []).push(p); });
+  const shelfYs = Object.keys(byY);
+  let cuts = shelfYs.length > 1 ? shelfYs.length - 1 : 0;
+  shelfYs.forEach(y => {
+    const piecesInShelf = byY[y];
+    if (piecesInShelf.length > 1) cuts += piecesInShelf.length - 1;
+    const shelfHeight = Math.max(...piecesInShelf.map(p => p.h));
+    cuts += piecesInShelf.filter(p => p.h < shelfHeight - 0.01).length;
+  });
+  return cuts + manualCount;
+}
+
 function recalcCutsLayout() {
   if (!els.cutsLayoutOutput) return;
   if (!state.editablePieces.length) { els.cutsLayoutOutput.innerHTML = ""; return; }
@@ -1978,10 +2001,8 @@ function recalcCutsLayout() {
       <div style="overflow-x:auto;margin-top:6px">${svgs}</div>`;
   }).join('<hr style="margin:12px 0;border-color:#E5E7EB">');
 
-  // Cortes estimados: en un patrón de corte por estantes (shelf cutting), separar N piezas
-  // en una lámina toma N-1 cortes guillotina (estantes + piezas dentro de cada estante).
   const estimatedCuts = allSheetGroups.reduce((sum, g) =>
-    sum + g.sheets.reduce((s, sh) => s + Math.max(0, sh.placements.length - 1), 0), 0);
+    sum + g.sheets.reduce((s, sh) => s + countGuillotineCuts(sh), 0), 0);
 
   // Canto total: suma la longitud de cada lado con canto (arriba/abajo = ancho, izq/der = alto),
   // agrupado por grosor, con costo estimado usando los precios por metro ya configurados.
@@ -2027,7 +2048,7 @@ function recalcCutsLayout() {
       <article><span>Canto total</span><strong>${totalCantoMeters.toFixed(2)} m</strong></article>
     </div>
     ${oversizedWarning}
-    <p style="font-size:.78rem;color:#6B7280;margin:6px 0 0">Canto por grosor: ${cantoBreakdown}${totalCantoMeters > 0 ? ` · costo estimado $${totalCantoCost.toFixed(2)}` : ""}. "Cortes estimados" asume corte por estantes (N piezas por lámina ≈ N-1 cortes guillotina) — es una estimación, no la secuencia exacta de corte.</p>
+    <p style="font-size:.78rem;color:#6B7280;margin:6px 0 0">Canto por grosor: ${cantoBreakdown}${totalCantoMeters > 0 ? ` · costo estimado $${totalCantoCost.toFixed(2)}` : ""}. "Cortes estimados" cuenta cortes guillotina por banda (estante) + recortes de piezas más bajas que su banda — es una estimación, no la secuencia exacta de corte.</p>
     <h4 style="margin:14px 0 6px">Distribución por grosor</h4>
     ${groupsHtml}`;
 }
@@ -3943,14 +3964,31 @@ function extractCantoThickness(t) {
   return nearest.toFixed(2) + "mm";
 }
 
+// Busca la medida de "word" (largo/ancho) aceptando los dos órdenes naturales:
+// "900 de largo" (número primero) y "largo de 900" / "largo: 900" / "largo es 900" (palabra
+// primero). searchFrom limita la búsqueda a partir de un índice, para no volver a agarrar
+// un número que ya se le asignó a la otra dimensión.
+function findDimensionMatch(t, word, searchFrom = 0) {
+  const sub = t.slice(searchFrom);
+  let m = sub.match(new RegExp(`(\\d+(?:[.,]\\d+)?)\\s*${UNIT_WORD}?\\s*(?:de\\s*)?${word}`, "i"));
+  if (!m) m = sub.match(new RegExp(`${word}\\s*(?:es\\s*|:\\s*|de\\s*)?(\\d+(?:[.,]\\d+)?)\\s*${UNIT_WORD}?`, "i"));
+  if (!m) return null;
+  return { value: toMm(Number(m[1].replace(",", ".")), m[2]), start: searchFrom + m.index, end: searchFrom + m.index + m[0].length };
+}
+
 function parsePieceFromText(text) {
   const t = String(text || "").toLowerCase();
 
-  const largoMatch = t.match(new RegExp(`(\\d+(?:[.,]\\d+)?)\\s*${UNIT_WORD}?\\s*(?:de\\s*)?largo`, "i"));
-  const anchoMatch = t.match(new RegExp(`(\\d+(?:[.,]\\d+)?)\\s*${UNIT_WORD}?\\s*(?:de\\s*)?ancho`, "i"));
+  const largoMatch = findDimensionMatch(t, "largo");
+  let anchoMatch = largoMatch ? findDimensionMatch(t, "ancho") : null;
+  // Si "ancho" agarró el mismo número que ya es de "largo" (se traslapan), reintenta
+  // buscando solo después de donde terminó el match de largo.
+  if (largoMatch && anchoMatch && anchoMatch.start < largoMatch.end) {
+    anchoMatch = findDimensionMatch(t, "ancho", largoMatch.end);
+  }
   if (!largoMatch || !anchoMatch) return null;
-  const largo = toMm(Number(largoMatch[1].replace(",", ".")), largoMatch[2]);
-  const ancho = toMm(Number(anchoMatch[1].replace(",", ".")), anchoMatch[2]);
+  const largo = largoMatch.value;
+  const ancho = anchoMatch.value;
 
   const qty = extractQuantity(t);
   const thickness = extractThickness(t);
