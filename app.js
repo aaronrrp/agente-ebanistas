@@ -139,12 +139,16 @@ function tenantPrices() {
 
 // Price groups — defines which keys belong to each group
 const priceGroups = [
-  { id: "madera",    icon: "🪵", title: "Madera / Melamina",        keys: ["melamina_std","melamina_lg","backing_m2"] },
-  { id: "canto",     icon: "🔄", title: "Canto PVC",                keys: ["canto_pvc","canto_grueso","canto_045mm_metro","canto_100mm_metro","canto_200mm_metro"] },
-  { id: "cortes",    icon: "✂️", title: "Cortes / nesting",          keys: ["kerf_mm"] },
-  { id: "bisagras",  icon: "🔩", title: "Bisagras y correderas",    keys: ["bisagra_std","bisagra_sc","corredera_std","corredera_sc"] },
-  { id: "jaladores", icon: "🪝", title: "Jaladores",                keys: ["jalador_chico","jalador_grande","jalador_premium"] },
-  { id: "mano",      icon: "🚚", title: "Mano de obra y transporte",keys: ["install_hour","transport_base","transport_km"] }
+  { id: "madera",       icon: "🪵", title: "Madera / Melamina",        keys: ["melamina_std","melamina_lg","backing_m2"] },
+  { id: "canto",        icon: "🔄", title: "Canto PVC",                keys: ["canto_pvc","canto_grueso","canto_045mm_metro","canto_100mm_metro","canto_200mm_metro"] },
+  { id: "cortes",       icon: "✂️", title: "Cortes / nesting",          keys: ["kerf_mm"] },
+  { id: "bisagras",     icon: "🔩", title: "Bisagras y correderas",    keys: ["bisagra_std","bisagra_sc","corredera_std","corredera_sc"] },
+  { id: "jaladores",    icon: "🪝", title: "Jaladores",                keys: ["jalador_chico","jalador_grande","jalador_premium"] },
+  { id: "mano",         icon: "🚚", title: "Mano de obra y transporte",keys: ["install_hour","transport_base","transport_km"] },
+  { id: "adhesivos",    icon: "🧴", title: "Pegamentos y solventes",   keys: [] },
+  { id: "cerraduras",   icon: "🔐", title: "Cerraduras y herrajes",    keys: [] },
+  { id: "herramientas", icon: "🛠️", title: "Herramientas y equipo",    keys: [] },
+  { id: "organizacion", icon: "🗄️", title: "Cocina y organización",    keys: [] }
 ];
 
 const state = {
@@ -3622,11 +3626,15 @@ els.chatInput.addEventListener("keydown", event => {
 const NON_MATERIAL_PRICE_KEYS = ["kerf_mm", "install_hour", "transport_base", "transport_km"];
 
 const MATERIAL_CATEGORIES = {
-  madera:    "🪵 Madera / Melamina",
-  canto:     "🔄 Canto PVC",
-  bisagras:  "🔩 Bisagras y correderas",
-  jaladores: "🪝 Jaladores",
-  mano:      "🚚 Mano de obra"
+  madera:       "🪵 Madera / Melamina",
+  canto:        "🔄 Canto PVC",
+  bisagras:     "🔩 Bisagras y correderas",
+  jaladores:    "🪝 Jaladores",
+  mano:         "🚚 Mano de obra",
+  adhesivos:    "🧴 Pegamentos y solventes",
+  cerraduras:   "🔐 Cerraduras y herrajes",
+  herramientas: "🛠️ Herramientas y equipo",
+  organizacion: "🗄️ Cocina y organización"
 };
 const STANDARD_KEY_CATEGORY = {
   melamina_std: "madera", melamina_lg: "madera", backing_m2: "madera",
@@ -3635,6 +3643,107 @@ const STANDARD_KEY_CATEGORY = {
   bisagra_std: "bisagras", bisagra_sc: "bisagras", corredera_std: "bisagras", corredera_sc: "bisagras",
   jalador_chico: "jaladores", jalador_grande: "jaladores", jalador_premium: "jaladores"
 };
+
+// Lista de precios IMECA (ferretería para muebles y carpintería) — se agrega una sola vez
+// a state.globalPrices.customItems (seedImecaPrices, llamado al final del archivo).
+const IMECA_PRICE_LIST = [
+  ["Adhesivo Aerosol 3M", 22.00, "adhesivos"],
+  ["Afix Montaje PU 310 ml", 10.99, "adhesivos"],
+  ["Arteplack 990 375 ml", 6.00, "adhesivos"],
+  ["Arteplack 750 ml", 15.00, "adhesivos"],
+  ["Arteplack 990 3 L", 24.99, "adhesivos"],
+  ["Carpincol MR-60 500 gr", 4.50, "adhesivos"],
+  ["Carpincol MR-60 1 Kg", 6.75, "adhesivos"],
+  ["Carpincol MR-60 1 Galón", 24.01, "adhesivos"],
+  ["Carpicol MR-60 1 Galón", 24.90, "adhesivos"],
+  ["Carpiflex Spray 1 Galón", 28.03, "adhesivos"],
+  ["Cemento 285 HV 120 ml", 2.25, "adhesivos"],
+  ["Cemento 321 HV 375 ml", 5.25, "adhesivos"],
+  ["Cemento 321 750 ml", 9.57, "adhesivos"],
+  ["Cemento 321 HV 1 Galón", 28.03, "adhesivos"],
+  ["Cemento 321 4.5 Galones", 102.70, "adhesivos"],
+  ["Cemento de Contacto Lanco 4 oz", 4.49, "adhesivos"],
+  ["Cemento de Contacto Lanco 8 oz", 5.60, "adhesivos"],
+  ["Cemento de Contacto Lanco 16 oz", 8.62, "adhesivos"],
+  ["Cemento de Contacto Lanco 1/4 Galón", 10.71, "adhesivos"],
+  ["Cemento de Contacto Lanco 1 Galón", 30.16, "adhesivos"],
+  ["Cemento PL285 Blíster", 3.50, "adhesivos"],
+  ["Cemento PL285 375 ml", 6.00, "adhesivos"],
+  ["Cemento PL285 Madera 750 ml", 9.90, "adhesivos"],
+  ["Cemento PL285 750 ml", 10.50, "adhesivos"],
+  ["Cemento PL285 1 Galón", 30.00, "adhesivos"],
+  ["Aguarrás 16 oz", 3.23, "adhesivos"],
+  ["Aguarrás 32 oz", 4.49, "adhesivos"],
+  ["Aguarrás 1/2 Galón", 7.64, "adhesivos"],
+  ["Aguarrás 1 Galón", 13.77, "adhesivos"],
+  ["Bisagra Cierre Lento 35 mm Recta IMEX", 1.30, "bisagras"],
+  ["Bisagra Cierre Lento 35 mm Semi Curva IMEX", 1.85, "bisagras"],
+  ["Bisagra Cierre Lento Curva", 1.08, "bisagras"],
+  ["Bisagra Cocina 35 mm Recta IMEX", 0.65, "bisagras"],
+  ["Bisagra Cocina 35 mm Recta IMEX S/P", 0.66, "bisagras"],
+  ["Bisagra Cocina 35 mm Semi Curva IMEX", 1.20, "bisagras"],
+  ["Bisagra Cocina 35 mm Curva IMEX", 1.20, "bisagras"],
+  ["Bisagra Recta C/L", 1.10, "bisagras"],
+  ["Bisagra Recta C-L (MD)", 1.50, "bisagras"],
+  ["Corredera 10” (25 cm) IMEX", 2.65, "bisagras"],
+  ["Corredera 12” (30 cm) IMEX", 2.95, "bisagras"],
+  ["Cerradura para Gaveta Metal", 1.72, "cerraduras"],
+  ["Cerradura para Gaveta de Metal", 2.11, "cerraduras"],
+  ["Cerradura Tipo Cocada", 2.15, "cerraduras"],
+  ["Cerradura Gaveta Plateada", 2.31, "cerraduras"],
+  ["Anclaje de Gola Universal Volpato", 4.35, "cerraduras"],
+  ["Ángulo Dorado 1”x1” (10 unidades)", 1.50, "cerraduras"],
+  ["Ángulo Interno 1”", 1.26, "cerraduras"],
+  ["Ángulo Interno 1½”", 1.46, "cerraduras"],
+  ["Ángulo Interno 2”", 1.68, "cerraduras"],
+  ["Ángulo Interno 2½”", 2.03, "cerraduras"],
+  ["Clavo Deslizante 5/8” (250 und.)", 9.75, "cerraduras"],
+  ["Clavo Deslizante 3/4” (250 und.)", 8.92, "cerraduras"],
+  ["Broca Bisagra 35 mm TOTAL", 7.48, "herramientas"],
+  ["Broca Sierra Bimetálica 14-30 mm IMEX", 11.90, "herramientas"],
+  ["Concealed Hinge Bit 35 mm", 22.52, "herramientas"],
+  ["Concealed Hinge Jig", 46.90, "herramientas"],
+  ["Caladora 20V IMEX", 83.90, "herramientas"],
+  ["Cinta Métrica 3 m IMEX", 4.95, "herramientas"],
+  ["Cinta Métrica 5 m IMEX", 5.50, "herramientas"],
+  ["Cinta Métrica 5 m TOTAL", 2.82, "herramientas"],
+  ["Batería Litio 12V IMEX", 28.90, "herramientas"],
+  ["Batería Litio 20V 2Ah IMEX", 45.38, "herramientas"],
+  ["Batería Litio 20V 2Ah TOTAL", 17.00, "herramientas"],
+  ["Batería Litio 20V 4Ah IMEX", 51.90, "herramientas"],
+  ["Batería Litio 20V 4Ah TOTAL", 25.00, "herramientas"],
+  ["Batería Litio 20V 5Ah TOTAL", 51.44, "herramientas"],
+  ["Compresor 110V 2HP 24L", 180.10, "herramientas"],
+  ["Compresor Aire 10L Hoteche", 133.00, "herramientas"],
+  ["Compresor Aire 24L", 213.78, "herramientas"],
+  ["Compresor Aire 24L Silencioso", 158.65, "herramientas"],
+  ["Compresor Aire Hoteche", 110.36, "herramientas"],
+  ["Compresor Aire 20V sin batería", 67.91, "herramientas"],
+  ["Basurero Doble Gris IMEX", 110.00, "organizacion"],
+  ["Basurero Sencillo Gris IMEX", 85.00, "organizacion"],
+  ["Cesta Extraíble para Platos 900 mm", 114.18, "organizacion"],
+  ["Barra Desayuno 60x710 Níquel", 15.25, "organizacion"],
+  ["Barra Desayuno 60x870 Níquel", 20.77, "organizacion"],
+  ["Barra Desayuno 60x870 Cromado", 15.85, "organizacion"],
+  ["Barra Desayuno 60x710 Negro Mate", 16.15, "organizacion"],
+  ["Barra Desayuno 60x870 Negro Mate", 14.77, "organizacion"]
+];
+
+// Agrega los productos de IMECA que falten (por nombre) a los precios globales — idempotente,
+// se puede llamar en cada carga sin duplicar lo que ya esté.
+function seedImecaPrices() {
+  if (!state.globalPrices.customItems) state.globalPrices.customItems = [];
+  const existingNames = new Set(state.globalPrices.customItems.map(c => c.name));
+  let added = 0;
+  IMECA_PRICE_LIST.forEach(([name, price, category]) => {
+    if (existingNames.has(name)) return;
+    state.globalPrices.customItems.push({ name, price, category });
+    existingNames.add(name);
+    added++;
+  });
+  if (added > 0) { saveGlobalPrices(); }
+  return added;
+}
 
 function getMaterialCatalogEntries() {
   const prices = tenantPrices();
@@ -5251,4 +5360,5 @@ const _origSaveEbanista = saveEbanistaFromModal;
 renderPricesForm();
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────
+seedImecaPrices();
 tryAutoLogin();
