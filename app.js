@@ -238,7 +238,6 @@ const els = {
   printQuoteBtn: document.getElementById("printQuoteBtn"),
   cutsLock: document.getElementById("cutsLock"),
   cutsWorkspace: document.getElementById("cutsWorkspace"),
-  sheetPreset: document.getElementById("sheetPreset"),
   sheetWidth: document.getElementById("sheetWidth"),
   sheetHeight: document.getElementById("sheetHeight"),
   applySheetPresetBtn: document.getElementById("applySheetPresetBtn"),
@@ -534,7 +533,6 @@ function showView(viewId) {
   if (viewId === "sellersView" && AUTH.mode === "admin") loadSellersFromServer();
   if (viewId === "quoteView" && AUTH.mode === "vendedor") loadSellerQuoteClientOptions();
   if (viewId === "quoteView" && AUTH.mode === "ebanista") resetMaterialCombo();
-  if (viewId === "cutsView" && (AUTH.mode === "ebanista" || AUTH.mode === "vendedor")) loadSheetCatalogOptions();
   if (viewId === "handoffsView") {
     const canSend = AUTH.mode === "ebanista" || AUTH.mode === "vendedor";
     document.getElementById("handoffSendActions")?.classList.toggle("hidden", !canSend);
@@ -6944,30 +6942,44 @@ document.getElementById("exportCutsBtn")?.addEventListener("click", exportCutsCS
 // ── Lámina: catálogo de precios del mercado (estándar + items "madera" del ebanista) ──
 const STANDARD_SHEET_DIMENSIONS_MM = { melamina_std: [2440, 1220], melamina_lg: [2750, 1830] };
 
-function loadSheetCatalogOptions() {
-  const sel = els.sheetPreset;
-  if (!sel) return;
-  const prevVal = sel.value;
+function getSheetCatalogEntries() {
   const prices = tenantPrices();
   const names = prices._names || {};
-  const customItems = prices.customItems || [];
-  const opts = Object.keys(STANDARD_SHEET_DIMENSIONS_MM)
+  const entries = Object.keys(STANDARD_SHEET_DIMENSIONS_MM)
     .filter(k => typeof prices[k] === "number")
-    .map(k => `<option value="std:${k}">${escapeHtml(names[k] || defaultPriceNames[k] || k)} — $${Number(prices[k]).toFixed(2)}</option>`)
-    .concat(customItems
-      .map((c, i) => ({ c, i }))
-      .filter(({ c }) => (c.category || "madera") === "madera")
-      .map(({ c, i }) => `<option value="custom:${i}">${escapeHtml(c.name)} — $${Number(c.price).toFixed(2)}</option>`))
-    .concat(['<option value="manual">Personalizado (sin precio de catálogo)</option>']);
-  sel.innerHTML = opts.join("");
-  if (prevVal && sel.querySelector(`option[value="${prevVal}"]`)) sel.value = prevVal;
-  applySheetCatalogSelection(false);
+    .map(k => ({ value: `std:${k}`, description: names[k] || defaultPriceNames[k] || k, unitPrice: Number(prices[k]) || 0 }));
+  (prices.customItems || []).forEach((c, i) => {
+    if ((c.category || "madera") !== "madera") return;
+    entries.push({ value: `custom:${i}`, description: c.name, unitPrice: Number(c.price) || 0 });
+  });
+  return entries;
 }
 
-function applySheetCatalogSelection(triggerRecalc = true) {
-  const val = els.sheetPreset?.value;
+function sheetComboItemRow(entry, query, matchIdx) {
+  const desc = entry.description;
+  let nameHtml = escapeHtml(desc);
+  if (query && matchIdx !== -1) {
+    nameHtml = escapeHtml(desc.slice(0, matchIdx)) + "<mark>" + escapeHtml(desc.slice(matchIdx, matchIdx + query.length)) + "</mark>" + escapeHtml(desc.slice(matchIdx + query.length));
+  }
+  return `<div class="material-combo-item" data-sheet-combo-value="${entry.value}"><span class="name">${nameHtml}</span><span class="price">$${entry.unitPrice.toFixed(2)}</span></div>`;
+}
+
+function renderSheetCombo(query) {
+  const panel = document.getElementById("sheetSearchResults");
+  if (!panel) return;
+  const entries = getSheetCatalogEntries();
+  const q = (query || "").trim().toLowerCase();
+  const matches = q
+    ? entries.map(e => ({ e, idx: e.description.toLowerCase().indexOf(q) })).filter(x => x.idx !== -1).sort((a, b) => a.idx - b.idx || a.e.description.length - b.e.description.length)
+    : entries.map(e => ({ e, idx: -1 }));
+  panel.innerHTML = matches.length
+    ? matches.map(({ e, idx }) => sheetComboItemRow(e, q, idx)).join("")
+    : `<p class="material-combo-empty">Sin resultados — agrégala primero en Precios del mercado.</p>`;
+}
+
+function selectSheetCatalogEntry(value) {
   const display = document.getElementById("sheetPriceDisplay");
-  if (!val || val === "manual") {
+  if (!value) {
     state.cutsSheetPrice = null;
     state.cutsSheetLabel = "";
     if (display) display.textContent = "—";
@@ -6975,14 +6987,14 @@ function applySheetCatalogSelection(triggerRecalc = true) {
   }
   const prices = tenantPrices();
   const names = prices._names || {};
-  if (val.startsWith("std:")) {
-    const key = val.slice(4);
+  if (value.startsWith("std:")) {
+    const key = value.slice(4);
     const dims = STANDARD_SHEET_DIMENSIONS_MM[key];
     if (dims) { els.sheetWidth.value = dims[0]; els.sheetHeight.value = dims[1]; }
     state.cutsSheetPrice = Number(prices[key]) || 0;
     state.cutsSheetLabel = names[key] || defaultPriceNames[key] || key;
-  } else if (val.startsWith("custom:")) {
-    const c = (prices.customItems || [])[Number(val.slice(7))];
+  } else if (value.startsWith("custom:")) {
+    const c = (prices.customItems || [])[Number(value.slice(7))];
     if (c) {
       state.cutsSheetPrice = Number(c.price) || 0;
       state.cutsSheetLabel = c.name;
@@ -6991,10 +7003,42 @@ function applySheetCatalogSelection(triggerRecalc = true) {
     }
   }
   if (display) display.textContent = state.cutsSheetPrice != null ? `$${state.cutsSheetPrice.toFixed(2)}` : "—";
-  if (triggerRecalc && state.editablePieces.length) recalcCutsLayout();
+  if (state.editablePieces.length) recalcCutsLayout();
 }
 
-els.sheetPreset.addEventListener("change", () => applySheetCatalogSelection(true));
+document.getElementById("sheetSearchInput")?.addEventListener("focus", (e) => {
+  document.getElementById("sheetSearchResults").classList.remove("hidden");
+  renderSheetCombo(e.target.value);
+});
+
+document.getElementById("sheetSearchInput")?.addEventListener("input", (e) => {
+  state.cutsSheetPrice = null;
+  state.cutsSheetLabel = "";
+  document.getElementById("sheetPriceDisplay").textContent = "—";
+  document.getElementById("sheetSearchResults").classList.remove("hidden");
+  renderSheetCombo(e.target.value);
+});
+
+document.getElementById("sheetSearchInput")?.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { document.getElementById("sheetSearchResults").classList.add("hidden"); e.target.blur(); }
+});
+
+document.getElementById("sheetSearchInput")?.addEventListener("blur", () => {
+  setTimeout(() => document.getElementById("sheetSearchResults")?.classList.add("hidden"), 120);
+});
+
+document.getElementById("sheetSearchResults")?.addEventListener("mousedown", (e) => {
+  e.preventDefault(); // evita que el input pierda foco antes de procesar el click
+  const itemEl = e.target.closest("[data-sheet-combo-value]");
+  if (itemEl) {
+    const entry = getSheetCatalogEntries().find(en => en.value === itemEl.dataset.sheetComboValue);
+    if (entry) {
+      document.getElementById("sheetSearchInput").value = entry.description;
+      selectSheetCatalogEntry(entry.value);
+    }
+    document.getElementById("sheetSearchResults").classList.add("hidden");
+  }
+});
 
 els.applySheetPresetBtn.addEventListener("click", () => {
   if (state.editablePieces.length) recalcCutsLayout();
@@ -7888,10 +7932,6 @@ document.getElementById("tenantAddPriceBtn")?.addEventListener("click", () => {
 document.getElementById("saveTenantPricesBtn")?.addEventListener("click", async () => {
   if (!_tenantPrices) return;
   await saveTenantPrices(_tenantPrices);
-  // El selector de lámina (sheetPreset) precarga sus <option> — hay que refrescarlo a mano
-  // porque el panel de precios vive dentro de quoteView (no hay cambio de vista que lo dispare).
-  // El buscador de materiales no necesita esto: lee el catálogo en vivo en cada render.
-  loadSheetCatalogOptions();
 });
 
 document.getElementById("resetTenantPricesBtn")?.addEventListener("click", () => {
