@@ -2333,21 +2333,17 @@ async function sendToAI() {
     // ── IA generó una imagen (logo, render, plano, etc.) ────────────────────
     if (data.imageB64 || data.imageUrl) {
       const src = data.imageB64 ? `data:image/png;base64,${data.imageB64}` : data.imageUrl;
+      renderImageBlock(pending, src);
+    } else if (data.suggestImage) {
+      // Señal ambigua (1 sola característica técnica): no se gasta de más generando sola,
+      // se ofrece un botón para que el usuario decida.
       pending.appendChild(document.createElement("br"));
-      const wrap = document.createElement("div");
-      wrap.className = "chat-render";
-      const img = document.createElement("img");
-      img.src = src;
-      img.alt = "Imagen generada por IA";
-      wrap.appendChild(img);
-      pending.appendChild(wrap);
-      const dl = document.createElement("a");
-      dl.className = "chat-quote-btn";
-      dl.textContent = "⬇ Descargar imagen";
-      dl.href = src;
-      dl.download = `agente-ebanistas-${Date.now()}.png`;
-      pending.appendChild(document.createElement("br"));
-      pending.appendChild(dl);
+      const genBtn = document.createElement("button");
+      genBtn.className = "chat-quote-btn";
+      genBtn.textContent = "🖼️ Generar imagen";
+      genBtn.type = "button";
+      genBtn.onclick = () => requestStandaloneImage(genBtn, message);
+      pending.appendChild(genBtn);
     }
 
   } catch (e) {
@@ -2357,6 +2353,52 @@ async function sendToAI() {
   } finally {
     els.sendChatBtn.disabled = false;
     els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+  }
+}
+
+function renderImageBlock(container, src) {
+  container.appendChild(document.createElement("br"));
+  const wrap = document.createElement("div");
+  wrap.className = "chat-render";
+  const img = document.createElement("img");
+  img.src = src;
+  img.alt = "Imagen generada por IA";
+  wrap.appendChild(img);
+  container.appendChild(wrap);
+  const dl = document.createElement("a");
+  dl.className = "chat-quote-btn";
+  dl.textContent = "⬇ Descargar imagen";
+  dl.href = src;
+  dl.download = `agente-ebanistas-${Date.now()}.png`;
+  container.appendChild(document.createElement("br"));
+  container.appendChild(dl);
+}
+
+// Caso ambiguo (1 sola señal técnica): el usuario pide la imagen a mano con el botón
+// "🖼️ Generar imagen" en vez de gastar una llamada automática que tal vez no quería.
+async function requestStandaloneImage(btn, prompt) {
+  btn.disabled = true;
+  btn.textContent = "🖼️ Generando…";
+  try {
+    const res = await fetch("/api/generate-image", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      btn.textContent = "🖼️ Generar imagen";
+      btn.disabled = false;
+      toast(data.error || "No se pudo generar la imagen.", "error");
+      return;
+    }
+    const src = data.imageB64 ? `data:image/png;base64,${data.imageB64}` : data.imageUrl;
+    renderImageBlock(btn.parentElement, src);
+    btn.remove();
+    els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+  } catch (e) {
+    btn.textContent = "🖼️ Generar imagen";
+    btn.disabled = false;
+    toast(`Error: ${e.message}`, "error");
   }
 }
 

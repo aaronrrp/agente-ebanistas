@@ -304,7 +304,9 @@ IMPORTANTE sobre la hora: NO puedes saber la hora exacta actual — no tienes re
 - NUNCA digas que un mueble "no está disponible". Somos fabricantes a medida.
 - Usa las medidas EXACTAS que pidió el cliente. NUNCA uses 120/90/55 como default.
 - Si hay un mueble previo en currentItem, úsalo como base.
-- Si pide "imagen" o "render": di que los renders no están disponibles, pero da la propuesta técnica completa.
+- Si pide "imagen" o "render": NUNCA digas que no está disponible — el sistema ya genera la imagen
+  por separado en paralelo a tu respuesta. Simplemente da la propuesta técnica completa, sin
+  mencionar la imagen ni sus limitaciones (no es tu responsabilidad, no la generas tú).
 
 ══ ACCIONES (solo en respuestas de muebles) ══
 - Propuesta normal → ["fill_form"]
@@ -581,6 +583,47 @@ function detectImageIntent(message) {
   return imageIntentWords.some(w => text.includes(w));
 }
 
+// Detector SEMÁNTICO (corre antes y tiene prioridad sobre el de palabras clave): cuenta
+// cuántas categorías de detalle técnico aparecen en el mensaje. Una sola coincidencia
+// ("una mesa") no alcanza — ahí hay demasiado riesgo de falso positivo con preguntas
+// generales. Dos o más (medidas + material, o componentes + objeto, etc.) son suficiente
+// señal de que el usuario está describiendo una pieza real y probablemente quiera verla.
+function scoreImageSignals(message) {
+  const text = String(message || "").toLowerCase();
+  const signals = {
+    medidas: /\d+(?:[.,]\d+)?\s*(?:cm|mm|m|mts?|metros?|cent[ií]metros?|mil[ií]metros?)\b/.test(text)
+      || /\d+\s*[x×]\s*\d+/.test(text),
+    materiales: /\b(melamina|mdf|madera|acero|vidrio|pvc|aluminio|f[oó]rmica|laminado|triplay|contrachapado|granito|m[aá]rmol|cuarzo)\b/.test(text),
+    componentes: /\b(gavetas?|cajones?|cajonera|puertas?|repisas?|entrepa[ñn]os?|patas?|bisagras?|correderas?|jaladores?|tiradores?|mesones?|cubiertas?)\b/.test(text),
+    estructural: /\b(espacio libre|compartimentos?|divisiones?|laterales?|central(es)?|interno|interna|externo|externa|integrado|empotrado|sobrepuesto|hueco)\b/.test(text),
+    objeto: /\b(mesa|escritorio|closet|cl[oó]set|cocina|mueble|estanter[ií]a|recepci[oó]n|tocador|bar|oficina|fachada|vitrina|alacena|ropero|repisero|biblioteca|isla|c[oó]moda|librero|credenza)\b/.test(text)
+  };
+  const count = Object.values(signals).filter(Boolean).length;
+  return { signals, count };
+}
+
+async function generateImageWithRetry(prompt) {
+  let result = await generateImageCascade(prompt);
+  if (!result.ok) {
+    console.log(`[image] primer intento falló (${result.error}), reintentando una vez...`);
+    result = await generateImageCascade(prompt);
+  }
+  return result;
+}
+
+function imageOnlyResponse(result) {
+  return {
+    source: "openai",
+    assistantText: "Aquí está la imagen que pediste 🎨",
+    actions: ["fill_form"],
+    items: null, item: null, materials: null, pieces: null, breakdown: null,
+    designPrompt: null,
+    imageB64: result.imageB64 || null,
+    imageUrl: result.imageUrl || null,
+    imageSource: result.source
+  };
+}
+
 async function handleAi(req, res) {
   if (!process.env.OPENAI_API_KEY) {
     sendJson(res, 503, { error: "OPENAI_API_KEY no configurada. Usando modo local." });
@@ -589,21 +632,28 @@ async function handleAi(req, res) {
   const body = await readBody(req);
   const payload = body ? JSON.parse(body) : {};
 
-  // Router texto vs imagen — solo si no viene una foto adjunta (eso es análisis, no generación).
-  if (!payload.imageData && detectImageIntent(payload.message)) {
-    const result = await generateImageCascade(payload.message);
+  // ── Router texto vs imagen ──────────────────────────────────────────────
+  // 1) Detector semántico (prioridad): ≥2 señales técnicas → imagen automática + JSON de mueble.
+  //    1 sola señal → respuesta normal + botón "Generar imagen" (ambiguo, no se gasta de más).
+  // 2) Si no hay señales semánticas, cae al detector por palabras clave (logo/render/etc, imagen sola).
+  // Solo aplica si no viene una foto adjunta (eso es análisis de espacio, no generación).
+  let imageDecision = "none";
+  const semantic = scoreImageSignals(payload.message);
+  const keywordHit = detectImageIntent(payload.message);
+  if (!payload.imageData) {
+    if (semantic.count >= 2) imageDecision = "auto";
+    else if (semantic.count === 1) imageDecision = "button";
+    else if (keywordHit) imageDecision = "keyword";
+  }
+  console.log(`[intent] msg="${String(payload.message || "").slice(0, 90)}" semantic=${JSON.stringify(semantic.signals)} count=${semantic.count} keywordHit=${keywordHit} decision=${imageDecision}`);
+
+  if (imageDecision === "keyword") {
+    console.log(`[intent] detector activado: palabras clave — generando SOLO imagen`);
+    const result = await generateImageWithRetry(payload.message);
     if (result.ok) {
-      sendJson(res, 200, {
-        source: "openai",
-        assistantText: "Aquí está la imagen que pediste 🎨",
-        actions: ["fill_form"],
-        items: null, item: null, materials: null, pieces: null, breakdown: null,
-        designPrompt: null,
-        imageB64: result.imageB64 || null,
-        imageUrl: result.imageUrl || null,
-        imageSource: result.source
-      });
+      sendJson(res, 200, imageOnlyResponse(result));
     } else {
+      console.error(`[intent] generación de imagen (keyword) falló: ${result.error}`);
       sendJson(res, result.status || 500, { error: result.error || "No se pudo generar la imagen." });
     }
     return;
@@ -650,8 +700,33 @@ async function handleAi(req, res) {
     content.push({ type: "input_image", image_url: payload.imageData });
   }
   try {
+    if (imageDecision === "auto") {
+      console.log(`[intent] detector activado: semántico (${semantic.count} señales) — JSON de mueble + imagen en paralelo`);
+      console.log(`[image] prompt enviado a ${imageModel}: "${String(payload.message || "").slice(0, 200)}"`);
+      const [parsed, imgResult] = await Promise.all([
+        callOpenAI(systemPrompt + pricesBlock + historyBlock, content),
+        generateImageWithRetry(payload.message)
+      ]);
+      const normalized = normalizeAi(parsed, parsed?.assistantText);
+      if (imgResult.ok) {
+        normalized.imageB64 = imgResult.imageB64 || null;
+        normalized.imageUrl = imgResult.imageUrl || null;
+        normalized.imageSource = imgResult.source;
+      } else {
+        console.error(`[intent] generación de imagen (auto) falló: ${imgResult.error}`);
+        normalized.imageError = imgResult.error || "No se pudo generar la imagen.";
+      }
+      sendJson(res, 200, normalized);
+      return;
+    }
+
     const parsed = await callOpenAI(systemPrompt + pricesBlock + historyBlock, content);
-    sendJson(res, 200, normalizeAi(parsed, parsed?.assistantText));
+    const normalized = normalizeAi(parsed, parsed?.assistantText);
+    if (imageDecision === "button") {
+      console.log(`[intent] detector activado: semántico (1 señal, ambiguo) — botón "Generar imagen"`);
+      normalized.suggestImage = true;
+    }
+    sendJson(res, 200, normalized);
   } catch (e) {
     const { status, message } = friendlyAiError(e);
     sendJson(res, status, { error: message });
@@ -773,10 +848,12 @@ async function handleGenerateImage(req, res) {
   const { prompt } = body ? JSON.parse(body) : {};
   if (!prompt) { sendJson(res, 400, { error: "Se requiere prompt." }); return; }
 
-  const result = await generateImageCascade(prompt);
+  console.log(`[image] /api/generate-image prompt="${String(prompt).slice(0, 200)}"`);
+  const result = await generateImageWithRetry(prompt);
   if (result.ok) {
     sendJson(res, 200, result);
   } else {
+    console.error(`[image] /api/generate-image falló: ${result.error}`);
     sendJson(res, result.status || 503, { error: result.error, pollinations: result.pollinations });
   }
 }
