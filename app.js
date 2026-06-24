@@ -2232,8 +2232,8 @@ async function sendToAI() {
 
   try {
     const endpoint = hasImage ? "/api/analyze-space" : "/api/ebanista-ai";
-    // Send last 6 turns (12 messages) as conversation context
-    const recentHistory = state.chatHistory.slice(-12);
+    // Send last ~7 turns (14 messages) as conversation context
+    const recentHistory = state.chatHistory.slice(-14);
     const body = hasImage
       ? { message: message || "Analiza este espacio y propón muebles de melamina.", imageData: imgDataForRequest }
       : { message, tenant: currentTenant(), currentItem: state.lastDesignItems[0] || null, history: recentHistory, customPrices: tenantPrices().customItems || [] };
@@ -2249,20 +2249,21 @@ async function sendToAI() {
     const data = await res.json();
 
     if (!res.ok) {
+      const icon = res.status === 503 ? "⚠️" : res.status === 429 ? "⏳" : "❌";
       pending.textContent = res.status === 503
         ? "⚠️ Sin clave de OpenAI. Configura OPENAI_API_KEY en Render."
-        : `❌ Error ${res.status}: ${data.error || "Error desconocido"}`;
+        : `${icon} ${data.error || "Error desconocido, intenta de nuevo."}`;
       return;
     }
 
     const assistantReply = data.assistantText || "Propuesta generada.";
     pending.textContent = assistantReply;
 
-    // Update conversation memory (max 20 entries = 10 turns)
+    // Update conversation memory (max 30 entries = 15 turns)
     if (!hasImage && message) {
       state.chatHistory.push({ role: "user", text: message });
       state.chatHistory.push({ role: "assistant", text: assistantReply });
-      if (state.chatHistory.length > 20) state.chatHistory = state.chatHistory.slice(-20);
+      if (state.chatHistory.length > 30) state.chatHistory = state.chatHistory.slice(-30);
     }
 
     const items = data.items?.length ? data.items : (data.item ? [data.item] : []);
@@ -2324,7 +2325,30 @@ async function sendToAI() {
       toast(`${allPieces.length} pieza(s) creada(s) por la IA ✓`);
     }
 
-    // Image renders removed — generateConceptImage disabled
+    // ── IA propone un desglose/despiece — el humano decide qué enviar a Cortes ──
+    if (data.breakdown && typeof data.breakdown === "object") {
+      renderBreakdownSection(pending, data.breakdown);
+    }
+
+    // ── IA generó una imagen (logo, render, plano, etc.) ────────────────────
+    if (data.imageB64 || data.imageUrl) {
+      const src = data.imageB64 ? `data:image/png;base64,${data.imageB64}` : data.imageUrl;
+      pending.appendChild(document.createElement("br"));
+      const wrap = document.createElement("div");
+      wrap.className = "chat-render";
+      const img = document.createElement("img");
+      img.src = src;
+      img.alt = "Imagen generada por IA";
+      wrap.appendChild(img);
+      pending.appendChild(wrap);
+      const dl = document.createElement("a");
+      dl.className = "chat-quote-btn";
+      dl.textContent = "⬇ Descargar imagen";
+      dl.href = src;
+      dl.download = `agente-ebanistas-${Date.now()}.png`;
+      pending.appendChild(document.createElement("br"));
+      pending.appendChild(dl);
+    }
 
   } catch (e) {
     pending.textContent = e.name === "AbortError"
@@ -2334,6 +2358,89 @@ async function sendToAI() {
     els.sendChatBtn.disabled = false;
     els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
   }
+}
+
+// Desglose interactivo: texto en 4 partes + piezas con botón individual "Enviar a Cortes".
+// A diferencia de data.pieces (que se auto-aplica), aquí el humano decide qué mandar.
+function renderBreakdownSection(pending, breakdown) {
+  const wrap = document.createElement("div");
+  wrap.className = "breakdown-block";
+
+  [["structure", "🏗️ Estructura"], ["materials", "🧱 Materiales"], ["cuts", "✂️ Cortes"], ["assembly", "🔧 Ensamblaje"]]
+    .forEach(([key, label]) => {
+      if (!breakdown[key]) return;
+      const p = document.createElement("p");
+      const strong = document.createElement("strong");
+      strong.textContent = `${label}: `;
+      p.appendChild(strong);
+      p.appendChild(document.createTextNode(String(breakdown[key])));
+      wrap.appendChild(p);
+    });
+
+  const pieces = Array.isArray(breakdown.pieces) ? breakdown.pieces : [];
+  if (pieces.length) {
+    const heading = document.createElement("h4");
+    heading.textContent = "📐 Cortes / despiece";
+    wrap.appendChild(heading);
+
+    const list = document.createElement("div");
+    list.className = "breakdown-pieces";
+
+    pieces.forEach((p, idx) => {
+      const card = document.createElement("div");
+      card.className = "breakdown-piece-card";
+
+      const info = document.createElement("div");
+      info.className = "breakdown-piece-info";
+      const name = document.createElement("strong");
+      name.textContent = p.name || `Pieza ${idx + 1}`;
+      const meta = document.createElement("span");
+      const qty = Math.max(1, Number(p.qty) || 1);
+      meta.textContent = `${Number(p.largo) || 0}×${Number(p.ancho) || 0}mm · ${p.material || p.thickness || "—"} · x${qty}`;
+      info.appendChild(name);
+      info.appendChild(meta);
+
+      const sendBtn = document.createElement("button");
+      sendBtn.className = "tiny-btn";
+      sendBtn.textContent = "✂️ Enviar a Cortes";
+      sendBtn.type = "button";
+      sendBtn.onclick = () => {
+        const built = buildManualPieces({
+          furniture: p.furniture || "",
+          name: p.name || "Pieza",
+          largo: Number(p.largo) || 1,
+          ancho: Number(p.ancho) || 1,
+          qty,
+          thickness: p.thickness || "18 mm",
+          cantoSides: p.cantoSides || { l1: false, l2: false, c1: false, c2: false },
+          cantoThickness: p.cantoThickness || "1.00mm",
+          grain: Boolean(p.grain),
+          grainDir: p.grainDirection || "largo"
+        });
+        addPiecesToCuts(built);
+        sendBtn.textContent = "✓ Enviada";
+        sendBtn.disabled = true;
+        toast(`"${p.name || "Pieza"}" enviada a Cortes ✓`);
+      };
+
+      card.appendChild(info);
+      card.appendChild(sendBtn);
+      list.appendChild(card);
+    });
+    wrap.appendChild(list);
+
+    const allBtn = document.createElement("button");
+    allBtn.className = "chat-quote-btn";
+    allBtn.textContent = "✂️ Enviar todas a Cortes";
+    allBtn.type = "button";
+    allBtn.onclick = () => {
+      list.querySelectorAll("button.tiny-btn").forEach(b => { if (!b.disabled) b.click(); });
+      showView("cutsView");
+    };
+    wrap.appendChild(allBtn);
+  }
+
+  pending.appendChild(wrap);
 }
 
 function normalizeText(value) {

@@ -1686,3 +1686,18 @@ textarea {
   font-size: .82rem; font-weight: 600; color: var(--accent); cursor: pointer; border-radius: 6px;
 }
 .material-combo-back:hover { background: var(--accent-soft); }
+
+/* ── Desglose IA: texto en partes + piezas con envío individual a Cortes ── */
+.breakdown-block { margin-top: 10px; }
+.breakdown-block p { margin: 0 0 8px; font-size: .87rem; line-height: 1.5; }
+.breakdown-block h4 { margin: 14px 0 8px; font-size: .85rem; color: var(--accent); }
+.breakdown-pieces { display: grid; gap: 6px; }
+.breakdown-piece-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-soft);
+}
+.breakdown-piece-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.breakdown-piece-info strong { font-size: .85rem; }
+.breakdown-piece-info span { font-size: .76rem; color: var(--muted); }
+.breakdown-piece-card .tiny-btn { flex-shrink: 0; }
+.breakdown-piece-card .tiny-btn:disabled { opacity: .6; cursor: default; }

@@ -6,7 +6,8 @@ const { readFile } = require("node:fs/promises");
 
 const rootDir = __dirname;
 const port = Number(process.env.PORT || 5174);
-const model = process.env.OPENAI_MODEL || "gpt-4o";
+const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
+const imageModel = process.env.OPENAI_IMAGE_MODEL || "gpt-image-1";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin1234";
 const TENANTS_FILE = path.join(__dirname, "tenants.json");
 
@@ -22,7 +23,7 @@ const mimeTypes = {
   ".svg":  "image/svg+xml"
 };
 
-const allowedActions = ["fill_form", "add_to_quote", "calculate_cuts", "enhance_image", "mock_3d", "add_materials", "add_pieces"];
+const allowedActions = ["fill_form", "add_to_quote", "calculate_cuts", "enhance_image", "mock_3d", "add_materials", "add_pieces", "breakdown"];
 
 // ── Tenant helpers ──────────────────────────────────────────────────────────
 function makeCode(companyName) {
@@ -338,6 +339,24 @@ los cantos" marca los 4. Veta: boolean + dirección "largo" o "ancho" (a qué ej
   "cantoSides": { "l1": false, "l2": false, "c1": true, "c2": false }, "cantoThickness": "1.00mm",
   "grain": false, "grainDirection": "largo" }
 
+══ DESGLOSE / DESPIECE (explicar cómo se construye, SIN agregar nada todavía) ══
+Distinto de "AGREGAR PIEZAS A CORTES": ahí el usuario ya sabe las medidas exactas y quiere que
+se agreguen YA. Aquí el usuario pide ENTENDER o VER cómo se construye un mueble — "desglósame
+ese mueble", "despiece del closet", "explícame por partes", "qué materiales lleva", "cómo se
+construye", "dame el breakdown" — normalmente sobre el mueble en currentItem o el último propuesto.
+NO agregues piezas/materiales automáticamente: el humano decide qué enviar a Cortes después de ver
+el desglose. Responde con actions: ["breakdown"], "items" null, y un objeto "breakdown":
+{ "structure": "1-2 oraciones: estructura principal (laterales, repisas, fondo, etc.)",
+  "materials": "1-2 oraciones: láminas, canto, herrajes que lleva",
+  "cuts": "1-2 oraciones: cuántas piezas distintas salen y de qué tamaño aproximado",
+  "assembly": "1-2 oraciones: orden de ensamblaje",
+  "pieces": [
+    { "name": "Lateral izquierdo", "largo": 900, "ancho": 550, "material": "Melamina 18mm RH01", "qty": 2,
+      "thickness": "18 mm", "cantoSides": { "l1": false, "l2": false, "c1": true, "c2": false },
+      "cantoThickness": "1.00mm", "grain": false, "grainDirection": "largo" }
+  ] }
+Mismas reglas de unidades (mm) y de canto/veta que en "AGREGAR PIEZAS A CORTES" aplican a cada pieza.
+
 ══ REGLAS TÉCNICAS ══
 - Fondo interno/embutido: resta grosor melamina a profundidad de repisas y gavetas internas.
 - Fondo exterior/sobrepuesto o sin fondo: NO restes profundidad a repisas internas.
@@ -395,11 +414,13 @@ Responde SOLO JSON válido:
   ],
   "materials": null,
   "pieces": null,
+  "breakdown": null,
   "designPrompt": null
 }
 
 Si la accion es "add_materials", "items" va null/vacio y "materials" lleva el array descrito arriba.
 Si la accion es "add_pieces", "items" va null/vacio y "pieces" lleva el array descrito arriba.
+Si la accion es "breakdown", "items"/"materials"/"pieces" van null y "breakdown" lleva el objeto descrito arriba.
 `.trim();
 
 function getAiText(data) {
@@ -429,6 +450,7 @@ function normalizeAi(payload, fallback) {
   }
   const materials = Array.isArray(payload?.materials) ? payload.materials : null;
   const pieces = Array.isArray(payload?.pieces) ? payload.pieces : null;
+  const breakdown = payload?.breakdown && typeof payload.breakdown === "object" ? payload.breakdown : null;
   return {
     source: "openai",
     assistantText: payload?.assistantText || fallback || "Propuesta generada.",
@@ -437,6 +459,7 @@ function normalizeAi(payload, fallback) {
     item: items ? items[0] : null,
     materials,
     pieces,
+    breakdown,
     designPrompt: payload?.designPrompt || null
   };
 }
@@ -503,6 +526,13 @@ Responde SOLO JSON válido:
 
 // ── Route handlers ──────────────────────────────────────────────────────────
 
+function friendlyAiError(e) {
+  if (e.status === 429) return { status: 429, message: "Hay mucha demanda en este momento, espera unos segundos e intenta de nuevo." };
+  if (e.status === 401) return { status: 500, message: "La clave de OpenAI configurada no es válida." };
+  if (e.status === 400) return { status: 400, message: "No pude procesar esa solicitud, intenta reformularla." };
+  return { status: 500, message: e.message || "Error inesperado." };
+}
+
 async function callOpenAI(sysPrompt, userContent) {
   // Use Responses API with web_search_preview for real-time web access
   const inputMessages = [{
@@ -528,7 +558,9 @@ async function callOpenAI(sysPrompt, userContent) {
   const data = await apiRes.json();
   if (!apiRes.ok) {
     console.error("[callOpenAI] error response:", JSON.stringify(data));
-    throw new Error(data.error?.message || `OpenAI ${apiRes.status}`);
+    const err = new Error(data.error?.message || `OpenAI ${apiRes.status}`);
+    err.status = apiRes.status;
+    throw err;
   }
   // Extract text from Responses API output array
   const text = (data.output || [])
@@ -540,6 +572,15 @@ async function callOpenAI(sysPrompt, userContent) {
   return parseJson(text) || { assistantText: text };
 }
 
+// Palabras que indican que el usuario quiere una IMAGEN generada, no una propuesta de mueble.
+// "mueble"/"cocina"/"diseño" se excluyen a propósito: aparecen en casi cualquier pedido normal
+// de cotización ("diseña un mueble de cocina") y dispararían el router por error.
+const imageIntentWords = ["logo", "tatuaje", "plano", "render", "fachada", "dibujo"];
+function detectImageIntent(message) {
+  const text = String(message || "").toLowerCase();
+  return imageIntentWords.some(w => text.includes(w));
+}
+
 async function handleAi(req, res) {
   if (!process.env.OPENAI_API_KEY) {
     sendJson(res, 503, { error: "OPENAI_API_KEY no configurada. Usando modo local." });
@@ -547,6 +588,27 @@ async function handleAi(req, res) {
   }
   const body = await readBody(req);
   const payload = body ? JSON.parse(body) : {};
+
+  // Router texto vs imagen — solo si no viene una foto adjunta (eso es análisis, no generación).
+  if (!payload.imageData && detectImageIntent(payload.message)) {
+    const result = await generateImageCascade(payload.message);
+    if (result.ok) {
+      sendJson(res, 200, {
+        source: "openai",
+        assistantText: "Aquí está la imagen que pediste 🎨",
+        actions: ["fill_form"],
+        items: null, item: null, materials: null, pieces: null, breakdown: null,
+        designPrompt: null,
+        imageB64: result.imageB64 || null,
+        imageUrl: result.imageUrl || null,
+        imageSource: result.source
+      });
+    } else {
+      sendJson(res, result.status || 500, { error: result.error || "No se pudo generar la imagen." });
+    }
+    return;
+  }
+
   // Include custom price items sent from client (stored in client localStorage)
   const clientCustomItems = Array.isArray(payload.customPrices) ? payload.customPrices : [];
   const customBlock = clientCustomItems.length
@@ -554,14 +616,21 @@ async function handleAi(req, res) {
     : "";
   const pricesBlock = `\n══ PRECIOS ACTUALES (en USD) ══\nMadera/Melamina estándar 2440×1220: $${prices.melamina_std}\nMadera/Melamina grande 2750×1830: $${prices.melamina_lg}\nFondo/backing por m²: $${prices.backing_m2}\nCanto PVC 22mm/metro: $${prices.canto_pvc}\nCanto grueso 2mm/metro: $${prices.canto_grueso}\nBisagra estándar: $${prices.bisagra_std}/un\nBisagra cierre suave: $${prices.bisagra_sc}/un\nCorredera estándar: $${prices.corredera_std}/par\nCorredera cierre suave: $${prices.corredera_sc}/par\nJalador 128mm: $${prices.jalador_chico}/un\nJalador 320mm: $${prices.jalador_grande}/un\nJalador premium inox: $${prices.jalador_premium}/un\nInstalación: $${prices.install_hour}/hora\nTransporte base: $${prices.transport_base}${customBlock}`;
 
-  // Build conversation history context block — limit to 5 msgs × 200 chars to stay under TPM
-  const history = Array.isArray(payload.history) ? payload.history.slice(-5) : [];
+  // Conversation history: últimos 14 mensajes completos (≈7 interacciones) + resumen local
+  // de lo más viejo (concatenación truncada, sin llamada extra a la API) para no perder
+  // contexto de la conversación sin disparar el costo/tokens de mandar todo completo.
+  const fullHistory = Array.isArray(payload.history) ? payload.history : [];
+  const recentWindow = fullHistory.slice(-14);
+  const older = fullHistory.slice(0, -14);
   let historyBlock = "";
-  if (history.length > 0) {
-    const lines = history.map(h =>
-      `${h.role === "user" ? "U" : "A"}: ${String(h.text || "").slice(0, 200)}`
+  if (recentWindow.length > 0) {
+    const summaryLine = older.length > 0
+      ? `Resumen de ${older.length} mensaje(s) previos: ` + older.map(h => String(h.text || "").slice(0, 60)).join(" | ") + "\n"
+      : "";
+    const lines = recentWindow.map(h =>
+      `${h.role === "user" ? "U" : "A"}: ${String(h.text || "").slice(0, 240)}`
     ).join("\n");
-    historyBlock = `\n\n══ HISTORIAL ══\n${lines}\n══ FIN ══`;
+    historyBlock = `\n\n══ HISTORIAL ══\n${summaryLine}${lines}\n══ FIN ══`;
   }
 
   // Trim tenant to essentials only — avoids sending large catalog arrays
@@ -584,7 +653,8 @@ async function handleAi(req, res) {
     const parsed = await callOpenAI(systemPrompt + pricesBlock + historyBlock, content);
     sendJson(res, 200, normalizeAi(parsed, parsed?.assistantText));
   } catch (e) {
-    sendJson(res, 500, { error: e.message });
+    const { status, message } = friendlyAiError(e);
+    sendJson(res, status, { error: message });
   }
 }
 
@@ -620,17 +690,14 @@ async function handleSpaceAnalysis(req, res) {
       items: parsed?.items || (firstItem ? [firstItem] : [])
     });
   } catch (e) {
-    sendJson(res, 500, { error: e.message });
+    const { status, message } = friendlyAiError(e);
+    sendJson(res, status, { error: message });
   }
 }
 
 // ── Image generation ────────────────────────────────────────────────────────
-// Orden: Together.ai FLUX (rápido, gratis) → DALL-E → Pollinations (cliente)
-async function handleGenerateImage(req, res) {
-  const body = await readBody(req);
-  const { prompt } = body ? JSON.parse(body) : {};
-  if (!prompt) { sendJson(res, 400, { error: "Se requiere prompt." }); return; }
-
+// Orden: Cloudflare FLUX (gratis) → Together FLUX (gratis) → gpt-image-1 (pago) → Pollinations (cliente)
+async function generateImageCascade(prompt) {
   const imgPrompt = `${prompt.slice(0, 700)}, photorealistic interior design render, high quality, 4k, soft lighting`;
 
   // 1. Cloudflare Workers AI — FLUX.1-schnell (gratis, ~15 imgs/día, sin tarjeta)
@@ -650,8 +717,7 @@ async function handleGenerateImage(req, res) {
       console.log(`[CF] status=${cfRes.status} success=${cfData.success} err="${cfData.errors?.[0]?.message || "ok"}"`);
       if (cfRes.ok && cfData.result?.image) {
         console.log("[CF] success!");
-        sendJson(res, 200, { imageUrl: `data:image/jpeg;base64,${cfData.result.image}`, source: "cloudflare-flux" });
-        return;
+        return { ok: true, imageUrl: `data:image/jpeg;base64,${cfData.result.image}`, source: "cloudflare-flux" };
       }
     } catch (e) { console.log(`[CF] exception: ${e.message}`); }
   }
@@ -670,35 +736,49 @@ async function handleGenerateImage(req, res) {
       console.log(`[Together] status=${tr.status} err="${td.error?.message || "ok"}"`);
       if (tr.ok && td.data?.[0]?.url) {
         console.log("[Together] success!");
-        sendJson(res, 200, { imageUrl: td.data[0].url, source: "together-flux" });
-        return;
+        return { ok: true, imageUrl: td.data[0].url, source: "together-flux" };
       }
     } catch (e) { console.log(`[Together] exception: ${e.message}`); }
   }
 
-  // 3. DALL-E (si la cuenta tiene acceso a imagen)
+  // 3. gpt-image-1 (requiere cuenta OpenAI con organización verificada para imágenes)
   if (process.env.OPENAI_API_KEY) {
-    for (const cfg of [{ model: "dall-e-3", size: "1024x1024" }, { model: "dall-e-2", size: "512x512" }]) {
-      try {
-        console.log(`[DALLE] trying ${cfg.model}...`);
-        const ar = await fetch("https://api.openai.com/v1/images/generations", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: cfg.model, prompt: prompt.slice(0, 900), n: 1, size: cfg.size }),
-          signal: AbortSignal.timeout(45000)
-        });
-        const ad = await ar.json();
-        console.log(`[DALLE] ${cfg.model} → status=${ar.status} err="${ad.error?.message || "ok"}"`);
-        if (ar.ok && ad.data?.[0]?.url) {
-          sendJson(res, 200, { imageUrl: ad.data[0].url, source: cfg.model });
-          return;
-        }
-      } catch (e) { console.log(`[DALLE] exception: ${e.message}`); }
-    }
+    try {
+      console.log(`[gpt-image-1] trying...`);
+      const ar = await fetch("https://api.openai.com/v1/images/generations", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: imageModel, prompt: prompt.slice(0, 900), n: 1, size: "1024x1024" }),
+        signal: AbortSignal.timeout(60000)
+      });
+      const ad = await ar.json();
+      console.log(`[gpt-image-1] status=${ar.status} err="${ad.error?.message || "ok"}"`);
+      if (ar.ok && ad.data?.[0]?.b64_json) {
+        return { ok: true, imageB64: ad.data[0].b64_json, source: imageModel };
+      }
+      if (ar.ok && ad.data?.[0]?.url) {
+        return { ok: true, imageUrl: ad.data[0].url, source: imageModel };
+      }
+      if (ar.status === 429) return { ok: false, status: 429, error: "Demasiadas solicitudes de imagen, espera un momento." };
+      if (ar.status === 403) return { ok: false, status: 403, error: "La cuenta de OpenAI no tiene acceso a gpt-image-1 (requiere organización verificada)." };
+    } catch (e) { console.log(`[gpt-image-1] exception: ${e.message}`); }
   }
 
   // 4. Fallback: Pollinations desde el navegador del cliente (diferente IP)
-  sendJson(res, 503, { error: "Servidor de renders ocupado.", pollinations: true });
+  return { ok: false, status: 503, error: "Servidor de renders ocupado.", pollinations: true };
+}
+
+async function handleGenerateImage(req, res) {
+  const body = await readBody(req);
+  const { prompt } = body ? JSON.parse(body) : {};
+  if (!prompt) { sendJson(res, 400, { error: "Se requiere prompt." }); return; }
+
+  const result = await generateImageCascade(prompt);
+  if (result.ok) {
+    sendJson(res, 200, result);
+  } else {
+    sendJson(res, result.status || 503, { error: result.error, pollinations: result.pollinations });
+  }
 }
 
 async function handleAuthAdmin(req, res) {
