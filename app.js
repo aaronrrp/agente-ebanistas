@@ -129,10 +129,15 @@ const defaultPriceNames = {
 function tenantPrices() {
   const tenant = currentTenant();
   if (!tenant?.prices) return state.globalPrices;
+  // Un customItems vacío en el tenant NO debe tapar el catálogo global (ej: el catálogo
+  // IMECA recién cargado) — solo un tenant que ya agregó sus propios items debe divergir.
+  const tenantCustom = Array.isArray(tenant.prices.customItems) && tenant.prices.customItems.length
+    ? tenant.prices.customItems
+    : (state.globalPrices.customItems || []);
   return {
     ...state.globalPrices,
     ...tenant.prices,
-    customItems: tenant.prices.customItems ?? state.globalPrices.customItems ?? [],
+    customItems: tenantCustom,
     _names: { ...(state.globalPrices._names || {}), ...(tenant.prices._names || {}) }
   };
 }
