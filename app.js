@@ -2202,6 +2202,110 @@ function appendChat(role, text) {
   return bubble;
 }
 
+const AI_REQUEST_TIMEOUT_MS = 90000;
+
+async function postAi(endpoint, body) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), AI_REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body), signal: controller.signal
+    });
+    const data = await res.json();
+    return { ok: res.ok, status: res.status, data };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function describeAiError(status, data) {
+  const icon = status === 503 ? "⚠️" : status === 429 ? "⏳" : "❌";
+  return status === 503
+    ? "⚠️ Sin clave de OpenAI. Configura OPENAI_API_KEY en Render."
+    : `${icon} ${data?.error || "Error desconocido, intenta de nuevo."}`;
+}
+
+// Pinta items/materiales/piezas/desglose en una burbuja dada — usado tanto para la
+// respuesta única (sin imagen automática) como para la 2da llamada de seguimiento
+// (cuando la 1ra llamada solo trajo la imagen).
+function renderAssistantContentBlocks(bubble, data, message) {
+  const items = data.items?.length ? data.items : (data.item ? [data.item] : []);
+  if (items.length > 0) {
+    const normalized = items.map(it => normalizeAssistantItem(it, message));
+    state.lastDesignItems = normalized;
+    bubble.appendChild(document.createElement("br"));
+    const cutsBtn = document.createElement("button");
+    cutsBtn.className = "chat-quote-btn";
+    cutsBtn.textContent = "✂️ Ir a cortes";
+    cutsBtn.onclick = () => { addItemsToQuote(normalized); showView("cutsView"); renderCuts(); };
+    bubble.appendChild(cutsBtn);
+  }
+
+  if (Array.isArray(data.materials) && data.materials.length) {
+    data.materials.forEach(m => {
+      state.materialCartItems.push({
+        id: crypto.randomUUID(),
+        description: m.description || "Material",
+        qty: Number(m.qty) || 1,
+        unit: m.unit || "Unidades",
+        unitPrice: Number(m.unitPrice) || 0
+      });
+    });
+    renderDraftItems();
+    bubble.appendChild(document.createElement("br"));
+    const btn = document.createElement("button");
+    btn.className = "chat-quote-btn";
+    btn.textContent = "📋 Ver en Cotizar";
+    btn.onclick = () => showView("quoteView");
+    bubble.appendChild(btn);
+    toast(`${data.materials.length} material(es) agregado(s) por la IA ✓`);
+  }
+
+  if (Array.isArray(data.pieces) && data.pieces.length) {
+    const allPieces = data.pieces.flatMap(p => buildManualPieces({
+      furniture: p.furniture || "",
+      name: p.name || "Pieza",
+      largo: Number(p.largo) || 1,
+      ancho: Number(p.ancho) || 1,
+      qty: Math.max(1, Number(p.qty) || 1),
+      thickness: p.thickness || "18 mm",
+      cantoSides: p.cantoSides || { l1: false, l2: false, c1: false, c2: false },
+      cantoThickness: p.cantoThickness || "1.00mm",
+      grain: Boolean(p.grain),
+      grainDir: p.grainDirection || "largo"
+    }));
+    addPiecesToCuts(allPieces);
+    bubble.appendChild(document.createElement("br"));
+    const btn = document.createElement("button");
+    btn.className = "chat-quote-btn";
+    btn.textContent = "✂️ Ver en Cortes";
+    btn.onclick = () => showView("cutsView");
+    bubble.appendChild(btn);
+    toast(`${allPieces.length} pieza(s) creada(s) por la IA ✓`);
+  }
+
+  if (data.breakdown && typeof data.breakdown === "object") {
+    renderBreakdownSection(bubble, data.breakdown);
+  }
+
+  if (data.suggestImage) {
+    bubble.appendChild(document.createElement("br"));
+    const genBtn = document.createElement("button");
+    genBtn.className = "chat-quote-btn";
+    genBtn.textContent = "🖼️ Generar imagen";
+    genBtn.type = "button";
+    genBtn.onclick = () => requestStandaloneImage(genBtn, message);
+    bubble.appendChild(genBtn);
+  }
+}
+
+function pushChatHistory(message, assistantReply) {
+  state.chatHistory.push({ role: "user", text: message });
+  state.chatHistory.push({ role: "assistant", text: assistantReply });
+  if (state.chatHistory.length > 30) state.chatHistory = state.chatHistory.slice(-30);
+}
+
 async function sendToAI() {
   const message = els.chatInput.value.trim();
   const hasImage = Boolean(state.currentImageData);
@@ -2236,124 +2340,54 @@ async function sendToAI() {
   els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
 
   try {
-    const endpoint = hasImage ? "/api/analyze-space" : "/api/ebanista-ai";
-    // Send last ~7 turns (14 messages) as conversation context
-    const recentHistory = state.chatHistory.slice(-14);
-    const body = hasImage
-      ? { message: message || "Analiza este espacio y propón muebles de melamina.", imageData: imgDataForRequest }
-      : { message, tenant: currentTenant(), currentItem: state.lastDesignItems[0] || null, history: recentHistory, customPrices: tenantPrices().customItems || [] };
-
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 55000);
-    const res = await fetch(endpoint, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body), signal: controller.signal
-    });
-    clearTimeout(timer);
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      const icon = res.status === 503 ? "⚠️" : res.status === 429 ? "⏳" : "❌";
-      pending.textContent = res.status === 503
-        ? "⚠️ Sin clave de OpenAI. Configura OPENAI_API_KEY en Render."
-        : `${icon} ${data.error || "Error desconocido, intenta de nuevo."}`;
+    if (hasImage) {
+      const { ok, status, data } = await postAi("/api/analyze-space", {
+        message: message || "Analiza este espacio y propón muebles de melamina.",
+        imageData: imgDataForRequest
+      });
+      if (!ok) { pending.textContent = describeAiError(status, data); return; }
+      pending.textContent = data.assistantText || "Propuesta generada.";
+      renderAssistantContentBlocks(pending, data, message);
       return;
     }
 
-    const assistantReply = data.assistantText || "Propuesta generada.";
-    pending.textContent = assistantReply;
+    // Send last ~7 turns (14 messages) as conversation context
+    const recentHistory = state.chatHistory.slice(-14);
+    const baseBody = { message, tenant: currentTenant(), currentItem: state.lastDesignItems[0] || null, history: recentHistory, customPrices: tenantPrices().customItems || [] };
 
-    // Update conversation memory (max 30 entries = 15 turns)
-    if (!hasImage && message) {
-      state.chatHistory.push({ role: "user", text: message });
-      state.chatHistory.push({ role: "assistant", text: assistantReply });
+    const first = await postAi("/api/ebanista-ai", baseBody);
+    if (!first.ok) { pending.textContent = describeAiError(first.status, first.data); return; }
+    const data1 = first.data;
+
+    pending.textContent = data1.assistantText || "Propuesta generada.";
+    if (data1.imageB64 || data1.imageUrl) {
+      renderImageBlock(pending, data1.imageB64 ? `data:image/png;base64,${data1.imageB64}` : data1.imageUrl);
+    }
+
+    // Nunca corremos imagen y desglose a la vez: si el servidor ya entregó (o intentó) la
+    // imagen y falta el desglose técnico, se pide en una 2da llamada secuencial — recién
+    // ahí se habilita "Ir a cortes"/"Enviar a Cortes".
+    if (data1.needsFollowup) {
+      if (message) state.chatHistory.push({ role: "user", text: message });
+      const followupPending = appendChat("assistant", "📝 Generando desglose técnico…");
+      els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+      const second = await postAi("/api/ebanista-ai", { ...baseBody, skipImageRouter: true });
+      if (!second.ok) { followupPending.textContent = describeAiError(second.status, second.data); return; }
+      const data2 = second.data;
+      const reply2 = data2.assistantText || "Propuesta generada.";
+      followupPending.textContent = reply2;
+      renderAssistantContentBlocks(followupPending, data2, message);
+      if (message) state.chatHistory.push({ role: "assistant", text: reply2 });
       if (state.chatHistory.length > 30) state.chatHistory = state.chatHistory.slice(-30);
+      return;
     }
 
-    const items = data.items?.length ? data.items : (data.item ? [data.item] : []);
-    if (items.length > 0) {
-      const normalized = items.map(it => normalizeAssistantItem(it, message));
-      state.lastDesignItems = normalized;
-      // Un mueble ya no se "cotiza" directo (Cotizar es solo materiales) — se manda a
-      // Cortes para sacarle las piezas; de ahí el ebanista envía láminas/canto a la cotización.
-      pending.appendChild(document.createElement("br"));
-      const cutsBtn = document.createElement("button");
-      cutsBtn.className = "chat-quote-btn";
-      cutsBtn.textContent = "✂️ Ir a cortes";
-      cutsBtn.onclick = () => { addItemsToQuote(normalized); showView("cutsView"); renderCuts(); };
-      pending.appendChild(cutsBtn);
-    }
-
-    // ── IA agrega materiales al carrito de Cotizar ──────────────────────────
-    if (Array.isArray(data.materials) && data.materials.length) {
-      data.materials.forEach(m => {
-        state.materialCartItems.push({
-          id: crypto.randomUUID(),
-          description: m.description || "Material",
-          qty: Number(m.qty) || 1,
-          unit: m.unit || "Unidades",
-          unitPrice: Number(m.unitPrice) || 0
-        });
-      });
-      renderDraftItems();
-      pending.appendChild(document.createElement("br"));
-      const btn = document.createElement("button");
-      btn.className = "chat-quote-btn";
-      btn.textContent = "📋 Ver en Cotizar";
-      btn.onclick = () => showView("quoteView");
-      pending.appendChild(btn);
-      toast(`${data.materials.length} material(es) agregado(s) por la IA ✓`);
-    }
-
-    // ── IA crea piezas y las manda a Cortes ─────────────────────────────────
-    if (Array.isArray(data.pieces) && data.pieces.length) {
-      const allPieces = data.pieces.flatMap(p => buildManualPieces({
-        furniture: p.furniture || "",
-        name: p.name || "Pieza",
-        largo: Number(p.largo) || 1,
-        ancho: Number(p.ancho) || 1,
-        qty: Math.max(1, Number(p.qty) || 1),
-        thickness: p.thickness || "18 mm",
-        cantoSides: p.cantoSides || { l1: false, l2: false, c1: false, c2: false },
-        cantoThickness: p.cantoThickness || "1.00mm",
-        grain: Boolean(p.grain),
-        grainDir: p.grainDirection || "largo"
-      }));
-      addPiecesToCuts(allPieces);
-      pending.appendChild(document.createElement("br"));
-      const btn = document.createElement("button");
-      btn.className = "chat-quote-btn";
-      btn.textContent = "✂️ Ver en Cortes";
-      btn.onclick = () => showView("cutsView");
-      pending.appendChild(btn);
-      toast(`${allPieces.length} pieza(s) creada(s) por la IA ✓`);
-    }
-
-    // ── IA propone un desglose/despiece — el humano decide qué enviar a Cortes ──
-    if (data.breakdown && typeof data.breakdown === "object") {
-      renderBreakdownSection(pending, data.breakdown);
-    }
-
-    // ── IA generó una imagen (logo, render, plano, etc.) ────────────────────
-    if (data.imageB64 || data.imageUrl) {
-      const src = data.imageB64 ? `data:image/png;base64,${data.imageB64}` : data.imageUrl;
-      renderImageBlock(pending, src);
-    } else if (data.suggestImage) {
-      // Señal ambigua (1 sola característica técnica): no se gasta de más generando sola,
-      // se ofrece un botón para que el usuario decida.
-      pending.appendChild(document.createElement("br"));
-      const genBtn = document.createElement("button");
-      genBtn.className = "chat-quote-btn";
-      genBtn.textContent = "🖼️ Generar imagen";
-      genBtn.type = "button";
-      genBtn.onclick = () => requestStandaloneImage(genBtn, message);
-      pending.appendChild(genBtn);
-    }
+    renderAssistantContentBlocks(pending, data1, message);
+    if (message) pushChatHistory(message, data1.assistantText || "Propuesta generada.");
 
   } catch (e) {
     pending.textContent = e.name === "AbortError"
-      ? "⏱ Tiempo agotado (55s). Intenta con imagen más pequeña."
+      ? "⏱ Tiempo agotado (90s). Intenta con una descripción más corta."
       : `❌ Error: ${e.message}`;
   } finally {
     els.sendChatBtn.disabled = false;

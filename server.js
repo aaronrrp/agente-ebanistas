@@ -602,12 +602,49 @@ function scoreImageSignals(message) {
   return { signals, count };
 }
 
-async function generateImageWithRetry(prompt) {
-  let result = await generateImageCascade(prompt);
-  if (!result.ok) {
-    console.log(`[image] primer intento falló (${result.error}), reintentando una vez...`);
-    result = await generateImageCascade(prompt);
-  }
+// Corta prompts excesivamente largos/detallados antes de mandarlos a generar imagen —
+// reduce la carga de gpt-image-1 sin gastar otra llamada a la API para "resumir".
+const IMAGE_PROMPT_MAX_CHARS = 260;
+function simplifyImagePrompt(rawPrompt) {
+  const p = String(rawPrompt || "").trim();
+  if (p.length <= IMAGE_PROMPT_MAX_CHARS) return p;
+  const cut = p.slice(0, IMAGE_PROMPT_MAX_CHARS);
+  const lastSpace = cut.lastIndexOf(" ");
+  const trimmed = lastSpace > 100 ? cut.slice(0, lastSpace) : cut;
+  console.log(`[image] prompt simplificado de ${p.length} a ${trimmed.length} caracteres`);
+  return `${trimmed}...`;
+}
+
+function delay(ms, value) {
+  return new Promise(resolve => setTimeout(() => resolve(value), ms));
+}
+
+// Techo duro: sin importar cuántos proveedores/reintentos corran por dentro, nunca
+// dejamos correr la generación de imagen más de esto — deja margen bajo el timeout
+// de 90s del cliente para que SIEMPRE llegue una respuesta a tiempo.
+const IMAGE_GEN_BUDGET_MS = 80000;
+
+async function generateImageWithRetry(rawPrompt) {
+  const prompt = simplifyImagePrompt(rawPrompt);
+  const start = Date.now();
+  console.log(`[image] inicio generación — prompt enviado: "${prompt.slice(0, 200)}"`);
+
+  const work = (async () => {
+    let result = await generateImageCascade(prompt);
+    if (!result.ok) {
+      console.log(`[image] primer intento falló (${result.error}), reintentando una vez...`);
+      result = await generateImageCascade(prompt);
+    }
+    return result;
+  })();
+
+  const result = await Promise.race([
+    work,
+    delay(IMAGE_GEN_BUDGET_MS, { ok: false, status: 504, error: "La generación de imagen tardó demasiado (>80s).", timedOut: true })
+  ]);
+
+  const elapsedMs = Date.now() - start;
+  console.log(`[image] fin generación — ok=${result.ok} fuente=${result.source || "-"} tiempo=${elapsedMs}ms${result.ok ? "" : ` error="${result.error}"`}`);
   return result;
 }
 
@@ -640,12 +677,38 @@ async function handleAi(req, res) {
   let imageDecision = "none";
   const semantic = scoreImageSignals(payload.message);
   const keywordHit = detectImageIntent(payload.message);
-  if (!payload.imageData) {
+  if (!payload.imageData && !payload.skipImageRouter) {
     if (semantic.count >= 2) imageDecision = "auto";
     else if (semantic.count === 1) imageDecision = "button";
     else if (keywordHit) imageDecision = "keyword";
   }
-  console.log(`[intent] msg="${String(payload.message || "").slice(0, 90)}" semantic=${JSON.stringify(semantic.signals)} count=${semantic.count} keywordHit=${keywordHit} decision=${imageDecision}`);
+  console.log(`[intent] msg="${String(payload.message || "").slice(0, 90)}" semantic=${JSON.stringify(semantic.signals)} count=${semantic.count} keywordHit=${keywordHit} skipImageRouter=${Boolean(payload.skipImageRouter)} decision=${imageDecision}`);
+
+  // Imagen primero, SIEMPRE en su propia respuesta — nunca junto al JSON de mueble/desglose
+  // (eso fue la causa del timeout: una llamada que esperaba ambas cosas a la vez). El cliente
+  // pide el desglose en una 2da llamada (con skipImageRouter:true) recién después de mostrar
+  // la imagen, así nunca corren imagen y texto al mismo tiempo.
+  if (imageDecision === "auto") {
+    console.log(`[intent] detector activado: semántico (${semantic.count} señales) — SOLO imagen primero, desglose en 2da llamada`);
+    const result = await generateImageWithRetry(payload.message);
+    if (result.ok) {
+      sendJson(res, 200, {
+        ...imageOnlyResponse(result),
+        assistantText: "🎨 Aquí está la imagen — preparando el desglose técnico…",
+        needsFollowup: true
+      });
+    } else {
+      console.error(`[intent] generación de imagen (auto) falló: ${result.error}`);
+      // No perdemos el pedido: igual se pide el desglose técnico en la 2da llamada.
+      sendJson(res, 200, {
+        ...imageOnlyResponse({}),
+        assistantText: `⚠️ No pude generar la imagen (${result.error || "error desconocido"}). Preparando la propuesta técnica…`,
+        imageError: result.error || "No se pudo generar la imagen.",
+        needsFollowup: true
+      });
+    }
+    return;
+  }
 
   if (imageDecision === "keyword") {
     console.log(`[intent] detector activado: palabras clave — generando SOLO imagen`);
@@ -700,26 +763,9 @@ async function handleAi(req, res) {
     content.push({ type: "input_image", image_url: payload.imageData });
   }
   try {
-    if (imageDecision === "auto") {
-      console.log(`[intent] detector activado: semántico (${semantic.count} señales) — JSON de mueble + imagen en paralelo`);
-      console.log(`[image] prompt enviado a ${imageModel}: "${String(payload.message || "").slice(0, 200)}"`);
-      const [parsed, imgResult] = await Promise.all([
-        callOpenAI(systemPrompt + pricesBlock + historyBlock, content),
-        generateImageWithRetry(payload.message)
-      ]);
-      const normalized = normalizeAi(parsed, parsed?.assistantText);
-      if (imgResult.ok) {
-        normalized.imageB64 = imgResult.imageB64 || null;
-        normalized.imageUrl = imgResult.imageUrl || null;
-        normalized.imageSource = imgResult.source;
-      } else {
-        console.error(`[intent] generación de imagen (auto) falló: ${imgResult.error}`);
-        normalized.imageError = imgResult.error || "No se pudo generar la imagen.";
-      }
-      sendJson(res, 200, normalized);
-      return;
+    if (payload.skipImageRouter) {
+      console.log(`[intent] 2da llamada (skipImageRouter) — generando solo el desglose/JSON de mueble`);
     }
-
     const parsed = await callOpenAI(systemPrompt + pricesBlock + historyBlock, content);
     const normalized = normalizeAi(parsed, parsed?.assistantText);
     if (imageDecision === "button") {
@@ -772,8 +818,11 @@ async function handleSpaceAnalysis(req, res) {
 
 // ── Image generation ────────────────────────────────────────────────────────
 // Orden: Cloudflare FLUX (gratis) → Together FLUX (gratis) → gpt-image-1 (pago) → Pollinations (cliente)
+// Resolución fija 1024x1024 — nunca pedir algo más grande, para mantener la carga/costo bajos.
+const IMAGE_SIZE = "1024x1024";
+const PROVIDER_TIMEOUT_MS = 38000; // deja espacio para que el reintento entero quepa en IMAGE_GEN_BUDGET_MS
 async function generateImageCascade(prompt) {
-  const imgPrompt = `${prompt.slice(0, 700)}, photorealistic interior design render, high quality, 4k, soft lighting`;
+  const imgPrompt = `${prompt}, photorealistic interior design render, high quality, 4k, soft lighting`;
 
   // 1. Cloudflare Workers AI — FLUX.1-schnell (gratis, ~15 imgs/día, sin tarjeta)
   if (process.env.CF_ACCOUNT_ID && process.env.CF_API_TOKEN) {
@@ -785,7 +834,7 @@ async function generateImageCascade(prompt) {
           method: "POST",
           headers: { Authorization: `Bearer ${process.env.CF_API_TOKEN}`, "Content-Type": "application/json" },
           body: JSON.stringify({ prompt: imgPrompt, num_steps: 4 }),
-          signal: AbortSignal.timeout(60000)
+          signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS)
         }
       );
       const cfData = await cfRes.json();
@@ -805,7 +854,7 @@ async function generateImageCascade(prompt) {
         method: "POST",
         headers: { Authorization: `Bearer ${process.env.TOGETHER_API_KEY}`, "Content-Type": "application/json" },
         body: JSON.stringify({ model: "black-forest-labs/FLUX.1-schnell-Free", prompt: imgPrompt, width: 1024, height: 1024, steps: 4, n: 1 }),
-        signal: AbortSignal.timeout(60000)
+        signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS)
       });
       const td = await tr.json();
       console.log(`[Together] status=${tr.status} err="${td.error?.message || "ok"}"`);
@@ -819,12 +868,12 @@ async function generateImageCascade(prompt) {
   // 3. gpt-image-1 (requiere cuenta OpenAI con organización verificada para imágenes)
   if (process.env.OPENAI_API_KEY) {
     try {
-      console.log(`[gpt-image-1] trying...`);
+      console.log(`[gpt-image-1] trying... prompt="${prompt.slice(0, 150)}"`);
       const ar = await fetch("https://api.openai.com/v1/images/generations", {
         method: "POST",
         headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: imageModel, prompt: prompt.slice(0, 900), n: 1, size: "1024x1024" }),
-        signal: AbortSignal.timeout(60000)
+        body: JSON.stringify({ model: imageModel, prompt, n: 1, size: IMAGE_SIZE }),
+        signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS)
       });
       const ad = await ar.json();
       console.log(`[gpt-image-1] status=${ar.status} err="${ad.error?.message || "ok"}"`);
