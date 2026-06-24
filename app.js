@@ -2016,7 +2016,12 @@ function recalcCutsLayout() {
       </div>`
     : "";
 
+  const sheetLabelBanner = state.cutsSheetLabel
+    ? `<p style="margin:0 0 10px;font-size:.85rem"><strong>📋 Lámina seleccionada:</strong> ${escapeHtml(state.cutsSheetLabel)} — ${sheetW}×${sheetH}mm${state.cutsSheetPrice != null ? ` · $${state.cutsSheetPrice.toFixed(2)}` : ""}</p>`
+    : `<p style="margin:0 0 10px;font-size:.85rem;color:#92722a">⚠ No hay lámina seleccionada — usando tamaño por defecto ${sheetW}×${sheetH}mm. Elígela arriba en "Lámina (de precios del mercado)".</p>`;
+
   els.cutsLayoutOutput.innerHTML = `
+    ${sheetLabelBanner}
     <div class="cuts-summary" style="margin-top:14px">
       <article><span>Piezas</span><strong>${state.editablePieces.length}</strong></article>
       <article><span>Láminas totales</span><strong>${totalSheets}</strong></article>
@@ -2480,6 +2485,12 @@ function renderBreakdownSection(pending, breakdown) {
       meta.textContent = `${Number(p.largo) || 0}×${Number(p.ancho) || 0}mm · ${p.material || p.thickness || "—"} · x${qty}`;
       info.appendChild(name);
       info.appendChild(meta);
+      if (p.calculo) {
+        const calc = document.createElement("span");
+        calc.className = "breakdown-piece-calc";
+        calc.textContent = `📐 ${p.calculo}`;
+        info.appendChild(calc);
+      }
 
       const sendBtn = document.createElement("button");
       sendBtn.className = "tiny-btn";

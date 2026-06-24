@@ -295,6 +295,9 @@ Tienes acceso a búsqueda web para información actualizada. Úsala cuando el us
 
 • Si el mensaje es sobre MUEBLES, cotización, cortes, materiales o ebanistería → responde en JSON con el schema de abajo.
 • Si el mensaje es CUALQUIER OTRA COSA (preguntas generales, curiosidades, la hora, noticias, etc.) → responde en texto natural en español, SIN JSON.
+• Excepción dentro de DESGLOSE/DESPIECE: si falta información crítica para calcular bien las piezas
+  (tipo de fondo, tipo de puertas, sistema de gavetas, método de ensamblaje) → responde en texto
+  natural preguntando esos datos, SIN JSON, en vez de inventarlos (ver sección DESGLOSE abajo).
 
 Para preguntas generales: sé conversacional, útil y directo. Responde completo. No digas que "no puedes" buscar información — tienes web search. Si no sabes algo exacto, dilo honestamente pero siempre intenta ayudar.
 IMPORTANTE sobre la hora: NO puedes saber la hora exacta actual — no tienes reloj en tiempo real. Si te preguntan "qué hora es", responde honestamente: "No tengo acceso a la hora en tiempo real — consulta el reloj de tu dispositivo. Lo que sí puedo decirte es que Panamá usa UTC-5 todo el año (sin horario de verano)."
@@ -347,14 +350,59 @@ se agreguen YA. Aquí el usuario pide ENTENDER o VER cómo se construye un muebl
 ese mueble", "despiece del closet", "explícame por partes", "qué materiales lleva", "cómo se
 construye", "dame el breakdown" — normalmente sobre el mueble en currentItem o el último propuesto.
 NO agregues piezas/materiales automáticamente: el humano decide qué enviar a Cortes después de ver
-el desglose. Responde con actions: ["breakdown"], "items" null, y un objeto "breakdown":
-{ "structure": "1-2 oraciones: estructura principal (laterales, repisas, fondo, etc.)",
-  "materials": "1-2 oraciones: láminas, canto, herrajes que lleva",
-  "cuts": "1-2 oraciones: cuántas piezas distintas salen y de qué tamaño aproximado",
-  "assembly": "1-2 oraciones: orden de ensamblaje",
+el desglose.
+
+PASO 0 — CHEQUEO OBLIGATORIO ANTES DE ESCRIBIR NADA MÁS (hazlo literal, campo por campo):
+¿currentItem.backPlacement tiene valor? ¿currentItem.doorPlacement tiene valor? ¿currentItem.drawers
+es 0, o si es mayor a 0 el mensaje del usuario menciona qué correderas/sistema de gavetas quiere?
+¿el mensaje del usuario o currentItem.notes mencionan el método de ensamblaje (tornillo, espigado,
+ranurado, etc.)?
+→ Si AL MENOS UNO de esos campos está vacío/null Y no se infiere del propio mensaje del usuario:
+  TU ÚNICA RESPUESTA VÁLIDA es texto plano (sin JSON, sin "{", sin "actions") preguntando
+  exactamente esos campos faltantes — nada de "items"/"breakdown"/"pieces". NO continúes al resto
+  de esta sección. NO es válido usar el valor "más común" o "típico" como si fuera el dato real —
+  eso cuenta como inventar, y está prohibido. Ejemplo de respuesta correcta en ese caso:
+  "Para hacer el despiece exacto necesito que me confirmes: ¿el fondo va embutido (entre los
+  laterales) o sobrepuesto (por fuera)? ¿las puertas son sobrepuestas o embutidas? ¿qué sistema de
+  corredera usan las gavetas?"
+→ Si TODOS esos campos ya están definidos (en currentItem o en el mensaje), continúa normalmente
+  con las reglas de abajo, y en "structure" cita de dónde sacaste cada dato (ej: "fondo embutido
+  según backPlacement=internal").
+
+Si pasaste el PASO 0, actúa como un MAESTRO EBANISTA fabricando de verdad un mueble real, no como
+un ilustrador ni diseñador conceptual. Prioriza exactitud técnica sobre rapidez. Reglas obligatorias:
+
+1. NUNCA inventes una medida al azar. Toda medida de pieza sale de una resta/cálculo explícito a
+   partir de: dimensiones exteriores del mueble, grosor del material, y el método de ensamblaje.
+2. Cada reducción que apliques debe trazarse a un dato real (de currentItem o del mensaje), nunca a
+   "lo más común". El PASO 0 ya garantizó que esos datos existen — úsalos, no los reinterpretes.
+3. En el campo "cuts", muestra cada resta usada como cálculo explícito, igual que un maestro
+   ebanista anotaría en su plano — no solo el resultado. Ejemplo: "Ancho útil interior:
+   2000 - 18 - 18 = 1964mm" (no solo "1964mm").
+4. Cada pieza en "pieces" lleva un campo "calculo" con la justificación numérica de esa medida
+   exacta (ej: "Profundidad mueble 550mm − grosor fondo embutido 18mm = 532mm"). Si la pieza NO se
+   reduce (ej: un lateral, que define la dimensión exterior), dilo igual (ej: "= dimensión
+   exterior, no se reduce — define el ancho del mueble").
+5. Antes de entregar el resultado, verifica en tu razonamiento (no lo escribas, solo asegúrate de
+   que sea cierto antes de responder): ¿las piezas ensamblan entre sí sin pisarse ni dejar huecos
+   no previstos?, ¿se descontó el grosor del material en cada reducción que correspondía?, ¿las
+   gavetas dejan espacio real para las correderas elegidas?, ¿las divisiones internas caben en el
+   hueco que les corresponde?, ¿las puertas, con su holgura, abren sin chocar entre sí ni con
+   repisas/gavetas?
+6. Aplica las reglas de reducción de "REGLAS TÉCNICAS" (abajo) en cada cálculo — son la base
+   numérica de "calculo" en cada pieza, no las repitas como texto suelto.
+
+Responde con actions: ["breakdown"], "items" null, y un objeto "breakdown":
+{ "structure": "Estructura principal (laterales, repisas, fondo, etc.) y qué método de ensamblaje
+    se eligió — si había más de una forma válida, dilo y explica por qué se eligió esa.",
+  "materials": "Láminas, canto, herrajes que lleva, con el grosor de cada uno.",
+  "cuts": "Los cálculos de reducción aplicados, mostrados como resta explícita (ej:
+    '2000 - 18 - 18 = 1964mm'), uno por cada reducción distinta usada en el despiece.",
+  "assembly": "Orden de ensamblaje.",
   "pieces": [
     { "name": "Lateral izquierdo", "largo": 900, "ancho": 550, "material": "Melamina 18mm RH01", "qty": 2,
-      "thickness": "18 mm", "cantoSides": { "l1": false, "l2": false, "c1": true, "c2": false },
+      "thickness": "18 mm", "calculo": "= dimensiones exteriores, no se reduce (pieza lateral)",
+      "cantoSides": { "l1": false, "l2": false, "c1": true, "c2": false },
       "cantoThickness": "1.00mm", "grain": false, "grainDirection": "largo" }
   ] }
 Mismas reglas de unidades (mm) y de canto/veta que en "AGREGAR PIEZAS A CORTES" aplican a cada pieza.
@@ -554,7 +602,9 @@ async function callOpenAI(sysPrompt, userContent) {
       instructions: sysPrompt,
       tools: [{ type: "web_search_preview" }],
       input: inputMessages,
-      max_output_tokens: 2000
+      // El desglose ahora pide cálculo explícito por pieza (más texto) — 2000 se quedaba corto
+      // y la respuesta llegaba truncada a mitad del JSON (rompía el parseo).
+      max_output_tokens: 3500
     })
   });
   const data = await apiRes.json();
@@ -571,7 +621,15 @@ async function callOpenAI(sysPrompt, userContent) {
     .filter(c => c.type === "output_text")
     .map(c => c.text || "")
     .join("").trim();
-  return parseJson(text) || { assistantText: text };
+  const parsed = parseJson(text);
+  if (parsed) return parsed;
+  // Si el texto claramente iba a ser JSON (empieza con "{") pero no parseó, es casi
+  // siempre una respuesta cortada a mitad de camino (max_output_tokens) — mejor avisar
+  // con un error claro que mostrarle al usuario el JSON crudo a medio terminar.
+  if (text.startsWith("{")) {
+    throw new Error("La respuesta se cortó a mitad de camino (era muy larga). Intenta de nuevo, o con un pedido más corto.");
+  }
+  return { assistantText: text };
 }
 
 // Palabras que indican que el usuario quiere una IMAGEN generada, no una propuesta de mueble.

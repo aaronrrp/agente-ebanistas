@@ -1699,5 +1699,6 @@ textarea {
 .breakdown-piece-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .breakdown-piece-info strong { font-size: .85rem; }
 .breakdown-piece-info span { font-size: .76rem; color: var(--muted); }
+.breakdown-piece-info .breakdown-piece-calc { font-style: italic; color: #92722a; }
 .breakdown-piece-card .tiny-btn { flex-shrink: 0; }
 .breakdown-piece-card .tiny-btn:disabled { opacity: .6; cursor: default; }
