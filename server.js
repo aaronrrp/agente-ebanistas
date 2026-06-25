@@ -709,8 +709,11 @@ function logEstimatedImageCost(label, quality, source) {
   console.log(`[costo] ${label}: 1 imagen ${quality} (${source}) ≈ $${cost.toFixed(4)} USD (estimado)`);
 }
 
-async function callOpenAI(sysPrompt, userContent) {
-  // Use Responses API with web_search_preview for real-time web access
+async function callOpenAI(sysPrompt, userContent, useWebSearch = true) {
+  // Use Responses API with web_search_preview for real-time web access — pero solo cuando
+  // de verdad puede hacer falta (preguntas generales). Para pedidos de muebles/materiales/
+  // piezas/desglose nunca aporta nada y solo arriesga un costo extra si el modelo decide
+  // invocarla sin necesidad.
   const inputMessages = [{
     role: "user",
     content: userContent.map(c => {
@@ -726,7 +729,7 @@ async function callOpenAI(sysPrompt, userContent) {
     body: JSON.stringify({
       model,
       instructions: sysPrompt,
-      tools: [{ type: "web_search_preview" }],
+      ...(useWebSearch ? { tools: [{ type: "web_search_preview" }] } : {}),
       input: inputMessages,
       // El desglose ahora pide cálculo explícito por pieza (más texto) — 2000 se quedaba corto
       // y la respuesta llegaba truncada a mitad del JSON (rompía el parseo).
@@ -742,6 +745,8 @@ async function callOpenAI(sysPrompt, userContent) {
     throw err;
   }
   logEstimatedCost(`callOpenAI (${model})`, data.usage);
+  const toolCalls = (data.output || []).filter(o => o.type !== "message").map(o => o.type);
+  if (toolCalls.length) console.log(`[costo] callOpenAI invocó herramientas: ${toolCalls.join(", ")} (costo adicional no reflejado en el estimado de arriba)`);
   // Extract text from Responses API output array
   const text = (data.output || [])
     .filter(o => o.type === "message")
@@ -857,8 +862,12 @@ async function generateImageWithRetry(rawPrompt, quality = "high") {
 
   const work = (async () => {
     let result = await generateImageCascade(prompt, quality);
-    // Sin cuota no tiene sentido reintentar — va a fallar exactamente igual y solo demora más.
-    if (!result.ok && result.status !== 503) {
+    // Sin cuota (402) o sin organización verificada (403) no tiene sentido reintentar — va a
+    // fallar exactamente igual, y a $0.167/imagen en "high" un reintento ciego sale caro.
+    // Sí vale la pena reintentar en timeout/excepción (503 genérico) o rate-limit (429),
+    // que son transitorios.
+    const NO_RETRY_STATUSES = [402, 403];
+    if (!result.ok && !NO_RETRY_STATUSES.includes(result.status)) {
       console.log(`[image] primer intento falló (${result.error}), reintentando una vez...`);
       result = await generateImageCascade(prompt, quality);
     }
@@ -1015,7 +1024,10 @@ async function handleAi(req, res) {
     if (payload.skipImageRouter) {
       console.log(`[intent] 2da llamada (skipImageRouter) — generando solo el desglose/JSON de mueble`);
     }
-    const parsed = await callOpenAI(systemPrompt + pricesBlock + historyBlock, content);
+    // Dominio mueble (hay señales semánticas, o ya hay un currentItem, o es la 2da llamada de
+    // desglose) → nunca necesita búsqueda web. Solo se deja activa para preguntas generales.
+    const isFurnitureDomain = semantic.count > 0 || Boolean(payload.currentItem) || Boolean(payload.skipImageRouter);
+    const parsed = await callOpenAI(systemPrompt + pricesBlock + historyBlock, content, !isFurnitureDomain);
     const normalized = normalizeAi(parsed, parsed?.assistantText);
     if (imageDecision === "button") {
       const why = semantic.count >= 2 ? "cambio chico sobre un mueble existente" : "1 señal, ambiguo";
@@ -1136,7 +1148,10 @@ async function generateImageCascade(prompt, quality = "high") {
       if (ar.ok && ad.data?.[0]?.url) {
         return { ok: true, imageUrl: ad.data[0].url, source: imageModel };
       }
-      if (ad.error?.code === "insufficient_quota") return { ok: false, status: 503, error: "La cuenta de OpenAI no tiene crédito/cuota disponible — revisa el plan y la facturación en platform.openai.com." };
+      // 402 (no es un status real de la API, es nuestro marcador interno) para no confundir
+      // "sin cuota" con el 503 genérico de "servidor ocupado/timeout" de más abajo — esos dos
+      // necesitan trato distinto: sin cuota NUNCA hay que reintentar, timeout transitorio sí.
+      if (ad.error?.code === "insufficient_quota") return { ok: false, status: 402, error: "La cuenta de OpenAI no tiene crédito/cuota disponible — revisa el plan y la facturación en platform.openai.com." };
       if (ar.status === 429) return { ok: false, status: 429, error: "Demasiadas solicitudes de imagen, espera un momento." };
       if (ar.status === 403) return { ok: false, status: 403, error: "La cuenta de OpenAI no tiene acceso a gpt-image-1 (requiere organización verificada)." };
     } catch (e) { console.log(`[gpt-image-1] exception: ${e.message}`); }
