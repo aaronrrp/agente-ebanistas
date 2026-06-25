@@ -688,6 +688,27 @@ function friendlyAiError(e) {
   return { status: 500, message: e.message || "Error inesperado." };
 }
 
+// Precios aproximados por 1M tokens / por imagen — verificar en https://openai.com/api/pricing/
+// y ajustar estas constantes si cambian. Son para tener una idea de costo relativo entre
+// llamadas, no una factura exacta.
+const PRICE_USD = {
+  textInputPer1M: 0.40,
+  textOutputPer1M: 1.60,
+  imagePerUnit: { low: 0.011, medium: 0.042, high: 0.167 } // gpt-image-1, 1024x1024
+};
+function logEstimatedCost(label, usage) {
+  if (!usage) { console.log(`[costo] ${label}: sin datos de uso de tokens`); return; }
+  const inTok = usage.input_tokens || 0;
+  const outTok = usage.output_tokens || 0;
+  const cost = (inTok / 1e6) * PRICE_USD.textInputPer1M + (outTok / 1e6) * PRICE_USD.textOutputPer1M;
+  console.log(`[costo] ${label}: ${inTok} tokens entrada + ${outTok} tokens salida ≈ $${cost.toFixed(4)} USD (estimado)`);
+}
+function logEstimatedImageCost(label, quality, source) {
+  if (source !== imageModel) { console.log(`[costo] ${label}: imagen gratis (${source})`); return; }
+  const cost = PRICE_USD.imagePerUnit[quality] ?? PRICE_USD.imagePerUnit.low;
+  console.log(`[costo] ${label}: 1 imagen ${quality} (${source}) ≈ $${cost.toFixed(4)} USD (estimado)`);
+}
+
 async function callOpenAI(sysPrompt, userContent) {
   // Use Responses API with web_search_preview for real-time web access
   const inputMessages = [{
@@ -720,6 +741,7 @@ async function callOpenAI(sysPrompt, userContent) {
     err.code = data.error?.code;
     throw err;
   }
+  logEstimatedCost(`callOpenAI (${model})`, data.usage);
   // Extract text from Responses API output array
   const text = (data.output || [])
     .filter(o => o.type === "message")
@@ -786,6 +808,26 @@ function scoreImageSignals(message) {
   return { signals, count };
 }
 
+// Solo manda al modelo los items del catálogo que tengan alguna palabra en común con el mensaje
+// — evita pagar tokens por miles de productos que no tienen nada que ver con el pedido actual.
+const MAX_RELEVANT_CATALOG_ITEMS = 30;
+function filterRelevantCatalogItems(items, message, max = MAX_RELEVANT_CATALOG_ITEMS) {
+  if (!Array.isArray(items) || !items.length) return [];
+  const words = String(message || "").toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "") // quita acentos para que "bisagra"="bisagrá"
+    .split(/[^a-z0-9]+/).filter(w => w.length >= 4);
+  if (!words.length) return [];
+  const scored = [];
+  for (const item of items) {
+    const name = String(item?.name || "").toLowerCase()
+      .normalize("NFD").replace(/[̀-ͯ]/g, "");
+    const hits = words.reduce((n, w) => n + (name.includes(w) ? 1 : 0), 0);
+    if (hits > 0) scored.push({ item, hits });
+  }
+  scored.sort((a, b) => b.hits - a.hits);
+  return scored.slice(0, max).map(s => s.item);
+}
+
 // Corta prompts excesivamente largos/detallados antes de mandarlos a generar imagen —
 // reduce la carga de gpt-image-1 sin gastar otra llamada a la API para "resumir".
 const IMAGE_PROMPT_MAX_CHARS = 260;
@@ -808,17 +850,17 @@ function delay(ms, value) {
 // de 90s del cliente para que SIEMPRE llegue una respuesta a tiempo.
 const IMAGE_GEN_BUDGET_MS = 80000;
 
-async function generateImageWithRetry(rawPrompt) {
+async function generateImageWithRetry(rawPrompt, quality = "low") {
   const prompt = simplifyImagePrompt(rawPrompt);
   const start = Date.now();
-  console.log(`[image] inicio generación — prompt enviado: "${prompt.slice(0, 200)}"`);
+  console.log(`[image] inicio generación — quality=${quality} prompt enviado: "${prompt.slice(0, 200)}"`);
 
   const work = (async () => {
-    let result = await generateImageCascade(prompt);
+    let result = await generateImageCascade(prompt, quality);
     // Sin cuota no tiene sentido reintentar — va a fallar exactamente igual y solo demora más.
     if (!result.ok && result.status !== 503) {
       console.log(`[image] primer intento falló (${result.error}), reintentando una vez...`);
-      result = await generateImageCascade(prompt);
+      result = await generateImageCascade(prompt, quality);
     }
     return result;
   })();
@@ -830,6 +872,7 @@ async function generateImageWithRetry(rawPrompt) {
 
   const elapsedMs = Date.now() - start;
   console.log(`[image] fin generación — ok=${result.ok} fuente=${result.source || "-"} tiempo=${elapsedMs}ms${result.ok ? "" : ` error="${result.error}"`}`);
+  if (result.ok) logEstimatedImageCost("generateImageWithRetry", quality, result.source);
   return result;
 }
 
@@ -867,6 +910,13 @@ async function handleAi(req, res) {
     else if (semantic.count === 1) imageDecision = "button";
     else if (keywordHit) imageDecision = "keyword";
   }
+  // Si ya existe un mueble propuesto (currentItem) y el mensaje es un ajuste sobre ese mismo
+  // mueble — no regenerar la imagen sola por eso. Solo si el usuario la pide explícitamente.
+  // Evita pagar una imagen nueva por cada cambio chico ("cámbiale el color", "hazla más alta").
+  const explicitImageRequest = /\b(imagen|render|foto|fotograf[íi]a|visualiza|mu[ée]stra(me)?|dibuj[oa]|vista nueva)\b/i.test(payload.message || "");
+  if (imageDecision === "auto" && payload.currentItem && !explicitImageRequest) {
+    imageDecision = "button";
+  }
   console.log(`[intent] msg="${String(payload.message || "").slice(0, 90)}" semantic=${JSON.stringify(semantic.signals)} count=${semantic.count} keywordHit=${keywordHit} skipImageRouter=${Boolean(payload.skipImageRouter)} decision=${imageDecision}`);
 
   // Imagen primero, SIEMPRE en su propia respuesta — nunca junto al JSON de mueble/desglose
@@ -874,8 +924,9 @@ async function handleAi(req, res) {
   // pide el desglose en una 2da llamada (con skipImageRouter:true) recién después de mostrar
   // la imagen, así nunca corren imagen y texto al mismo tiempo.
   if (imageDecision === "auto") {
-    console.log(`[intent] detector activado: semántico (${semantic.count} señales) — SOLO imagen primero, desglose en 2da llamada`);
-    const result = await generateImageWithRetry(payload.message);
+    const quality = detectsExplicitHdRequest(payload.message) ? "high" : "low";
+    console.log(`[intent] detector activado: semántico (${semantic.count} señales) — SOLO imagen primero (modo ${quality === "high" ? "HD pedido explícitamente" : "boceto"}), desglose en 2da llamada`);
+    const result = await generateImageWithRetry(payload.message, quality);
     if (result.ok) {
       sendJson(res, 200, {
         ...imageOnlyResponse(result),
@@ -896,8 +947,9 @@ async function handleAi(req, res) {
   }
 
   if (imageDecision === "keyword") {
-    console.log(`[intent] detector activado: palabras clave — generando SOLO imagen`);
-    const result = await generateImageWithRetry(payload.message);
+    const quality = detectsExplicitHdRequest(payload.message) ? "high" : "low";
+    console.log(`[intent] detector activado: palabras clave — generando SOLO imagen (modo ${quality === "high" ? "HD pedido explícitamente" : "boceto"})`);
+    const result = await generateImageWithRetry(payload.message, quality);
     if (result.ok) {
       sendJson(res, 200, imageOnlyResponse(result));
     } else {
@@ -907,19 +959,24 @@ async function handleAi(req, res) {
     return;
   }
 
-  // Include custom price items sent from client (stored in client localStorage)
+  // El catálogo de precios del cliente puede tener miles de items (ej: catálogo IMECA, 2611
+  // productos ≈ 24,000 tokens si se manda completo) — eso es la mayor parte del costo de cada
+  // llamada, y casi nunca son todos relevantes. Solo mandamos los que comparten palabras con el
+  // mensaje del usuario (lo que de verdad podría necesitar el precio), tope 30 items.
   const clientCustomItems = Array.isArray(payload.customPrices) ? payload.customPrices : [];
-  const customBlock = clientCustomItems.length
-    ? "\n" + clientCustomItems.map(i => `${String(i.name).slice(0,50)}: $${Number(i.price)||0}`).join("\n")
+  const relevantCustomItems = filterRelevantCatalogItems(clientCustomItems, payload.message);
+  const customBlock = relevantCustomItems.length
+    ? "\n" + relevantCustomItems.map(i => `${String(i.name).slice(0,50)}: $${Number(i.price)||0}`).join("\n")
     : "";
   const pricesBlock = `\n══ PRECIOS ACTUALES (en USD) ══\nMadera/Melamina estándar 2440×1220: $${prices.melamina_std}\nMadera/Melamina grande 2750×1830: $${prices.melamina_lg}\nFondo/backing por m²: $${prices.backing_m2}\nCanto PVC 22mm/metro: $${prices.canto_pvc}\nCanto grueso 2mm/metro: $${prices.canto_grueso}\nBisagra estándar: $${prices.bisagra_std}/un\nBisagra cierre suave: $${prices.bisagra_sc}/un\nCorredera estándar: $${prices.corredera_std}/par\nCorredera cierre suave: $${prices.corredera_sc}/par\nJalador 128mm: $${prices.jalador_chico}/un\nJalador 320mm: $${prices.jalador_grande}/un\nJalador premium inox: $${prices.jalador_premium}/un\nInstalación: $${prices.install_hour}/hora\nTransporte base: $${prices.transport_base}${customBlock}`;
 
-  // Conversation history: últimos 14 mensajes completos (≈7 interacciones) + resumen local
-  // de lo más viejo (concatenación truncada, sin llamada extra a la API) para no perder
-  // contexto de la conversación sin disparar el costo/tokens de mandar todo completo.
+  // Conversation history: últimos 5 mensajes completos (tope pedido para controlar costo) +
+  // resumen local de lo más viejo (concatenación truncada, sin llamada extra a la API) para no
+  // perder contexto de la conversación sin pagar tokens de mandar todo completo.
+  const HISTORY_MAX_MESSAGES = 5;
   const fullHistory = Array.isArray(payload.history) ? payload.history : [];
-  const recentWindow = fullHistory.slice(-14);
-  const older = fullHistory.slice(0, -14);
+  const recentWindow = fullHistory.slice(-HISTORY_MAX_MESSAGES);
+  const older = fullHistory.slice(0, -HISTORY_MAX_MESSAGES);
   let historyBlock = "";
   if (recentWindow.length > 0) {
     const summaryLine = older.length > 0
@@ -963,7 +1020,8 @@ async function handleAi(req, res) {
     const parsed = await callOpenAI(systemPrompt + pricesBlock + historyBlock, content);
     const normalized = normalizeAi(parsed, parsed?.assistantText);
     if (imageDecision === "button") {
-      console.log(`[intent] detector activado: semántico (1 señal, ambiguo) — botón "Generar imagen"`);
+      const why = semantic.count >= 2 ? "cambio chico sobre un mueble existente" : "1 señal, ambiguo";
+      console.log(`[intent] detector activado: semántico (${why}) — botón "Generar imagen" en vez de gastar una imagen automática`);
       normalized.suggestImage = true;
     }
     sendJson(res, 200, normalized);
@@ -1015,7 +1073,12 @@ async function handleSpaceAnalysis(req, res) {
 // Resolución fija 1024x1024 — nunca pedir algo más grande, para mantener la carga/costo bajos.
 const IMAGE_SIZE = "1024x1024";
 const PROVIDER_TIMEOUT_MS = 38000; // deja espacio para que el reintento entero quepa en IMAGE_GEN_BUDGET_MS
-async function generateImageCascade(prompt) {
+// "Modo boceto": por defecto toda imagen automática se genera en calidad "low" (gpt-image-1 cobra
+// bastante menos que "high"). Solo se pide "high" cuando el usuario lo pide explícitamente.
+function detectsExplicitHdRequest(message) {
+  return /\b(hd|alta calidad|alta resoluci[oó]n|calidad alta|detallad[oa]|m[aá]xima calidad)\b/i.test(String(message || ""));
+}
+async function generateImageCascade(prompt, quality = "low") {
   const imgPrompt = `${prompt}, photorealistic interior design render, high quality, 4k, soft lighting`;
 
   // 1. Cloudflare Workers AI — FLUX.1-schnell (gratis, ~15 imgs/día, sin tarjeta)
@@ -1062,11 +1125,11 @@ async function generateImageCascade(prompt) {
   // 3. gpt-image-1 (requiere cuenta OpenAI con organización verificada para imágenes)
   if (process.env.OPENAI_API_KEY) {
     try {
-      console.log(`[gpt-image-1] trying... prompt="${prompt.slice(0, 150)}"`);
+      console.log(`[gpt-image-1] trying... quality=${quality} prompt="${prompt.slice(0, 150)}"`);
       const ar = await fetch("https://api.openai.com/v1/images/generations", {
         method: "POST",
         headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: imageModel, prompt, n: 1, size: IMAGE_SIZE }),
+        body: JSON.stringify({ model: imageModel, prompt, n: 1, size: IMAGE_SIZE, quality }),
         signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS)
       });
       const ad = await ar.json();
@@ -1089,11 +1152,12 @@ async function generateImageCascade(prompt) {
 
 async function handleGenerateImage(req, res) {
   const body = await readBody(req);
-  const { prompt } = body ? JSON.parse(body) : {};
+  const { prompt, quality: requestedQuality } = body ? JSON.parse(body) : {};
   if (!prompt) { sendJson(res, 400, { error: "Se requiere prompt." }); return; }
 
-  console.log(`[image] /api/generate-image prompt="${String(prompt).slice(0, 200)}"`);
-  const result = await generateImageWithRetry(prompt);
+  const quality = requestedQuality === "high" || detectsExplicitHdRequest(prompt) ? "high" : "low";
+  console.log(`[image] /api/generate-image quality=${quality} prompt="${String(prompt).slice(0, 200)}"`);
+  const result = await generateImageWithRetry(prompt, quality);
   if (result.ok) {
     sendJson(res, 200, result);
   } else {

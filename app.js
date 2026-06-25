@@ -2317,6 +2317,11 @@ function pushChatHistory(message, assistantReply) {
 }
 
 async function sendToAI() {
+  // Evita disparar una 2da solicitud superpuesta (ej: Ctrl+Enter mientras la anterior sigue
+  // esperando respuesta) — cada llamada a la IA tiene costo, no tiene sentido pagar dos veces
+  // por una doble pulsación.
+  if (els.sendChatBtn.disabled) return;
+
   const message = els.chatInput.value.trim();
   const hasImage = Boolean(state.currentImageData);
 
@@ -2361,8 +2366,10 @@ async function sendToAI() {
       return;
     }
 
-    // Send last ~7 turns (14 messages) as conversation context
-    const recentHistory = state.chatHistory.slice(-14);
+    // Se manda todo lo que el cliente tiene guardado (tope de 30 = 15 turnos, ver pushChatHistory);
+    // el servidor es quien decide cuánto usar tal cual (últimos 5) y cuánto resumir — así el
+    // resumen compacto de lo viejo tiene algo real que resumir en vez de quedar sin efecto.
+    const recentHistory = state.chatHistory;
     const baseBody = { message, tenant: currentTenant(), currentItem: state.lastDesignItems[0] || null, history: recentHistory, customPrices: tenantPrices().customItems || [] };
 
     const first = await postAi("/api/ebanista-ai", baseBody);
