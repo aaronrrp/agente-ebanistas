@@ -850,7 +850,7 @@ function delay(ms, value) {
 // de 90s del cliente para que SIEMPRE llegue una respuesta a tiempo.
 const IMAGE_GEN_BUDGET_MS = 80000;
 
-async function generateImageWithRetry(rawPrompt, quality = "low") {
+async function generateImageWithRetry(rawPrompt, quality = "high") {
   const prompt = simplifyImagePrompt(rawPrompt);
   const start = Date.now();
   console.log(`[image] inicio generación — quality=${quality} prompt enviado: "${prompt.slice(0, 200)}"`);
@@ -924,9 +924,8 @@ async function handleAi(req, res) {
   // pide el desglose en una 2da llamada (con skipImageRouter:true) recién después de mostrar
   // la imagen, así nunca corren imagen y texto al mismo tiempo.
   if (imageDecision === "auto") {
-    const quality = detectsExplicitHdRequest(payload.message) ? "high" : "low";
-    console.log(`[intent] detector activado: semántico (${semantic.count} señales) — SOLO imagen primero (modo ${quality === "high" ? "HD pedido explícitamente" : "boceto"}), desglose en 2da llamada`);
-    const result = await generateImageWithRetry(payload.message, quality);
+    console.log(`[intent] detector activado: semántico (${semantic.count} señales) — SOLO imagen primero (calidad alta), desglose en 2da llamada`);
+    const result = await generateImageWithRetry(payload.message);
     if (result.ok) {
       sendJson(res, 200, {
         ...imageOnlyResponse(result),
@@ -947,9 +946,8 @@ async function handleAi(req, res) {
   }
 
   if (imageDecision === "keyword") {
-    const quality = detectsExplicitHdRequest(payload.message) ? "high" : "low";
-    console.log(`[intent] detector activado: palabras clave — generando SOLO imagen (modo ${quality === "high" ? "HD pedido explícitamente" : "boceto"})`);
-    const result = await generateImageWithRetry(payload.message, quality);
+    console.log(`[intent] detector activado: palabras clave — generando SOLO imagen (calidad alta)`);
+    const result = await generateImageWithRetry(payload.message);
     if (result.ok) {
       sendJson(res, 200, imageOnlyResponse(result));
     } else {
@@ -1073,12 +1071,10 @@ async function handleSpaceAnalysis(req, res) {
 // Resolución fija 1024x1024 — nunca pedir algo más grande, para mantener la carga/costo bajos.
 const IMAGE_SIZE = "1024x1024";
 const PROVIDER_TIMEOUT_MS = 38000; // deja espacio para que el reintento entero quepa en IMAGE_GEN_BUDGET_MS
-// "Modo boceto": por defecto toda imagen automática se genera en calidad "low" (gpt-image-1 cobra
-// bastante menos que "high"). Solo se pide "high" cuando el usuario lo pide explícitamente.
-function detectsExplicitHdRequest(message) {
-  return /\b(hd|alta calidad|alta resoluci[oó]n|calidad alta|detallad[oa]|m[aá]xima calidad)\b/i.test(String(message || ""));
-}
-async function generateImageCascade(prompt, quality = "low") {
+// Calidad alta por defecto en gpt-image-1 — la calidad visual no se negocia. "low"/"medium"
+// quedan disponibles si algún día se pide explícitamente desde el cliente (más barato pero
+// con menos detalle), pero NUNCA por default.
+async function generateImageCascade(prompt, quality = "high") {
   const imgPrompt = `${prompt}, photorealistic interior design render, high quality, 4k, soft lighting`;
 
   // 1. Cloudflare Workers AI — FLUX.1-schnell (gratis, ~15 imgs/día, sin tarjeta)
@@ -1155,7 +1151,8 @@ async function handleGenerateImage(req, res) {
   const { prompt, quality: requestedQuality } = body ? JSON.parse(body) : {};
   if (!prompt) { sendJson(res, 400, { error: "Se requiere prompt." }); return; }
 
-  const quality = requestedQuality === "high" || detectsExplicitHdRequest(prompt) ? "high" : "low";
+  // Calidad alta por defecto — solo baja si el cliente la pide explícitamente como "low"/"medium".
+  const quality = requestedQuality === "low" || requestedQuality === "medium" ? requestedQuality : "high";
   console.log(`[image] /api/generate-image quality=${quality} prompt="${String(prompt).slice(0, 200)}"`);
   const result = await generateImageWithRetry(prompt, quality);
   if (result.ok) {
