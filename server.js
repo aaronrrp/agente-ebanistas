@@ -302,6 +302,37 @@ Tienes acceso a búsqueda web para información actualizada. Úsala cuando el us
 Para preguntas generales: sé conversacional, útil y directo. Responde completo. No digas que "no puedes" buscar información — tienes web search. Si no sabes algo exacto, dilo honestamente pero siempre intenta ayudar.
 IMPORTANTE sobre la hora: NO puedes saber la hora exacta actual — no tienes reloj en tiempo real. Si te preguntan "qué hora es", responde honestamente: "No tengo acceso a la hora en tiempo real — consulta el reloj de tu dispositivo. Lo que sí puedo decirte es que Panamá usa UTC-5 todo el año (sin horario de verano)."
 
+══ INTERPRETACIÓN INTELIGENTE DE LENGUAJE COTIDIANO ══
+El usuario típico tiene 30-60 años, no es técnico, y describe muebles con sus propias palabras —
+no con terminología de ebanistería. Actúa como un DISEÑADOR DE MOBILIARIO Y EBANISTA PROFESIONAL
+que entiende lo que el cliente QUISO DECIR, no como un validador estricto que exige vocabulario
+exacto. Reglas:
+
+1. Interpreta la intención antes de responder — nunca rechaces un pedido solo porque no usó
+   términos técnicos. El objetivo es entender la intención, no juzgar la redacción literal.
+2. Corrige automáticamente errores evidentes de terminología, usando el contexto del mueble:
+   - "sobre de 3 cm de ancho" en una mesa/escritorio → es el ESPESOR del tablero (3cm), no su
+     ancho — el ancho y la profundidad de una mesa ya vienen dados por otras medidas.
+   - "gavetas abajo" → módulos de gavetas en la parte INFERIOR del mueble (drawerPlacement
+     acorde, no lo tomes como ubicación literal "debajo de la mesa" fuera del mueble).
+   - "madera blanca" → es melamina/acabado BLANCO con textura/veta de madera (no busques una
+     especie de madera que sea blanca — es una combinación de color + textura).
+   - Aplica esta misma lógica a cualquier frase ambigua: prioriza SIEMPRE la interpretación que
+     tenga sentido real para fabricar el mueble, no la lectura más literal de las palabras.
+3. Si faltan detalles MENORES (estilo exacto, tono de color, tipo de jalador, etc.) — asume un
+   valor razonable y profesional, y continúa. NUNCA te detengas a preguntar por algo menor.
+4. Solo pregunta cuando falta información verdaderamente CRÍTICA — algo que sin definir haría
+   imposible saber qué mueble fabricar (ej: el usuario no dice qué tipo de mueble quiere, o las
+   medidas son contradictorias). Esto es distinto y mucho más permisivo que el PASO 0 de la
+   sección DESGLOSE (ese es exclusivo para cuando se pide el despiece exacto de fabricación).
+5. Antes de llenar "items", construye mentalmente una especificación normalizada (tipo de mueble,
+   medidas, espesor, estilo, colores, tipo de base) — y guárdala en el campo "normalizedSpec" de
+   cada item (ver schema abajo) para que quede registro de cómo interpretaste el pedido. NO
+   repitas ahí las medidas en mm/otra unidad — eso ya vive en width/height/depth (evita
+   duplicar conversiones que puedan desincronizarse).
+6. Cuando haya varias interpretaciones válidas, elige la más lógica para fabricación y diseño
+   real — no la más insegura o la primera lectura literal.
+
 ══ CUANDO ES PREGUNTA DE MUEBLES — REGLAS ══
 - Responde con JSON válido usando el schema de abajo.
 - NUNCA digas que un mueble "no está disponible". Somos fabricantes a medida.
@@ -488,7 +519,13 @@ Responde SOLO JSON válido:
       "handles": "Barra aluminio 320mm|Barra aluminio 128mm|Jalador integrado / embutido|Sin jalador (push-to-open)|Inox premium acero inoxidable|No incluir jaladores",
       "color": "RH01|RH10|RH15|RH20|RH30|RH35|RH40|RH50",
       "notes": "detalle técnico",
-      "manualPrice": 0
+      "manualPrice": 0,
+      "normalizedSpec": {
+        "tipo": "ej: mesa de comedor",
+        "estilo": "ej: moderno",
+        "colores": "ej: blanco + textura madera natural",
+        "notasInterpretacion": "qué corregiste o asumiste del lenguaje cotidiano del usuario, si aplica (ej: 'sobre de 3cm interpretado como espesor del tablero')"
+      }
     }
   ],
   "materials": null,
@@ -641,6 +678,10 @@ Responde SOLO JSON válido:
 // ── Route handlers ──────────────────────────────────────────────────────────
 
 function friendlyAiError(e) {
+  // "insufficient_quota" también llega con status 429, pero NO es un límite que se resuelva
+  // esperando — significa que se acabó el crédito/plan de OpenAI. Hay que distinguirlo del
+  // 429 real de "demasiadas solicitudes", que sí se resuelve solo en segundos.
+  if (e.code === "insufficient_quota") return { status: 503, message: "La cuenta de OpenAI no tiene crédito/cuota disponible — revisa el plan y la facturación en platform.openai.com. Esperar no lo va a resolver." };
   if (e.status === 429) return { status: 429, message: "Hay mucha demanda en este momento, espera unos segundos e intenta de nuevo." };
   if (e.status === 401) return { status: 500, message: "La clave de OpenAI configurada no es válida." };
   if (e.status === 400) return { status: 400, message: "No pude procesar esa solicitud, intenta reformularla." };
@@ -676,6 +717,7 @@ async function callOpenAI(sysPrompt, userContent) {
     console.error("[callOpenAI] error response:", JSON.stringify(data));
     const err = new Error(data.error?.message || `OpenAI ${apiRes.status}`);
     err.status = apiRes.status;
+    err.code = data.error?.code;
     throw err;
   }
   // Extract text from Responses API output array
@@ -773,7 +815,8 @@ async function generateImageWithRetry(rawPrompt) {
 
   const work = (async () => {
     let result = await generateImageCascade(prompt);
-    if (!result.ok) {
+    // Sin cuota no tiene sentido reintentar — va a fallar exactamente igual y solo demora más.
+    if (!result.ok && result.status !== 503) {
       console.log(`[image] primer intento falló (${result.error}), reintentando una vez...`);
       result = await generateImageCascade(prompt);
     }
@@ -1034,6 +1077,7 @@ async function generateImageCascade(prompt) {
       if (ar.ok && ad.data?.[0]?.url) {
         return { ok: true, imageUrl: ad.data[0].url, source: imageModel };
       }
+      if (ad.error?.code === "insufficient_quota") return { ok: false, status: 503, error: "La cuenta de OpenAI no tiene crédito/cuota disponible — revisa el plan y la facturación en platform.openai.com." };
       if (ar.status === 429) return { ok: false, status: 429, error: "Demasiadas solicitudes de imagen, espera un momento." };
       if (ar.status === 403) return { ok: false, status: 403, error: "La cuenta de OpenAI no tiene acceso a gpt-image-1 (requiere organización verificada)." };
     } catch (e) { console.log(`[gpt-image-1] exception: ${e.message}`); }
