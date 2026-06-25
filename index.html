@@ -288,6 +288,14 @@
           </div>
         </div>
 
+        <ol class="flow-steps" aria-label="Pasos del proceso">
+          <li><span class="flow-step-num">1</span>Descripción</li>
+          <li><span class="flow-step-num">2</span>Imagen</li>
+          <li><span class="flow-step-num">3</span>Desglose</li>
+          <li><span class="flow-step-num">4</span>Cortes</li>
+          <li><span class="flow-step-num">5</span>Cotización</li>
+        </ol>
+
         <div id="designerLock" class="lock-panel hidden">
           <h3>Agente desactivado</h3>
           <p>La suscripción de esta empresa no está activa. Reactiva la cuenta para usar diseño IA.</p>
@@ -301,16 +309,16 @@
             </div>
           </div>
           <div class="chat-input-bar">
-            <label class="img-attach-btn" title="Subir foto del espacio">
+            <label class="img-attach-btn" title="Subir foto del espacio" aria-label="Subir foto del espacio">
               📷
               <input id="designImage" type="file" accept="image/*" style="display:none">
             </label>
             <div id="imgThumb" class="img-thumb" style="display:none">
-              <button id="clearImageBtn" class="img-thumb-remove" title="Quitar foto">✕</button>
+              <button id="clearImageBtn" class="img-thumb-remove" title="Quitar foto" aria-label="Quitar foto">✕</button>
             </div>
             <textarea id="chatInput" rows="2" placeholder="Ej: closet 200×60×55 cm, melamina blanca, 4 puertas con cierre suave…"></textarea>
-            <button id="voiceBtn" class="chat-voice-btn" type="button" title="Hablar con IA">🎤</button>
-            <button id="sendChatBtn" class="chat-send-btn" type="button">↑</button>
+            <button id="voiceBtn" class="chat-voice-btn" type="button" title="Hablar con IA" aria-label="Hablar con IA">🎤</button>
+            <button id="sendChatBtn" class="chat-send-btn" type="button" aria-label="Enviar mensaje" title="Enviar">↑</button>
           </div>
         </div>
       </section>
@@ -487,7 +495,7 @@
               <p>Desglosa cada mueble en piezas rectangulares y estima láminas por área con desperdicio. Las franjas rojas en el dibujo de la lámina representan el corte de la sierra (kerf) que se pierde entre piezas.</p>
             </div>
 
-            <div class="subsection" style="margin-top:16px">
+            <div class="subsection" style="margin-top:28px">
               <h4>Agregar pieza</h4>
               <div class="form-grid compact-grid">
                 <label>Mueble<input id="mp_furniture" placeholder="Opcional"></label>
@@ -526,7 +534,7 @@
               </div>
               <div style="display:flex;gap:6px">
                 <input id="mp_naturalInput" placeholder="Ej: 4 piezas con 900 de largo, 550 de ancho, canto en los anchos">
-                <button id="mp_voiceBtn" class="secondary-btn" type="button" title="Dictar por voz">🎤</button>
+                <button id="mp_voiceBtn" class="secondary-btn" type="button" title="Dictar por voz" aria-label="Dictar por voz">🎤</button>
                 <button id="parseManualPieceBtn" class="secondary-btn" type="button">Crear</button>
               </div>
             </div>
@@ -576,7 +584,7 @@
   <!-- ── MODAL: thread de un envío ──────────────────────────── -->
   <div id="handoffThreadModal" class="modal-overlay hidden" role="dialog">
     <div class="modal-card" style="max-width:560px">
-      <button id="closeHandoffThreadBtn" class="modal-close" type="button">✕</button>
+      <button id="closeHandoffThreadBtn" class="modal-close" type="button" aria-label="Cerrar">✕</button>
       <h3>Envío</h3>
       <div id="handoffThreadMessages" style="max-height:340px;overflow-y:auto;margin-bottom:1rem"></div>
       <div class="button-row" style="margin-bottom:.75rem">
@@ -616,7 +624,7 @@
   <!-- ── MODAL: nuevo / editar ebanista ──────────────────────── -->
   <div id="ebanistaModal" class="modal-overlay hidden" role="dialog">
     <div class="modal-card" style="max-width:500px">
-      <button id="closeEbanistaModalBtn" class="modal-close" type="button">✕</button>
+      <button id="closeEbanistaModalBtn" class="modal-close" type="button" aria-label="Cerrar">✕</button>
       <h3 id="ebanistaModalTitle">Nuevo ebanista</h3>
       <div class="form-grid">
         <label class="span-2">Empresa <span style="color:#ef4444">*</span>
@@ -741,7 +749,7 @@
   <!-- ── MODAL: nuevo / editar vendedor ──────────────────────── -->
   <div id="sellerModal" class="modal-overlay hidden" role="dialog">
     <div class="modal-card" style="max-width:480px">
-      <button id="closeSellerModalBtn" class="modal-close" type="button">✕</button>
+      <button id="closeSellerModalBtn" class="modal-close" type="button" aria-label="Cerrar">✕</button>
       <h3 id="sellerModalTitle">Nuevo vendedor</h3>
       <div class="form-grid">
         <label class="span-2">Nombre <span style="color:#ef4444">*</span>

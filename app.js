@@ -2188,10 +2188,16 @@ function exportCutsCSV() {
   URL.revokeObjectURL(url);
 }
 
-function appendChat(role, text) {
+function appendChat(role, text, loading = false) {
   const bubble = document.createElement("div");
   bubble.className = `chat-bubble ${role}`;
   bubble.textContent = text;
+  if (loading) {
+    const dots = document.createElement("span");
+    dots.className = "loading-dots";
+    dots.innerHTML = "<span></span><span></span><span></span>";
+    bubble.appendChild(dots);
+  }
   els.chatMessages.appendChild(bubble);
   els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
   return bubble;
@@ -2226,6 +2232,15 @@ function describeAiError(status, data) {
 // (cuando la 1ra llamada solo trajo la imagen).
 function renderAssistantContentBlocks(bubble, data, message) {
   const items = data.items?.length ? data.items : (data.item ? [data.item] : []);
+  const hasMaterials = Array.isArray(data.materials) && data.materials.length > 0;
+  const hasPieces = Array.isArray(data.pieces) && data.pieces.length > 0;
+  const hasBreakdown = Boolean(data.breakdown && typeof data.breakdown === "object");
+  if (items.length > 0 || hasMaterials || hasPieces || hasBreakdown || data.suggestImage) {
+    const nextLabel = document.createElement("p");
+    nextLabel.className = "next-step-label";
+    nextLabel.textContent = "¿Qué quieres hacer ahora?";
+    bubble.appendChild(nextLabel);
+  }
   if (items.length > 0) {
     const normalized = items.map(it => normalizeAssistantItem(it, message));
     state.lastDesignItems = normalized;
@@ -2330,7 +2345,7 @@ async function sendToAI() {
 
   const pending = appendChat("assistant", hasImage
     ? "🔍 Analizando imagen… 15–30 seg"
-    : "⚙️ Diseñando…");
+    : "⚙️ Diseñando…", true);
   els.sendChatBtn.disabled = true;
   els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
 
@@ -2364,7 +2379,7 @@ async function sendToAI() {
     // ahí se habilita "Ir a cortes"/"Enviar a Cortes".
     if (data1.needsFollowup) {
       if (message) state.chatHistory.push({ role: "user", text: message });
-      const followupPending = appendChat("assistant", "📝 Generando desglose técnico…");
+      const followupPending = appendChat("assistant", "📝 Generando desglose técnico…", true);
       els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
       const second = await postAi("/api/ebanista-ai", { ...baseBody, skipImageRouter: true });
       if (!second.ok) { followupPending.textContent = describeAiError(second.status, second.data); return; }
