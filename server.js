@@ -306,6 +306,11 @@ IMPORTANTE sobre la hora: NO puedes saber la hora exacta actual — no tienes re
 - Responde con JSON válido usando el schema de abajo.
 - NUNCA digas que un mueble "no está disponible". Somos fabricantes a medida.
 - Usa las medidas EXACTAS que pidió el cliente. NUNCA uses 120/90/55 como default.
+- UNIDADES de "width"/"height"/"depth" en el array "items": SIEMPRE en CENTÍMETROS, sin excepción.
+  Si el usuario dice "200 cm de largo" → width: 200 (NO 2000). Si dice "2 metros" → width: 200.
+  Esto es DISTINTO de las secciones de Cortes/desglose (esas sí trabajan en mm) — NO mezcles esa
+  conversión aquí. Un mueble de "200x60x240 cm" jamás debe dar width:2000 — eso es un closet de
+  20 metros, una pieza físicamente imposible, y es exactamente el bug que esta regla previene.
 - Si hay un mueble previo en currentItem, úsalo como base.
 - Si pide "imagen" o "render": NUNCA digas que no está disponible — el sistema ya genera la imagen
   por separado en paralelo a tu respuesta. Simplemente da la propuesta técnica completa, sin
@@ -345,12 +350,25 @@ los cantos" marca los 4. Veta: boolean + dirección "largo" o "ancho" (a qué ej
   "grain": false, "grainDirection": "largo" }
 
 ══ DESGLOSE / DESPIECE (explicar cómo se construye, SIN agregar nada todavía) ══
+ESTA SECCIÓN SOLO APLICA si el usuario pide EXPLÍCITAMENTE entender/ver la construcción —
+"desglósame ese mueble", "despiece del closet", "explícame por partes", "qué materiales lleva",
+"cómo se construye", "dame el breakdown". Un mensaje que solo DESCRIBE un mueble que quiere
+fabricar (medidas, materiales, qué le cabe adentro) — aunque tenga mucho detalle — NO es un pedido
+de desglose: es un pedido de propuesta/cotización normal, sigue las reglas de "CUANDO ES PREGUNTA
+DE MUEBLES" de arriba con el array "items", NO entres a esta sección ni a su PASO 0.
+
 Distinto de "AGREGAR PIEZAS A CORTES": ahí el usuario ya sabe las medidas exactas y quiere que
-se agreguen YA. Aquí el usuario pide ENTENDER o VER cómo se construye un mueble — "desglósame
-ese mueble", "despiece del closet", "explícame por partes", "qué materiales lleva", "cómo se
-construye", "dame el breakdown" — normalmente sobre el mueble en currentItem o el último propuesto.
-NO agregues piezas/materiales automáticamente: el humano decide qué enviar a Cortes después de ver
-el desglose.
+se agreguen YA. Aquí el usuario pide ENTENDER o VER cómo se construye un mueble, normalmente sobre
+el mueble en currentItem o el último propuesto. NO agregues piezas/materiales automáticamente: el
+humano decide qué enviar a Cortes después de ver el desglose.
+
+UNIDADES — REGLA QUE NO ADMITE EXCEPCIÓN: si el contexto trae "dimensionesExterioresMm", esos tres
+números (ancho_mm, alto_mm, profundidad_mm) YA están en milímetros y ya fueron multiplicados por 10
+una sola vez — son las dimensiones exteriores reales. ÚSALOS TAL CUAL para tus restas. JAMÁS los
+vuelvas a multiplicar por 10, ni tampoco vuelvas a convertir currentItem.width/height/depth (esos
+están en cm y son la MISMA medida que dimensionesExterioresMm — usar ambos y multiplicar fue lo que
+en producción dio piezas de "24 metros" en un clóset de 2.4m). Si "dimensionesExterioresMm" no
+viene en el contexto, ahí sí conviertes tú: cm del mensaje × 10 = mm, una sola vez.
 
 PASO 0 — CHEQUEO OBLIGATORIO ANTES DE ESCRIBIR NADA MÁS (hazlo literal, campo por campo):
 ¿currentItem.backPlacement tiene valor? ¿currentItem.doorPlacement tiene valor? ¿currentItem.drawers
@@ -487,6 +505,38 @@ function parseJson(text) {
   }
 }
 
+// Red de seguridad: ningún mueble de este catálogo mide más de 8m en un solo eje. Si llega así,
+// es casi seguro un error de unidades de la IA (cm convertido a mm por accidente) — se corrige
+// dividiendo por 10 en vez de dejar pasar una pieza físicamente imposible a Cortes/cotización.
+const MAX_PLAUSIBLE_CM = 800;
+function fixImplausibleDimensions(item) {
+  if (!item || typeof item !== "object") return item;
+  const fixed = { ...item };
+  ["width", "height", "depth"].forEach(key => {
+    const v = Number(fixed[key]);
+    if (v > MAX_PLAUSIBLE_CM) {
+      console.warn(`[normalizeAi] ${key}=${v} es físicamente imposible (>${MAX_PLAUSIBLE_CM}cm) — corrigiendo /10 a ${v / 10}`);
+      fixed[key] = Math.round((v / 10) * 10) / 10;
+    }
+  });
+  return fixed;
+}
+
+// Mismo techo de cordura, en mm, para piezas de Cortes/desglose (largo/ancho).
+const MAX_PLAUSIBLE_MM = 6000;
+function fixImplausiblePieceMm(p) {
+  if (!p || typeof p !== "object") return p;
+  const fixed = { ...p };
+  ["largo", "ancho"].forEach(key => {
+    const v = Number(fixed[key]);
+    if (v > MAX_PLAUSIBLE_MM) {
+      console.warn(`[normalizeAi] pieza "${fixed.name || "?"}" ${key}=${v}mm es físicamente imposible (>${MAX_PLAUSIBLE_MM}mm) — corrigiendo /10 a ${v / 10}`);
+      fixed[key] = Math.round(v / 10);
+    }
+  });
+  return fixed;
+}
+
 function normalizeAi(payload, fallback) {
   const actions = Array.isArray(payload?.actions)
     ? payload.actions.filter(a => allowedActions.includes(a))
@@ -498,9 +548,12 @@ function normalizeAi(payload, fallback) {
   } else if (payload?.item) {
     items = [payload.item];
   }
+  if (items) items = items.map(fixImplausibleDimensions);
   const materials = Array.isArray(payload?.materials) ? payload.materials : null;
-  const pieces = Array.isArray(payload?.pieces) ? payload.pieces : null;
-  const breakdown = payload?.breakdown && typeof payload.breakdown === "object" ? payload.breakdown : null;
+  let pieces = Array.isArray(payload?.pieces) ? payload.pieces.map(fixImplausiblePieceMm) : null;
+  const breakdown = payload?.breakdown && typeof payload.breakdown === "object"
+    ? { ...payload.breakdown, pieces: Array.isArray(payload.breakdown.pieces) ? payload.breakdown.pieces.map(fixImplausiblePieceMm) : payload.breakdown.pieces }
+    : null;
   return {
     source: "openai",
     assistantText: payload?.assistantText || fallback || "Propuesta generada.",
@@ -639,6 +692,26 @@ const imageIntentWords = ["logo", "tatuaje", "plano", "render", "fachada", "dibu
 function detectImageIntent(message) {
   const text = String(message || "").toLowerCase();
   return imageIntentWords.some(w => text.includes(w));
+}
+
+// Extrae "200 cm de largo, 60 cm de profundidad y 240 cm de altura" (y variantes de orden/
+// sinónimo) del mensaje, para no depender de que la IA convierta cm→mm por su cuenta — eso fue
+// lo que dio piezas de "24 metros" en un clóset de 2.4m (doble conversión por parte del modelo).
+const AXIS_WORDS = { ancho: ["largo", "ancho", "longitud"], alto: ["alto", "altura"], profundidad: ["profundidad", "fondo"] };
+function extractCmDimensionsFromText(message) {
+  const t = String(message || "").toLowerCase();
+  const found = {};
+  for (const [axis, words] of Object.entries(AXIS_WORDS)) {
+    for (const word of words) {
+      let m = t.match(new RegExp(`(\\d+(?:[.,]\\d+)?)\\s*cm\\s*(?:de\\s*)?${word}\\b`));
+      if (!m) m = t.match(new RegExp(`${word}\\s*(?:de\\s*)?(\\d+(?:[.,]\\d+)?)\\s*cm\\b`));
+      if (m) { found[axis] = Number(m[1].replace(",", ".")); break; }
+    }
+  }
+  if (found.ancho > 0 && found.alto > 0 && found.profundidad > 0) {
+    return { ancho_mm: Math.round(found.ancho * 10), alto_mm: Math.round(found.alto * 10), profundidad_mm: Math.round(found.profundidad * 10) };
+  }
+  return null;
 }
 
 // Detector SEMÁNTICO (corre antes y tiene prioridad sobre el de palabras clave): cuenta
@@ -813,9 +886,18 @@ async function handleAi(req, res) {
     terms: String(rawTenant.terms || "").slice(0, 150)
   };
 
+  // currentItem.width/height/depth vienen en CM (convención del schema de muebles). Para el
+  // desglose (que trabaja en mm) esa conversión NUNCA se le deja al modelo — se calcula aquí,
+  // una sola vez, de forma determinística. El modelo solo debe restar a partir de estos valores,
+  // nunca volver a multiplicar por 10 (eso fue lo que causó piezas de "24 metros" en producción).
+  const ci = payload.currentItem || null;
+  const dimensionesExterioresMm = (ci && Number(ci.width) > 0 && Number(ci.height) > 0 && Number(ci.depth) > 0)
+    ? { ancho_mm: Math.round(Number(ci.width) * 10), alto_mm: Math.round(Number(ci.height) * 10), profundidad_mm: Math.round(Number(ci.depth) * 10) }
+    : extractCmDimensionsFromText(payload.message);
+
   const content = [{
     type: "input_text",
-    text: JSON.stringify({ message: payload.message || "", tenant: slimTenant, currentItem: payload.currentItem || null })
+    text: JSON.stringify({ message: payload.message || "", tenant: slimTenant, currentItem: ci, dimensionesExterioresMm })
   }];
   if (typeof payload.imageData === "string" && payload.imageData.startsWith("data:image/")) {
     content.push({ type: "input_image", image_url: payload.imageData });
