@@ -1514,20 +1514,25 @@ function renderEbanistaMaterialQuotePaper(quote, tenant) {
 
 // item llega en cm (pipeline de muebles de IA) — Cortes trabaja en mm, así que se
 // convierte aquí, en el límite entre los dos mundos.
+// El canto/tapacanto NUNCA reduce la medida de la pieza — la medida final del mueble
+// armado debe coincidir exactamente con lo pedido. Solo el espesor de piezas
+// estructurales adyacentes (laterales, fondo, etc.) puede reducir una medida, y eso ya
+// se descontó más arriba, en generatePiecesForItem, antes de llegar aquí.
 function piece(item, name, width, height, qty = 1) {
   const edgeSides = computeEdgeSides(name, item.edgeBanding);
-  const substrate = applyEdgeThicknessToDimensions(width * 10, height * 10, edgeSides);
+  const widthMm = roundMm(width * 10);
+  const heightMm = roundMm(height * 10);
   return Array.from({ length: qty }, (_, index) => ({
     id: crypto.randomUUID(),
     furniture: item.name,
     name: qty > 1 ? `${name} ${index + 1}` : name,
-    width: roundMm(substrate.width),
-    height: roundMm(substrate.height),
+    width: widthMm,
+    height: heightMm,
     thickness: item.melamineThickness,
     edgeSides,
     edge: describeEdgeSides(edgeSides),
     grain: false,
-    area: roundMm(substrate.width * substrate.height)
+    area: roundMm(widthMm * heightMm)
   }));
 }
 
@@ -1547,9 +1552,6 @@ function safeDimension(value) {
 // Cortes trabaja en mm (a diferencia del pipeline de muebles de IA, que sigue en cm).
 function roundMm(value) {
   return Math.max(0, Math.round(Number(value || 0) * 10) / 10);
-}
-function safeDimensionMm(value) {
-  return Math.max(1, roundMm(value));
 }
 
 const EDGE_THICKNESS_OPTIONS = ["0.45mm", "1.00mm", "2.00mm"];
@@ -1586,18 +1588,6 @@ function describeEdgeSides(edgeSides) {
     return thicknesses.size === 1 ? `Todos los cantos (${[...thicknesses][0]})` : "Todos los cantos expuestos";
   }
   return `Canto en ${sides.map(([, label]) => label).join("/")} (${sides.map(([key]) => edgeSides[key]).join("/")})`;
-}
-
-// Resta el grosor de canto de los lados que lo llevan. width pierde left+right, height pierde top+bottom.
-// width/height y el resultado están en mm — igual que el grosor de canto ("1.00mm" etc).
-function applyEdgeThicknessToDimensions(width, height, edgeSides) {
-  const mm = (label) => label ? Number(String(label).replace("mm", "")) : 0;
-  const wReduction = mm(edgeSides.left) + mm(edgeSides.right);
-  const hReduction = mm(edgeSides.top) + mm(edgeSides.bottom);
-  return {
-    width: safeDimensionMm(width - wReduction),
-    height: safeDimensionMm(height - hReduction)
-  };
 }
 
 function generatePiecesForItem(item) {

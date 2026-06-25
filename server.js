@@ -406,9 +406,14 @@ un ilustrador ni diseñador conceptual. Prioriza exactitud técnica sobre rapide
    no previstos?, ¿se descontó el grosor del material en cada reducción que correspondía?, ¿las
    gavetas dejan espacio real para las correderas elegidas?, ¿las divisiones internas caben en el
    hueco que les corresponde?, ¿las puertas, con su holgura, abren sin chocar entre sí ni con
-   repisas/gavetas?
+   repisas/gavetas?, ¿el ALTO final armado coincide exactamente con el solicitado?, ¿el ANCHO final
+   armado coincide exactamente con el solicitado?, ¿la PROFUNDIDAD final armada coincide exactamente
+   con la solicitada? Las medidas que da el usuario son las del mueble TERMINADO — esa es la
+   prioridad absoluta, ninguna pieza exterior puede quedar más chica que eso.
 6. Aplica las reglas de reducción de "REGLAS TÉCNICAS" (abajo) en cada cálculo — son la base
-   numérica de "calculo" en cada pieza, no las repitas como texto suelto.
+   numérica de "calculo" en cada pieza, no las repitas como texto suelto. El canto/tapacanto NUNCA
+   es una de esas reducciones: no resta nada de ninguna medida, sin excepción — solo el espesor de
+   una pieza estructural ADYACENTE (otro panel de melamina) puede reducir una medida.
 
 Responde con actions: ["breakdown"], "items" null, y un objeto "breakdown":
 { "structure": "Estructura principal (laterales, repisas, fondo, etc.) y qué método de ensamblaje
@@ -426,6 +431,12 @@ Responde con actions: ["breakdown"], "items" null, y un objeto "breakdown":
 Mismas reglas de unidades (mm) y de canto/veta que en "AGREGAR PIEZAS A CORTES" aplican a cada pieza.
 
 ══ REGLAS TÉCNICAS ══
+- Las medidas que da el usuario (o currentItem/dimensionesExterioresMm) son las del mueble
+  TERMINADO/armado — nunca una medida de pieza individual ya reducida. Laterales y demás piezas
+  que DEFINEN el exterior del mueble se cortan exactamente a esa medida, SIN reducción.
+- El canto/tapacanto (PVC, cualquier grosor) NUNCA reduce ninguna medida de ninguna pieza — ni la
+  exterior ni la interior. Solo registra en qué lados lleva canto (cantoSides), no restes nada por
+  eso. La única reducción válida es el espesor de una pieza ESTRUCTURAL adyacente.
 - Fondo interno/embutido: resta grosor melamina a profundidad de repisas y gavetas internas.
 - Fondo exterior/sobrepuesto o sin fondo: NO restes profundidad a repisas internas.
 - Repisas internas van entre laterales: restan grosor en ancho.
