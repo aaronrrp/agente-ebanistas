@@ -2842,6 +2842,17 @@ function clearImageState() {
 // manteniendo forma/distribución/proporciones originales (server.js: /api/enhance-sketch, usa
 // /v1/images/edits en vez de /generations). Distinto de "Analizar espacio" (esa interpreta una
 // foto de un cuarto vacío y propone muebles; esta toma una referencia de UN mueble y la mejora).
+// Error específico de este flujo -- a propósito NO reutiliza describeAiError(), que asume
+// que TODO status 503 significa "falta OPENAI_API_KEY". Esa suposición no aplica aquí: el
+// servidor (editImageWithReference en server.js) ahora usa 401 solo para "falta la clave" y
+// reserva 503 para timeouts/excepciones reales de red al subir la imagen -- mezclar ambos bajo
+// el mismo mensaje fue justo el bug reportado (decía "sin clave" cuando la clave sí existía).
+function describeSketchError(status, data) {
+  if (status === 401) return "⚠️ Sin clave de OpenAI configurada en el servidor. Configura OPENAI_API_KEY en Render.";
+  if (status === 429) return `⏳ ${data?.error || "Demasiadas solicitudes, espera un momento."}`;
+  return `❌ ${data?.error || "No se pudo mejorar la imagen, intenta de nuevo."}`;
+}
+
 let enhanceSketchInFlight = false;
 async function enhanceSketchUpload() {
   if (enhanceSketchInFlight) return;
@@ -2870,7 +2881,7 @@ async function enhanceSketchUpload() {
 
   try {
     const { ok, status, data } = await postAi("/api/enhance-sketch", { imageData: imageDataForRequest, message });
-    if (!ok) { pending.textContent = describeAiError(status, data); return; }
+    if (!ok) { pending.textContent = describeSketchError(status, data); return; }
     pending.textContent = data.assistantText || "Imagen profesional generada a partir del boceto.";
     if (data.imageB64 || data.imageUrl) {
       renderImageBlock(pending, data.imageB64 ? `data:image/png;base64,${data.imageB64}` : data.imageUrl);

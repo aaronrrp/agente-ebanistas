@@ -1219,11 +1219,23 @@ function dataUrlToBlob(dataUrl) {
 
 const EDIT_TIMEOUT_MS = 75000; // sube un archivo + edita en alta calidad: necesita más margen que PROVIDER_TIMEOUT_MS
 async function editImageWithReference(imageDataUrl, prompt, quality = "high") {
-  if (!process.env.OPENAI_API_KEY) {
-    return { ok: false, status: 503, error: "OPENAI_API_KEY no configurada." };
+  // Misma variable que el resto del archivo (texto y generación desde cero usan esta
+  // misma process.env.OPENAI_API_KEY, sin cliente ni configuración aparte) -- el log deja
+  // constancia explícita de que se detectó (o no) antes de seguir, para diagnosticar en Render
+  // sin adivinar si esta ruta está leyendo algo distinto.
+  const hasKey = Boolean(process.env.OPENAI_API_KEY);
+  console.log(`[enhance-sketch] editImageWithReference: OPENAI_API_KEY detectada=${hasKey}`);
+  if (!hasKey) {
+    console.log(`[enhance-sketch] abortando: falta OPENAI_API_KEY (mismo nombre de variable que usan el chat de texto y la generación desde texto)`);
+    // 401 (no 503) -- así el cliente puede distinguir "no hay clave" de cualquier otra falla
+    // (timeout, excepción de red, etc.) que también cae en el catch de abajo con 503.
+    return { ok: false, status: 401, error: "OPENAI_API_KEY no configurada." };
   }
   const blob = dataUrlToBlob(imageDataUrl);
-  if (!blob) return { ok: false, status: 400, error: "Imagen inválida." };
+  if (!blob) {
+    console.log(`[enhance-sketch] abortando: la imagen subida no es un data URL válido (dataUrlToBlob devolvió null)`);
+    return { ok: false, status: 400, error: "Imagen inválida." };
+  }
 
   const ext = blob.type.includes("png") ? "png" : blob.type.includes("webp") ? "webp" : "jpg";
   const form = new FormData();
@@ -1257,9 +1269,12 @@ async function editImageWithReference(imageDataUrl, prompt, quality = "high") {
     if (ad.error?.code === "insufficient_quota") return { ok: false, status: 402, error: "La cuenta de OpenAI no tiene crédito/cuota disponible." };
     if (ar.status === 429) return { ok: false, status: 429, error: "Demasiadas solicitudes, espera un momento." };
     if (ar.status === 403) return { ok: false, status: 403, error: "La cuenta de OpenAI no tiene acceso a edición de imágenes (requiere organización verificada)." };
+    console.log(`[enhance-sketch] fallo no contemplado arriba: status=${ar.status} error="${ad.error?.message}"`);
     return { ok: false, status: ar.status || 500, error: ad.error?.message || "No se pudo mejorar la imagen." };
   } catch (e) {
-    console.log(`[gpt-image-1-edit] exception: ${e.message}`);
+    // Timeout (AbortSignal) o error de red al subir el archivo -- NO es un problema de
+    // configuración de clave (eso ya se descartó arriba con status 401 antes de llegar aquí).
+    console.log(`[enhance-sketch] excepción durante el fetch a /v1/images/edits: ${e.name}: ${e.message}`);
     return { ok: false, status: 503, error: "No se pudo procesar la imagen, intenta de nuevo." };
   }
 }
@@ -1276,9 +1291,11 @@ fotografía profesional de catálogo.`.replace(/\s+/g, " ").trim();
 }
 
 async function handleEnhanceSketch(req, res) {
+  console.log(`[enhance-sketch] POST /api/enhance-sketch recibido`);
   const body = await readBody(req);
   const payload = body ? JSON.parse(body) : {};
   if (typeof payload.imageData !== "string" || !payload.imageData.startsWith("data:image/")) {
+    console.log(`[enhance-sketch] abortando: payload sin imageData válido (tipo recibido: ${typeof payload.imageData})`);
     sendJson(res, 400, { error: "Se requiere una imagen del boceto/referencia." });
     return;
   }
