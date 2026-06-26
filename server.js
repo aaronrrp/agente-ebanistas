@@ -855,8 +855,35 @@ function delay(ms, value) {
 // de 90s del cliente para que SIEMPRE llegue una respuesta a tiempo.
 const IMAGE_GEN_BUDGET_MS = 80000;
 
+// Caché en memoria: si el mismo prompt (texto→imagen) ya se generó hace poco, se devuelve esa
+// imagen sin gastar otra llamada — misma calidad exacta, $0 de costo. No aplica a boceto→render
+// (esa depende de la imagen subida, casi nunca es idéntica de una vez a otra).
+const IMAGE_CACHE = new Map(); // key -> { result, expiresAt }
+const IMAGE_CACHE_TTL_MS = 30 * 60 * 1000;
+const IMAGE_CACHE_MAX_ENTRIES = 50;
+function imageCacheGet(key) {
+  const entry = IMAGE_CACHE.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) { IMAGE_CACHE.delete(key); return null; }
+  return entry.result;
+}
+function imageCacheSet(key, result) {
+  if (IMAGE_CACHE.size >= IMAGE_CACHE_MAX_ENTRIES) {
+    const oldestKey = IMAGE_CACHE.keys().next().value;
+    if (oldestKey !== undefined) IMAGE_CACHE.delete(oldestKey);
+  }
+  IMAGE_CACHE.set(key, { result, expiresAt: Date.now() + IMAGE_CACHE_TTL_MS });
+}
+
 async function generateImageWithRetry(rawPrompt, quality = "high") {
   const prompt = simplifyImagePrompt(rawPrompt);
+  const cacheKey = `${quality}::${prompt.toLowerCase()}`;
+  const cached = imageCacheGet(cacheKey);
+  if (cached) {
+    console.log(`[image] cache HIT — quality=${quality} prompt="${prompt.slice(0, 100)}" — $0 gastado`);
+    return cached;
+  }
+
   const start = Date.now();
   console.log(`[image] inicio generación — quality=${quality} prompt enviado: "${prompt.slice(0, 200)}"`);
 
@@ -881,7 +908,10 @@ async function generateImageWithRetry(rawPrompt, quality = "high") {
 
   const elapsedMs = Date.now() - start;
   console.log(`[image] fin generación — ok=${result.ok} fuente=${result.source || "-"} tiempo=${elapsedMs}ms${result.ok ? "" : ` error="${result.error}"`}`);
-  if (result.ok) logEstimatedImageCost("generateImageWithRetry", quality, result.source);
+  if (result.ok) {
+    logEstimatedImageCost("generateImageWithRetry", quality, result.source);
+    imageCacheSet(cacheKey, result);
+  }
   return result;
 }
 
@@ -1159,6 +1189,98 @@ async function generateImageCascade(prompt, quality = "high") {
 
   // 4. Fallback: Pollinations desde el navegador del cliente (diferente IP)
   return { ok: false, status: 503, error: "Servidor de renders ocupado.", pollinations: true };
+}
+
+// ── Boceto/referencia → render profesional (image-to-image) ────────────────
+// Usa /v1/images/edits (no /generations) — toma la imagen subida por el usuario como base y la
+// transforma según el prompt, en vez de generar algo desde cero. gpt-image-1 soporta esto vía
+// multipart/form-data; FormData/Blob son globales nativos de Node (18+), cero dependencias nuevas.
+function dataUrlToBlob(dataUrl) {
+  const match = String(dataUrl || "").match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return null;
+  const [, mime, b64] = match;
+  const buffer = Buffer.from(b64, "base64");
+  return new Blob([buffer], { type: mime });
+}
+
+const EDIT_TIMEOUT_MS = 75000; // sube un archivo + edita en alta calidad: necesita más margen que PROVIDER_TIMEOUT_MS
+async function editImageWithReference(imageDataUrl, prompt, quality = "high") {
+  if (!process.env.OPENAI_API_KEY) {
+    return { ok: false, status: 503, error: "OPENAI_API_KEY no configurada." };
+  }
+  const blob = dataUrlToBlob(imageDataUrl);
+  if (!blob) return { ok: false, status: 400, error: "Imagen inválida." };
+
+  const ext = blob.type.includes("png") ? "png" : blob.type.includes("webp") ? "webp" : "jpg";
+  const form = new FormData();
+  form.append("model", imageModel);
+  form.append("image", blob, `referencia.${ext}`);
+  form.append("prompt", prompt);
+  form.append("n", "1");
+  form.append("size", IMAGE_SIZE);
+  form.append("quality", quality);
+
+  try {
+    console.log(`[gpt-image-1-edit] trying... quality=${quality} prompt="${prompt.slice(0, 150)}"`);
+    const ar = await fetch("https://api.openai.com/v1/images/edits", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` }, // sin Content-Type: FormData pone el boundary correcto
+      body: form,
+      // Más tiempo que la generación normal: aquí también se sube la imagen de referencia
+      // (no solo texto), así que la subida + el procesamiento tardan más.
+      signal: AbortSignal.timeout(EDIT_TIMEOUT_MS)
+    });
+    const ad = await ar.json();
+    console.log(`[gpt-image-1-edit] status=${ar.status} err="${ad.error?.message || "ok"}"`);
+    if (ar.ok && ad.data?.[0]?.b64_json) {
+      logEstimatedImageCost("editImageWithReference", quality, imageModel);
+      return { ok: true, imageB64: ad.data[0].b64_json, source: imageModel };
+    }
+    if (ar.ok && ad.data?.[0]?.url) {
+      logEstimatedImageCost("editImageWithReference", quality, imageModel);
+      return { ok: true, imageUrl: ad.data[0].url, source: imageModel };
+    }
+    if (ad.error?.code === "insufficient_quota") return { ok: false, status: 402, error: "La cuenta de OpenAI no tiene crédito/cuota disponible." };
+    if (ar.status === 429) return { ok: false, status: 429, error: "Demasiadas solicitudes, espera un momento." };
+    if (ar.status === 403) return { ok: false, status: 403, error: "La cuenta de OpenAI no tiene acceso a edición de imágenes (requiere organización verificada)." };
+    return { ok: false, status: ar.status || 500, error: ad.error?.message || "No se pudo mejorar la imagen." };
+  } catch (e) {
+    console.log(`[gpt-image-1-edit] exception: ${e.message}`);
+    return { ok: false, status: 503, error: "No se pudo procesar la imagen, intenta de nuevo." };
+  }
+}
+
+function buildSketchEnhancePrompt(userNote) {
+  const base = `Convierte este boceto/dibujo/referencia en un render fotorrealista profesional de
+mueble de melamina para ebanistería. Mantén EXACTAMENTE la forma general, la distribución de
+espacios, las proporciones y la intención de diseño original — NO inventes una estructura
+distinta ni cambies el tipo de mueble. Solo eleva la calidad visual: mejora la iluminación,
+los materiales, los acabados de melamina, y el realismo del render, como si fuera una
+fotografía profesional de catálogo.`.replace(/\s+/g, " ").trim();
+  const note = String(userNote || "").trim();
+  return note ? `${base} Detalles adicionales del cliente: ${note}` : base;
+}
+
+async function handleEnhanceSketch(req, res) {
+  const body = await readBody(req);
+  const payload = body ? JSON.parse(body) : {};
+  if (typeof payload.imageData !== "string" || !payload.imageData.startsWith("data:image/")) {
+    sendJson(res, 400, { error: "Se requiere una imagen del boceto/referencia." });
+    return;
+  }
+  const prompt = buildSketchEnhancePrompt(payload.message);
+  const result = await editImageWithReference(payload.imageData, prompt, "high");
+  if (result.ok) {
+    sendJson(res, 200, {
+      assistantText: "Imagen profesional generada a partir del boceto.",
+      imageB64: result.imageB64 || null,
+      imageUrl: result.imageUrl || null,
+      imageSource: result.source
+    });
+  } else {
+    console.error(`[enhance-sketch] falló: ${result.error}`);
+    sendJson(res, result.status || 500, { error: result.error || "No se pudo mejorar la imagen." });
+  }
 }
 
 async function handleGenerateImage(req, res) {
@@ -1673,6 +1795,7 @@ const server = http.createServer(async (req, res) => {
     if (method === "POST" && p === "/api/ebanista-ai")     { await handleAi(req, res); return; }
     if (method === "POST" && p === "/api/analyze-space")   { await handleSpaceAnalysis(req, res); return; }
     if (method === "POST" && p === "/api/generate-image")  { await handleGenerateImage(req, res); return; }
+    if (method === "POST" && p === "/api/enhance-sketch")  { await handleEnhanceSketch(req, res); return; }
 
     // Auth
     if (method === "POST" && p === "/api/auth/admin")  { await handleAuthAdmin(req, res); return; }

@@ -1564,6 +1564,25 @@ textarea {
   border: 1px solid var(--line);
 }
 
+.img-thumb-enhance {
+  position: absolute;
+  bottom: -34px;
+  left: 0;
+  z-index: 2;
+  white-space: nowrap;
+  padding: 6px 10px;
+  min-height: 32px;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 999px;
+  box-shadow: 0 2px 6px rgba(0,0,0,.2);
+}
+.img-thumb-enhance:hover { opacity: .9; }
+.img-thumb-enhance:disabled { opacity: .6; cursor: default; }
+
 .img-thumb-remove {
   position: absolute;
   top: -6px;

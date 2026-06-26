@@ -2817,6 +2817,55 @@ function clearImageState() {
   if (inp) inp.value = "";
 }
 
+// Boceto/dibujo/captura/referencia subida por el usuario -> render profesional de alta calidad,
+// manteniendo forma/distribución/proporciones originales (server.js: /api/enhance-sketch, usa
+// /v1/images/edits en vez de /generations). Distinto de "Analizar espacio" (esa interpreta una
+// foto de un cuarto vacío y propone muebles; esta toma una referencia de UN mueble y la mejora).
+let enhanceSketchInFlight = false;
+async function enhanceSketchUpload() {
+  if (enhanceSketchInFlight) return;
+  if (!state.currentImageData) { toast("Adjunta una foto, boceto o referencia primero.", "error"); return; }
+  enhanceSketchInFlight = true;
+  const btn = document.getElementById("enhanceSketchBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "✏️ Mejorando…"; }
+
+  const message = els.chatInput.value.trim();
+  const imageDataForRequest = state.currentImageData;
+
+  const userBubble = document.createElement("div");
+  userBubble.className = "chat-bubble user";
+  if (message) { const t = document.createElement("span"); t.textContent = message; userBubble.appendChild(t); }
+  const img = document.createElement("img");
+  img.src = imageDataForRequest;
+  img.style.cssText = "display:block;max-width:180px;border-radius:8px;margin-top:6px";
+  userBubble.appendChild(img);
+  els.chatMessages.appendChild(userBubble);
+
+  els.chatInput.value = "";
+  clearImageState();
+
+  const pending = appendChat("assistant", "✏️ Mejorando tu boceto a render profesional… 15–30 seg", true);
+  els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+
+  try {
+    const { ok, status, data } = await postAi("/api/enhance-sketch", { imageData: imageDataForRequest, message });
+    if (!ok) { pending.textContent = describeAiError(status, data); return; }
+    pending.textContent = data.assistantText || "Imagen profesional generada a partir del boceto.";
+    if (data.imageB64 || data.imageUrl) {
+      renderImageBlock(pending, data.imageB64 ? `data:image/png;base64,${data.imageB64}` : data.imageUrl);
+    }
+  } catch (e) {
+    pending.textContent = e.name === "AbortError"
+      ? "⏱ Tiempo agotado (90s). Intenta con una imagen más liviana."
+      : `❌ Error: ${e.message}`;
+  } finally {
+    enhanceSketchInFlight = false;
+    if (btn) { btn.disabled = false; btn.textContent = "✏️ Mejorar a render"; }
+    els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+  }
+}
+document.getElementById("enhanceSketchBtn")?.addEventListener("click", enhanceSketchUpload);
+
 async function downloadRender(url) {
   try {
     let blobUrl;
