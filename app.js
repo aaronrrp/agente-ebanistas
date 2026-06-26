@@ -3757,26 +3757,85 @@ function handoffAuthHeader() {
   return token ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
 }
 
+// Combo buscable para elegir a quién enviar (vendedor o ebanista, según el rol) — reemplaza
+// al <select> nativo de antes. El <select> vacío (sin <option>) no mostraba nada al hacer clic
+// en algunos navegadores/zooms; este combo es HTML/CSS propio (mismo patrón que el buscador de
+// láminas en Cortes), así que no depende de cómo cada navegador dibuje su lista nativa.
+let _handoffTargetList = []; // [{id, label}] -- vacío = solo "Bandeja compartida" (modo ebanista) o sin opciones (modo vendedor)
+let _handoffTargetId = "";
+
 async function loadHandoffTargetOptions() {
-  const sel = document.getElementById("handoffNewTarget");
-  if (!sel) return;
+  const input = document.getElementById("handoffTargetSearchInput");
+  if (!input) return;
+  _handoffTargetList = [];
+  _handoffTargetId = "";
   try {
     if (AUTH.mode === "ebanista") {
       const res = await fetch("/api/sellers/active", { headers: handoffAuthHeader() });
-      if (!res.ok) return;
-      const list = await res.json();
-      sel.innerHTML = '<option value="">Bandeja compartida</option>' +
-        list.map(s => `<option value="${s.id}">${escapeHtml(s.name)}${s.company ? " — " + escapeHtml(s.company) : ""}</option>`).join("");
+      if (res.ok) {
+        const list = await res.json();
+        _handoffTargetList = list.map(s => ({ id: s.id, label: `${s.name}${s.company ? " — " + s.company : ""}` }));
+      }
+      input.placeholder = "Bandeja compartida";
     } else if (AUTH.mode === "vendedor") {
       const res = await fetch("/api/tenants/active", { headers: handoffAuthHeader() });
-      if (!res.ok) return;
-      const list = await res.json();
-      sel.innerHTML = list.length
-        ? list.map(t => `<option value="${t.id}">${escapeHtml(t.companyName)}</option>`).join("")
-        : '<option value="">No hay ebanistas activos</option>';
+      if (res.ok) {
+        const list = await res.json();
+        _handoffTargetList = list.map(t => ({ id: t.id, label: t.companyName }));
+      }
+      input.placeholder = _handoffTargetList.length ? "Elige un ebanista…" : "No hay ebanistas activos";
     }
   } catch {}
+  input.value = "";
 }
+
+function handoffTargetComboItemRow(entry, query, matchIdx) {
+  let nameHtml = escapeHtml(entry.label);
+  if (query && matchIdx !== -1) {
+    nameHtml = escapeHtml(entry.label.slice(0, matchIdx)) + "<mark>" + escapeHtml(entry.label.slice(matchIdx, matchIdx + query.length)) + "</mark>" + escapeHtml(entry.label.slice(matchIdx + query.length));
+  }
+  return `<div class="material-combo-item" data-handoff-target-id="${entry.id}" data-handoff-target-label="${escapeHtml(entry.label)}"><span class="name">${nameHtml}</span></div>`;
+}
+
+function renderHandoffTargetCombo(query) {
+  const panel = document.getElementById("handoffTargetResults");
+  if (!panel) return;
+  const q = (query || "").trim().toLowerCase();
+  const pool = AUTH.mode === "ebanista"
+    ? [{ id: "", label: "Bandeja compartida" }, ..._handoffTargetList]
+    : _handoffTargetList;
+  const matches = q
+    ? pool.map(e => ({ e, idx: e.label.toLowerCase().indexOf(q) })).filter(x => x.idx !== -1).sort((a, b) => a.idx - b.idx)
+    : pool.map(e => ({ e, idx: -1 }));
+  panel.innerHTML = matches.length
+    ? matches.map(({ e, idx }) => handoffTargetComboItemRow(e, q, idx)).join("")
+    : `<p class="material-combo-empty">Sin resultados.</p>`;
+}
+
+document.getElementById("handoffTargetSearchInput")?.addEventListener("focus", (e) => {
+  document.getElementById("handoffTargetResults").classList.remove("hidden");
+  renderHandoffTargetCombo(e.target.value);
+});
+document.getElementById("handoffTargetSearchInput")?.addEventListener("input", (e) => {
+  _handoffTargetId = "";
+  document.getElementById("handoffTargetResults").classList.remove("hidden");
+  renderHandoffTargetCombo(e.target.value);
+});
+document.getElementById("handoffTargetSearchInput")?.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { document.getElementById("handoffTargetResults").classList.add("hidden"); e.target.blur(); }
+});
+document.getElementById("handoffTargetSearchInput")?.addEventListener("blur", () => {
+  setTimeout(() => document.getElementById("handoffTargetResults")?.classList.add("hidden"), 120);
+});
+document.getElementById("handoffTargetResults")?.addEventListener("mousedown", (e) => {
+  e.preventDefault(); // evita que el input pierda foco antes de procesar el click
+  const itemEl = e.target.closest("[data-handoff-target-id]");
+  if (itemEl) {
+    _handoffTargetId = itemEl.dataset.handoffTargetId;
+    document.getElementById("handoffTargetSearchInput").value = itemEl.dataset.handoffTargetLabel;
+    document.getElementById("handoffTargetResults").classList.add("hidden");
+  }
+});
 
 function handoffSummary(h) {
   const last = h.messages[h.messages.length - 1];
@@ -3876,7 +3935,7 @@ function goToHandoffWithType(type) {
   showView("handoffsView");
   const typeSel = document.getElementById("handoffNewType");
   if (typeSel) typeSel.value = type;
-  document.getElementById("handoffNewTarget")?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+  document.getElementById("handoffTargetCombo")?.scrollIntoView?.({ behavior: "smooth", block: "center" });
 }
 async function loadSellerQuoteClientOptions() {
   const sel = document.getElementById("sq_client");
@@ -3988,7 +4047,7 @@ function updateSendButtonLabels() {
 
 document.getElementById("sendHandoffBtn")?.addEventListener("click", async () => {
   const type = document.getElementById("handoffNewType").value;
-  const targetId = document.getElementById("handoffNewTarget").value;
+  const targetId = _handoffTargetId;
   const quoteItems = AUTH.mode === "vendedor" ? state.sellerQuoteItems : state.materialCartItems;
   const payload = type === "cuts" ? { pieces: state.editablePieces } : { items: quoteItems };
   const count = type === "cuts" ? state.editablePieces.length : quoteItems.length;

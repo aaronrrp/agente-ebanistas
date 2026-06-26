@@ -570,7 +570,10 @@
               <option value="cuts">Cortes</option>
               <option value="quote">Cotización</option>
             </select>
-            <select id="handoffNewTarget"></select>
+            <div class="material-combo" id="handoffTargetCombo">
+              <input id="handoffTargetSearchInput" type="text" placeholder="Bandeja compartida" autocomplete="off">
+              <div id="handoffTargetResults" class="material-combo-results hidden"></div>
+            </div>
             <button id="sendHandoffBtn" class="primary-btn" type="button">Enviar lo que tengo ahora</button>
           </div>
         </div>
