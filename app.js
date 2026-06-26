@@ -7232,20 +7232,56 @@ document.getElementById("addManualPieceBtn")?.addEventListener("click", () => {
 
 // Texto libre (escrito o dictado por voz): "4 piezas con 40mm de largo, 30 de ancho, canto en los anchos".
 // Numero sin unidad = mm por defecto (asi suelen anotar las medidas); "cm" explicito se respeta.
-const SPANISH_NUMBER_WORDS = {
-  un: 1, una: 1, uno: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10,
-  once: 11, doce: 12, trece: 13, catorce: 14, quince: 15, dieciseis: 16, diecisiete: 17, dieciocho: 18, diecinueve: 19, veinte: 20
+// El dictado por voz no siempre transcribe en dígitos -- "ochenta centímetros" llega tal cual,
+// no "80 centímetros" -- así que TODAS las medidas (no solo la cantidad de piezas) necesitan
+// poder leerse como número en palabras, hasta los miles (un sheet de "dos mil cuatrocientos
+// cuarenta" mm es un caso real).
+const SPANISH_UNITS = {
+  cero: 0, un: 1, una: 1, uno: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9,
+  diez: 10, once: 11, doce: 12, trece: 13, catorce: 14, quince: 15,
+  dieciseis: 16, diecisiete: 17, dieciocho: 18, diecinueve: 19,
+  veinte: 20, veintiun: 21, veintiuno: 21, veintiuna: 21, veintidos: 22, veintitres: 23, veinticuatro: 24,
+  veinticinco: 25, veintiseis: 26, veintisiete: 27, veintiocho: 28, veintinueve: 29
 };
+const SPANISH_TENS = { treinta: 30, cuarenta: 40, cincuenta: 50, sesenta: 60, setenta: 70, ochenta: 80, noventa: 90 };
+const SPANISH_HUNDREDS = {
+  cien: 100, ciento: 100, doscientos: 200, doscientas: 200, trescientos: 300, trescientas: 300,
+  cuatrocientos: 400, cuatrocientas: 400, quinientos: 500, quinientas: 500, seiscientos: 600, seiscientas: 600,
+  setecientos: 700, setecientas: 700, ochocientos: 800, ochocientas: 800, novecientos: 900, novecientas: 900
+};
+const ALL_NUMBER_WORDS = [...Object.keys(SPANISH_UNITS), ...Object.keys(SPANISH_TENS), ...Object.keys(SPANISH_HUNDREDS), "mil"];
+// Fragmento de regex: dígitos normales O una secuencia de palabras numéricas en español
+// ("ochenta y cinco", "doscientos cuarenta", "dos mil cuatrocientos cuarenta").
+const NUM = `(?:\\d+(?:[.,]\\d+)?|(?:(?:${ALL_NUMBER_WORDS.join("|")})\\s*(?:y\\s*)?)+)`;
 
-// El dictado por voz a veces transcribe los números como palabras ("cuatro" en vez de "4")
-// y mete comas en las pausas — por eso se acepta dígito o palabra, con puntuación opcional.
+// Convierte una secuencia YA AISLADA de palabras numéricas ("ochenta", "y", "cinco") al entero
+// que representan. "mil" multiplica lo acumulado hasta ahí (o vale 1000 si no hay nada antes).
+function parseSpanishNumberWords(words) {
+  let total = 0, current = 0;
+  for (const w of words) {
+    if (!w || w === "y") continue;
+    if (w === "mil") { total += (current || 1) * 1000; current = 0; continue; }
+    if (w in SPANISH_HUNDREDS) { current += SPANISH_HUNDREDS[w]; continue; }
+    if (w in SPANISH_TENS) { current += SPANISH_TENS[w]; continue; }
+    if (w in SPANISH_UNITS) { current += SPANISH_UNITS[w]; continue; }
+    return null; // palabra no reconocida -- secuencia inválida, no es un número real
+  }
+  return total + current;
+}
+
+// Convierte el texto capturado por NUM (dígitos o palabras) a un número real.
+function parseNumberToken(token) {
+  const t = String(token || "").trim();
+  if (!t) return null;
+  if (/^\d/.test(t)) return Number(t.replace(",", "."));
+  return parseSpanishNumberWords(t.toLowerCase().split(/\s+/));
+}
+
 function extractQuantity(t) {
-  const digitMatch = t.match(/(\d+)\s*,?\s*piezas?/);
-  if (digitMatch) return Number(digitMatch[1]);
-  const wordPattern = new RegExp(`\\b(${Object.keys(SPANISH_NUMBER_WORDS).join("|")})\\b\\s*,?\\s*piezas?`, "i");
-  const wordMatch = t.match(wordPattern);
-  if (wordMatch) return SPANISH_NUMBER_WORDS[wordMatch[1].toLowerCase()];
-  return 1;
+  const m = t.match(new RegExp(`(${NUM})\\s*,?\\s*piezas?`, "i"));
+  if (!m) return 1;
+  const value = parseNumberToken(m[1]);
+  return value != null && value > 0 ? value : 1;
 }
 
 // Cuenta cuántos lados "largo" o "ancho/corto" lleva canto, aceptando varias formas naturales
@@ -7274,20 +7310,22 @@ function toMm(val, unitWord) {
 
 function extractThickness(t) {
   const THICKNESS_OPTS = [15, 18, 25, 36];
-  let m = t.match(new RegExp(`grosor\\s*(?:de\\s*)?(\\d+(?:[.,]\\d+)?)\\s*${UNIT_WORD}?`, "i"))
-    || t.match(new RegExp(`(\\d+(?:[.,]\\d+)?)\\s*${UNIT_WORD}?\\s*(?:de\\s*)?grosor`, "i"));
-  if (!m) return "18 mm";
-  const val = toMm(Number(m[1].replace(",", ".")), m[2]);
+  let m = t.match(new RegExp(`grosor\\s*(?:de\\s*)?(${NUM})\\s*${UNIT_WORD}?`, "i"))
+    || t.match(new RegExp(`(${NUM})\\s*${UNIT_WORD}?\\s*(?:de\\s*)?grosor`, "i"));
+  const numVal = m && parseNumberToken(m[1]);
+  if (numVal == null) return "18 mm";
+  const val = toMm(numVal, m[2]);
   const nearest = THICKNESS_OPTS.reduce((a, b) => Math.abs(b - val) < Math.abs(a - val) ? b : a);
   return nearest === 36 ? "36 mm doble laminado" : `${nearest} mm`;
 }
 
 function extractCantoThickness(t) {
   const CANTO_OPTS = [0.45, 1.00, 2.00];
-  let m = t.match(new RegExp(`canto\\s*(?:de\\s*)?(\\d+(?:[.,]\\d+)?)\\s*${UNIT_WORD}?`, "i"))
-    || t.match(new RegExp(`(\\d+(?:[.,]\\d+)?)\\s*${UNIT_WORD}?\\s*(?:de\\s*)?canto`, "i"));
-  if (!m) return "1.00mm";
-  const val = toMm(Number(m[1].replace(",", ".")), m[2]);
+  let m = t.match(new RegExp(`canto\\s*(?:de\\s*)?(${NUM})\\s*${UNIT_WORD}?`, "i"))
+    || t.match(new RegExp(`(${NUM})\\s*${UNIT_WORD}?\\s*(?:de\\s*)?canto`, "i"));
+  const numVal = m && parseNumberToken(m[1]);
+  if (numVal == null) return "1.00mm";
+  const val = toMm(numVal, m[2]);
   const nearest = CANTO_OPTS.reduce((a, b) => Math.abs(b - val) < Math.abs(a - val) ? b : a);
   return nearest.toFixed(2) + "mm";
 }
@@ -7298,10 +7336,28 @@ function extractCantoThickness(t) {
 // un número que ya se le asignó a la otra dimensión.
 function findDimensionMatch(t, word, searchFrom = 0) {
   const sub = t.slice(searchFrom);
-  let m = sub.match(new RegExp(`(\\d+(?:[.,]\\d+)?)\\s*${UNIT_WORD}?\\s*(?:de\\s*)?${word}`, "i"));
-  if (!m) m = sub.match(new RegExp(`${word}\\s*(?:es\\s*|:\\s*|de\\s*)?(\\d+(?:[.,]\\d+)?)\\s*${UNIT_WORD}?`, "i"));
+  let m = sub.match(new RegExp(`(${NUM})\\s*${UNIT_WORD}?\\s*(?:de\\s*)?${word}`, "i"));
+  if (!m) m = sub.match(new RegExp(`${word}\\s*(?:es\\s*|:\\s*|de\\s*)?(${NUM})\\s*${UNIT_WORD}?`, "i"));
   if (!m) return null;
-  return { value: toMm(Number(m[1].replace(",", ".")), m[2]), start: searchFrom + m.index, end: searchFrom + m.index + m[0].length };
+  const value = parseNumberToken(m[1]);
+  if (value == null) return null;
+  return { value: toMm(value, m[2]), start: searchFrom + m.index, end: searchFrom + m.index + m[0].length };
+}
+
+// Un solo dictado/texto puede describir VARIOS modelos distintos de pieza ("4 piezas de 80x80...
+// 4 piezas más de 5x5...") -- en vez de pedirle al usuario que pare la grabación y dicte cada
+// modelo por separado, se corta el texto en un segmento por cada vez que aparece "<N> piezas"
+// (la misma marca que ya usa extractQuantity) y cada segmento se interpreta de forma
+// independiente. Si solo hay una marca (o ninguna), se devuelve el texto completo como un único
+// segmento -- mismo comportamiento de antes para una descripción de un solo modelo.
+function splitIntoPieceSegments(text) {
+  const t = String(text || "");
+  const marker = new RegExp(`(?:\\d+|\\b(?:${ALL_NUMBER_WORDS.join("|")})\\b)\\s*,?\\s*piezas?\\b`, "gi");
+  const starts = [];
+  let m;
+  while ((m = marker.exec(t)) !== null) starts.push(m.index);
+  if (starts.length <= 1) return [t];
+  return starts.map((start, i) => t.slice(i === 0 ? 0 : start, i + 1 < starts.length ? starts[i + 1] : t.length));
 }
 
 function parsePieceFromText(text) {
@@ -7309,9 +7365,11 @@ function parsePieceFromText(text) {
 
   const largoMatch = findDimensionMatch(t, "largo");
   let anchoMatch = largoMatch ? findDimensionMatch(t, "ancho") : null;
-  // Si "ancho" agarró el mismo número que ya es de "largo" (se traslapan), reintenta
-  // buscando solo después de donde terminó el match de largo.
-  if (largoMatch && anchoMatch && anchoMatch.start < largoMatch.end) {
+  // Si "ancho" agarró el mismo texto que ya es de "largo" (se traslapan de verdad), reintenta
+  // buscando solo después de donde terminó el match de largo. Un solapamiento REAL es que los
+  // rangos de caracteres se crucen -- no solo que "ancho" aparezca antes en el texto, que es un
+  // orden de dictado perfectamente válido ("cinco de ancho, cinco de largo" también es correcto).
+  if (largoMatch && anchoMatch && anchoMatch.start < largoMatch.end && anchoMatch.end > largoMatch.start) {
     anchoMatch = findDimensionMatch(t, "ancho", largoMatch.end);
   }
   if (!largoMatch || !anchoMatch) return null;
@@ -7336,15 +7394,29 @@ function parsePieceFromText(text) {
 
 document.getElementById("parseManualPieceBtn")?.addEventListener("click", () => {
   const input = document.getElementById("mp_naturalInput");
-  const parsed = parsePieceFromText(input.value);
-  if (!parsed) { toast('No entendí las medidas — usa algo como "40 de largo, 30 de ancho".', "error"); return; }
-  // Grosor de lámina y de canto vienen de los selectores, no del texto — más confiable que
-  // detectarlos de lo que se dijo/escribió.
-  parsed.thickness = document.getElementById("mp_voiceThickness").value;
-  parsed.cantoThickness = document.getElementById("mp_voiceCantoThickness").value;
-  const pieces = buildManualPieces(parsed);
-  addPiecesToCuts(pieces);
-  toast(`${pieces.length} pieza(s) creada(s) desde el texto ✓`);
+  // Un mismo texto/dictado puede describir varios modelos ("4 piezas de 80x80... 4 piezas más
+  // de 5x5...") -- se separa en segmentos (uno por cada "<N> piezas" mencionado) y cada uno se
+  // interpreta por su cuenta, en vez de quedarse solo con el primer modelo y descartar el resto.
+  const segments = splitIntoPieceSegments(input.value);
+  const thickness = document.getElementById("mp_voiceThickness").value;
+  const cantoThickness = document.getElementById("mp_voiceCantoThickness").value;
+  const allPieces = [];
+  let modelsOk = 0, modelsFailed = 0;
+  for (const segment of segments) {
+    const parsed = parsePieceFromText(segment);
+    if (!parsed) { modelsFailed++; continue; }
+    // Grosor de lámina y de canto vienen de los selectores, no del texto — más confiable que
+    // detectarlos de lo que se dijo/escribió.
+    parsed.thickness = thickness;
+    parsed.cantoThickness = cantoThickness;
+    allPieces.push(...buildManualPieces(parsed));
+    modelsOk++;
+  }
+  if (!modelsOk) { toast('No entendí las medidas — usa algo como "40 de largo, 30 de ancho".', "error"); return; }
+  addPiecesToCuts(allPieces);
+  const modelsNote = modelsOk > 1 ? ` en ${modelsOk} modelos` : "";
+  const failedNote = modelsFailed ? ` (${modelsFailed} parte(s) del texto no se entendió)` : "";
+  toast(`${allPieces.length} pieza(s) creada(s)${modelsNote} desde el texto ✓${failedNote}`);
   input.value = "";
 });
 document.getElementById("mp_naturalInput")?.addEventListener("keydown", (e) => {
