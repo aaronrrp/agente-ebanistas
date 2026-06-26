@@ -1754,82 +1754,216 @@ function renderCutsPiecesTable() {
     </div>`;
 }
 
-// ── BFDH 2D bin packing (Best Fit Decreasing + rotation) ────────────────────
-function packPiecesFFDH(pieces, sheetW, sheetH, kerfMm = 5) {
-  const kerf = kerfMm;
-  const marginX = 20, marginY = 20;
+// ── Motor de empaquetado: Guillotine free-rectangle (best-area-fit) ─────────
+// Reemplaza al shelf-packing anterior (shelves de altura fija). La diferencia clave:
+// en vez de "bandas" de altura fija que nunca liberan su sobrante vertical, esta
+// versión mantiene una lista de rectángulos libres explícitos por lámina. Al
+// colocar una pieza, el rectángulo libre usado se parte en guillotina (1 corte
+// recto de borde a borde) en hasta 2 rectángulos nuevos que quedan disponibles
+// para piezas futuras — así una pieza baja SÍ puede aprovechar el sobrante que
+// dejó una pieza alta, que era justo lo que el shelf-packing no podía hacer.
+//
+// Se prueban varios órdenes de pieza (área/lado mayor/alto/ancho/perímetro,
+// todos descendente) y se elige la combinación con menos láminas (y, si hay
+// empate, menos desperdicio) — software profesional de nesting hace lo mismo:
+// ninguna heurística de orden único es óptima para todos los conjuntos de piezas.
+
+// Reparte un rectángulo libre en hasta 2 rectángulos tras colocar una pieza
+// usedW×usedH en su esquina superior izquierda. Heurística "shorter leftover
+// axis": se corte por el eje que deje el sobrante más grande lo más cuadrado
+// posible, para fragmentar menos el espacio restante.
+function _splitFreeRect(rect, usedW, usedH, kerf) {
+  const rightW = rect.w - usedW - kerf;
+  const bottomH = rect.h - usedH - kerf;
+  const out = [];
+  if (rightW <= bottomH) {
+    if (bottomH > 0) out.push({ x: rect.x, y: rect.y + usedH + kerf, w: rect.w, h: bottomH });
+    if (rightW > 0) out.push({ x: rect.x + usedW + kerf, y: rect.y, w: rightW, h: usedH });
+  } else {
+    if (rightW > 0) out.push({ x: rect.x + usedW + kerf, y: rect.y, w: rightW, h: rect.h });
+    if (bottomH > 0) out.push({ x: rect.x, y: rect.y + usedH + kerf, w: usedW, h: bottomH });
+  }
+  return out.filter(r => r.w > 0.5 && r.h > 0.5);
+}
+
+// Best-area-fit: el rectángulo libre MÁS CHICO que aún contiene la pieza —
+// deja los huecos grandes intactos para piezas grandes futuras, en vez de
+// fragmentar el primer rectángulo que calce (first-fit sería peor aquí).
+function _bestFreeRectFor(freeRects, pw, ph) {
+  let best = null, bestArea = Infinity;
+  for (let i = 0; i < freeRects.length; i++) {
+    const r = freeRects[i];
+    if (pw <= r.w + 0.01 && ph <= r.h + 0.01) {
+      const area = r.w * r.h;
+      if (area < bestArea) { bestArea = area; best = i; }
+    }
+  }
+  return best;
+}
+
+function _packGuillotine(sortedPieces, sheetW, sheetH, kerf, marginX, marginY) {
   const usableW = sheetW - marginX * 2;
   const usableH = sheetH - marginY * 2;
-
-  // Sort by longest side desc — better than height-only
-  const sorted = [...pieces].sort((a, b) =>
-    Math.max(Number(b.width)||1, Number(b.height)||1) -
-    Math.max(Number(a.width)||1, Number(a.height)||1)
-  );
-
   const sheets = [];
-
-  // Best-fit shelf: choose shelf that wastes least remaining width
-  const tryPlace = (sheet, pw, ph) => {
-    let best = null, bestWaste = Infinity;
-    for (const shelf of sheet.shelves) {
-      const rem = usableW - shelf.usedW;
-      if (rem >= pw + kerf && shelf.h >= ph) {
-        const waste = rem - pw - kerf;
-        if (waste < bestWaste) { bestWaste = waste; best = shelf; }
-      }
-    }
-    if (best) {
-      const x = marginX + best.usedW, y = marginY + best.y;
-      best.usedW += pw + kerf;
-      return { x, y };
-    }
-    // New shelf
-    const nextY = sheet.shelves.reduce((s, sh) => s + sh.h + kerf, 0);
-    if (nextY + ph <= usableH && pw <= usableW) {
-      sheet.shelves.push({ y: nextY, h: ph, usedW: pw + kerf });
-      return { x: marginX, y: marginY + nextY };
-    }
-    return null;
-  };
-
-  // Try both orientations; prefer the one that fits on existing sheets first.
-  // Piezas con veta (grain=true) no se rotan — deben mantener su orientación original.
-  const placePiece = (sheet, pw, ph, allowRotate) => {
-    const p1 = tryPlace(sheet, pw, ph);
-    if (p1) return { ...p1, w: pw, h: ph, rotated: false };
-    if (allowRotate && pw !== ph) {
-      const p2 = tryPlace(sheet, ph, pw);
-      if (p2) return { ...p2, w: ph, h: pw, rotated: true };
-    }
-    return null;
-  };
-
   const oversized = [];
-  sorted.forEach(piece => {
-    const pw = Math.max(1, Number(piece.width)  || 1);
+
+  const tryPlaceOnSheet = (sheet, pw, ph, allowRotate) => {
+    let idx = _bestFreeRectFor(sheet.freeRects, pw, ph);
+    let w = pw, h = ph, rotated = false;
+    if (idx == null && allowRotate && pw !== ph) {
+      idx = _bestFreeRectFor(sheet.freeRects, ph, pw);
+      if (idx != null) { w = ph; h = pw; rotated = true; }
+    }
+    if (idx == null) return null;
+    const rect = sheet.freeRects[idx];
+    const placement = { x: rect.x, y: rect.y, w, h, rotated };
+    sheet.freeRects.splice(idx, 1, ..._splitFreeRect(rect, w, h, kerf));
+    return placement;
+  };
+
+  sortedPieces.forEach(piece => {
+    const pw = Math.max(1, Number(piece.width) || 1);
     const ph = Math.max(1, Number(piece.height) || 1);
+    // Piezas con veta (grain=true) no se rotan — un giro de 90° invertiría la
+    // dirección de la veta respecto a la lámina, así que "rotar solo cuando la
+    // veta lo permite" en la práctica es "rotar solo si no tiene veta marcada".
     const allowRotate = !piece.grain;
-    // Si la pieza no cabe en una lámina vacía ni normal ni rotada, no tiene sentido
-    // seguir creando láminas para ella — se reporta aparte en vez de generar láminas vacías.
     const fitsNormal = pw <= usableW && ph <= usableH;
     const fitsRotated = allowRotate && ph <= usableW && pw <= usableH;
     if (!fitsNormal && !fitsRotated) { oversized.push(piece); return; }
 
     let placed = false;
     for (const sheet of sheets) {
-      const r = placePiece(sheet, pw, ph, allowRotate);
-      if (r) { sheet.placements.push({ piece, ...r }); placed = true; break; }
+      const r = tryPlaceOnSheet(sheet, pw, ph, allowRotate);
+      if (r) {
+        sheet.placements.push({ piece, x: marginX + r.x, y: marginY + r.y, w: r.w, h: r.h, rotated: r.rotated });
+        placed = true;
+        break;
+      }
     }
     if (!placed) {
-      const sheet = { number: sheets.length + 1, shelves: [], placements: [] };
-      const r = placePiece(sheet, pw, ph, allowRotate);
-      if (r) { sheet.placements.push({ piece, ...r }); sheets.push(sheet); }
-      else oversized.push(piece); // no debería pasar (ya se filtró arriba), pero por si acaso no se crea lámina vacía
+      const sheet = { number: sheets.length + 1, freeRects: [{ x: 0, y: 0, w: usableW, h: usableH }], placements: [] };
+      const r = tryPlaceOnSheet(sheet, pw, ph, allowRotate);
+      if (r) {
+        sheet.placements.push({ piece, x: marginX + r.x, y: marginY + r.y, w: r.w, h: r.h, rotated: r.rotated });
+        sheets.push(sheet);
+      } else {
+        oversized.push(piece); // no debería pasar (ya se filtró arriba), pero por si acaso no se crea lámina vacía
+      }
     }
   });
   sheets.oversized = oversized;
   return sheets;
+}
+
+// MaxRects (best-area-fit): variante más fuerte que guillotine puro. En vez de partir el
+// espacio libre en una única partición fija al colocar cada pieza, mantiene TODOS los
+// rectángulos libres candidatos (pueden superponerse entre sí) y los recorta/depura después
+// de cada colocación. Esto evita la limitación de guillotine puro: el primer corte reparte el
+// espacio entre dos zonas ANTES de saber cuánto va a necesitar cada una, y a veces esa
+// partición temprana deja sin lugar a una pieza que sí cabría con un reparto distinto.
+// Nota: el resultado de MaxRects no siempre es "cortable en guillotina" (cortes rectos de
+// borde a borde) — para una sierra de panel solo sirven los acomodos guillotine; para CNC con
+// mesa de vacío (que sí puede rutear cualquier rectángulo en cualquier posición) no hay problema.
+function _maxRectsPlaceAndSplit(freeRects, x, y, w, h) {
+  const px2 = x + w, py2 = y + h;
+  const next = [];
+  for (const r of freeRects) {
+    const rx2 = r.x + r.w, ry2 = r.y + r.h;
+    if (x >= rx2 || px2 <= r.x || y >= ry2 || py2 <= r.y) { next.push(r); continue; } // no se superponen
+    if (r.x < x)   next.push({ x: r.x, y: r.y, w: x - r.x,   h: r.h });   // franja izquierda
+    if (rx2 > px2) next.push({ x: px2,  y: r.y, w: rx2 - px2, h: r.h });   // franja derecha
+    if (r.y < y)   next.push({ x: r.x, y: r.y, w: r.w, h: y - r.y });     // franja arriba
+    if (ry2 > py2) next.push({ x: r.x, y: py2,  w: r.w, h: ry2 - py2 });   // franja abajo
+  }
+  const filtered = next.filter(r => r.w > 0.5 && r.h > 0.5);
+  const isContained = (a, b) => a !== b && a.x >= b.x - 0.01 && a.y >= b.y - 0.01 &&
+    a.x + a.w <= b.x + b.w + 0.01 && a.y + a.h <= b.y + b.h + 0.01;
+  return filtered.filter(r => !filtered.some(other => isContained(r, other))); // descarta redundantes
+}
+
+function _packMaxRects(sortedPieces, sheetW, sheetH, kerf, marginX, marginY) {
+  const usableW = sheetW - marginX * 2;
+  const usableH = sheetH - marginY * 2;
+  const sheets = [];
+  const oversized = [];
+
+  const tryPlaceOnSheet = (sheet, pw, ph, allowRotate) => {
+    let idx = _bestFreeRectFor(sheet.freeRects, pw, ph);
+    let w = pw, h = ph, rotated = false;
+    if (idx == null && allowRotate && pw !== ph) {
+      idx = _bestFreeRectFor(sheet.freeRects, ph, pw);
+      if (idx != null) { w = ph; h = pw; rotated = true; }
+    }
+    if (idx == null) return null;
+    const rect = sheet.freeRects[idx];
+    const placement = { x: rect.x, y: rect.y, w, h, rotated };
+    // El corte (kerf) se "gasta" agrandando el área recortada del espacio libre — la pieza en
+    // sí queda con sus medidas reales, solo el hueco disponible para la siguiente se reduce.
+    sheet.freeRects = _maxRectsPlaceAndSplit(sheet.freeRects, rect.x, rect.y, w + kerf, h + kerf);
+    return placement;
+  };
+
+  sortedPieces.forEach(piece => {
+    const pw = Math.max(1, Number(piece.width) || 1);
+    const ph = Math.max(1, Number(piece.height) || 1);
+    const allowRotate = !piece.grain;
+    const fitsNormal = pw <= usableW && ph <= usableH;
+    const fitsRotated = allowRotate && ph <= usableW && pw <= usableH;
+    if (!fitsNormal && !fitsRotated) { oversized.push(piece); return; }
+
+    let placed = false;
+    for (const sheet of sheets) {
+      const r = tryPlaceOnSheet(sheet, pw, ph, allowRotate);
+      if (r) {
+        sheet.placements.push({ piece, x: marginX + r.x, y: marginY + r.y, w: r.w, h: r.h, rotated: r.rotated });
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      const sheet = { number: sheets.length + 1, freeRects: [{ x: 0, y: 0, w: usableW, h: usableH }], placements: [] };
+      const r = tryPlaceOnSheet(sheet, pw, ph, allowRotate);
+      if (r) {
+        sheet.placements.push({ piece, x: marginX + r.x, y: marginY + r.y, w: r.w, h: r.h, rotated: r.rotated });
+        sheets.push(sheet);
+      } else {
+        oversized.push(piece);
+      }
+    }
+  });
+  sheets.oversized = oversized;
+  return sheets;
+}
+
+const _PACK_STRATEGIES = [
+  (a, b) => (Number(b.width)||1)*(Number(b.height)||1) - (Number(a.width)||1)*(Number(a.height)||1),       // área desc
+  (a, b) => Math.max(Number(b.width)||1,Number(b.height)||1) - Math.max(Number(a.width)||1,Number(a.height)||1), // lado mayor desc
+  (a, b) => (Number(b.height)||1) - (Number(a.height)||1),                                                    // alto desc
+  (a, b) => (Number(b.width)||1) - (Number(a.width)||1),                                                      // ancho desc
+  (a, b) => 2*((Number(b.width)||1)+(Number(b.height)||1)) - 2*((Number(a.width)||1)+(Number(a.height)||1))   // perímetro desc
+];
+
+function packPiecesGuillotine(pieces, sheetW, sheetH, kerfMm = 5) {
+  const marginX = 20, marginY = 20;
+  let best = null, bestSheets = Infinity, bestWaste = Infinity, bestOversized = Infinity;
+  const candidates = [];
+  for (const sortFn of _PACK_STRATEGIES) {
+    const sorted = [...pieces].sort(sortFn);
+    candidates.push(_packGuillotine(sorted, sheetW, sheetH, kerfMm, marginX, marginY));
+    candidates.push(_packMaxRects(sorted, sheetW, sheetH, kerfMm, marginX, marginY));
+  }
+  for (const sheets of candidates) {
+    const usedArea = sheets.reduce((s, sh) => s + sh.placements.reduce((s2, p) => s2 + p.w * p.h, 0), 0);
+    const waste = sheetW * sheetH * sheets.length - usedArea;
+    const oversizedCount = sheets.oversized.length;
+    // Prioridad: 1) menos piezas sin acomodar, 2) menos láminas, 3) menos desperdicio.
+    const better = oversizedCount < bestOversized ||
+      (oversizedCount === bestOversized && sheets.length < bestSheets) ||
+      (oversizedCount === bestOversized && sheets.length === bestSheets && waste < bestWaste);
+    if (!best || better) { best = sheets; bestSheets = sheets.length; bestWaste = waste; bestOversized = oversizedCount; }
+  }
+  return best;
 }
 
 // Cuenta cortes guillotina para una lámina ya empacada: 1 corte horizontal entre cada
@@ -1840,7 +1974,7 @@ function packPiecesFFDH(pieces, sheetW, sheetH, kerfMm = 5) {
 // N piezas en fila necesitan N-1 cortes para separarse ENTRE ellas, pero si la última no
 // llega hasta el borde útil de la lámina (queda sobrante detrás), separarla de ese sobrante
 // es un corte más → N cortes, no N-1. Lo mismo aplica entre bandas (shelves) y el sobrante
-// de abajo. marginX/marginY deben coincidir con los que usa packPiecesFFDH.
+// de abajo. marginX/marginY deben coincidir con los que usa packPiecesGuillotine.
 function countGuillotineCuts(sheet, sheetW, sheetH) {
   const autoPlacements = sheet.placements.filter(p => !p.manual);
   const manualCount = sheet.placements.length - autoPlacements.length;
@@ -1893,7 +2027,7 @@ function recalcCutsLayout() {
     // Piezas con manualPlacement no entran al auto-nesting — se reservan en su posición fija.
     const autoPieces = pieces.filter(p => !p.manualPlacement);
     const manualPieces = pieces.filter(p => p.manualPlacement);
-    const sheets = packPiecesFFDH(autoPieces, sheetW, sheetH, kerfMm);
+    const sheets = packPiecesGuillotine(autoPieces, sheetW, sheetH, kerfMm);
     const oversized = sheets.oversized || [];
     manualPieces.forEach(p => {
       const si = Math.max(0, Number(p.manualPlacement.sheetIndex) || 0);
@@ -1945,6 +2079,28 @@ function recalcCutsLayout() {
     })();
 
     const svgs = sheets.map((sh, si) => {
+      // Área desperdiciada: los rectángulos libres que dejó el empacador automático, dibujados
+      // como una franja diagonal tenue debajo de las piezas. Solo es exacto mientras nadie haya
+      // movido piezas a mano en esta lámina (el reacomodo manual no actualiza freeRects) — por
+      // eso se omite apenas hay alguna pieza con posición manual, para no mostrar un área
+      // "libre" que en realidad ya está ocupada.
+      const hasManual = sh.placements.some(pl => pl.manual);
+      const wasteRects = (!hasManual && Array.isArray(sh.freeRects)) ? sh.freeRects.map((fr, fi) => {
+        const wx = 2 + scale(fr.x), wy = 2 + scaleH(fr.y);
+        const ww = scale(fr.w), wh = scaleH(fr.h);
+        if (ww < 3 || wh < 3) return ""; // huecos minúsculos (sobrante de kerf) no aportan nada visual
+        const hatchLines = [];
+        for (let off = 0; off < ww + wh; off += 6) {
+          const x1 = wx + Math.max(0, off - wh), y1 = wy + Math.min(off, wh);
+          const x2 = wx + Math.min(off, ww), y2 = wy + Math.max(0, off - ww);
+          hatchLines.push(`<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="#D97706" stroke-width="0.4" opacity="0.4"/>`);
+        }
+        return `<g class="waste-area-g" style="pointer-events:none">
+          <rect x="${wx.toFixed(1)}" y="${wy.toFixed(1)}" width="${ww.toFixed(1)}" height="${wh.toFixed(1)}" fill="#FFFBEB" opacity="0.5"/>
+          <clipPath id="waste-clip-${si}-${fi}"><rect x="${wx.toFixed(1)}" y="${wy.toFixed(1)}" width="${ww.toFixed(1)}" height="${wh.toFixed(1)}"/></clipPath>
+          <g clip-path="url(#waste-clip-${si}-${fi})">${hatchLines.join('')}</g>
+        </g>`;
+      }).join('') : '';
       const rects = sh.placements.map((pl, pi) => {
         const rx = 2 + scale(pl.x);
         const ry = 2 + scaleH(pl.y);
@@ -1970,7 +2126,7 @@ function recalcCutsLayout() {
           <rect x="${rx.toFixed(1)}" y="${(ry+rh).toFixed(1)}" width="${rw.toFixed(1)}" height="${kerfPxH.toFixed(1)}" fill="#EF4444" opacity="0.55"/>`;
         return `<g class="cut-piece-g" data-piece-id="${pl.piece.id}" data-rotated="${pl.rotated ? 1 : 0}" style="cursor:move">
           ${kerfStripes}
-          <rect x="${rx.toFixed(1)}" y="${ry.toFixed(1)}" width="${rw.toFixed(1)}" height="${rh.toFixed(1)}"
+          <rect class="piece-rect" x="${rx.toFixed(1)}" y="${ry.toFixed(1)}" width="${rw.toFixed(1)}" height="${rh.toFixed(1)}"
           fill="${colors[pi % colors.length]}" stroke="${pl.piece.grain ? "#374151" : "#6B7280"}" stroke-width="${pl.piece.grain ? 0.9 : 0.4}"
           stroke-dasharray="${pl.manual ? "2,1.5" : "none"}" rx="1"/>
           ${grainLines}
@@ -1981,7 +2137,7 @@ function recalcCutsLayout() {
       return `<div style="display:inline-block;margin:.3rem;vertical-align:top">
         <p style="font-size:.72rem;font-weight:600;margin:0 0 3px">Lámina ${sh.number} — ${thickness}</p>
         <svg width="${SW}" height="${SH}" data-thickness="${thickness}" data-sheet-index="${si}" data-sheet-w="${sheetW}" data-sheet-h="${sheetH}"
-          style="border:1px solid #D1D5DB;border-radius:5px;background:#F9FAFB;touch-action:none">${sheetGrainBg}${rects}</svg>
+          style="border:1px solid #D1D5DB;border-radius:5px;background:#F9FAFB;touch-action:none">${sheetGrainBg}${wasteRects}${rects}</svg>
       </div>`;
     }).join('');
 
@@ -2083,6 +2239,7 @@ document.addEventListener("click", (e) => {
 });
 
 let _cutDrag = null; // { pieceId, svg, sheetIndex, sheetW, sheetH, startX, startY, origX, origY }
+const SNAP_PX = 5; // distancia (en px del SVG, ~380x190 de viewBox) para que una guía "atrape"
 
 function _svgPxToCm(svg, px, py) {
   const sheetW = Number(svg.dataset.sheetW) || 244;
@@ -2100,16 +2257,83 @@ function _eventToSvgPoint(svg, e) {
   return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
 }
 
+// Guías magnéticas: alinea el borde que se está moviendo con el borde de la lámina o de
+// cualquier otra pieza ya colocada en el mismo SVG, si queda a menos de SNAP_PX. Devuelve además
+// qué eje "atrapó" para poder dibujar la línea guía correspondiente.
+function _snapDragPosition(svg, excludeG, x, y, w, h) {
+  const SW = 380, SH = 190;
+  const targetsX = [2, SW - 2], targetsY = [2, SH - 2];
+  svg.querySelectorAll(".cut-piece-g").forEach(other => {
+    if (other === excludeG) return;
+    const r = other.querySelector("rect.piece-rect");
+    if (!r) return;
+    const ox = Number(r.getAttribute("x")), oy = Number(r.getAttribute("y"));
+    const ow = Number(r.getAttribute("width")), oh = Number(r.getAttribute("height"));
+    targetsX.push(ox, ox + ow);
+    targetsY.push(oy, oy + oh);
+  });
+  let snapX = x, snapY = y, lineX = null, lineY = null;
+  for (const t of targetsX) {
+    if (lineX == null && Math.abs(x - t) < SNAP_PX) { snapX = t; lineX = t; }
+    else if (lineX == null && Math.abs((x + w) - t) < SNAP_PX) { snapX = t - w; lineX = t; }
+  }
+  for (const t of targetsY) {
+    if (lineY == null && Math.abs(y - t) < SNAP_PX) { snapY = t; lineY = t; }
+    else if (lineY == null && Math.abs((y + h) - t) < SNAP_PX) { snapY = t - h; lineY = t; }
+  }
+  return { x: snapX, y: snapY, lineX, lineY };
+}
+
+// Solapamiento o fuera de los límites dibujables de la lámina (2..SW-2 / 2..SH-2, mismo
+// margen que usa el render) — usado tanto para el tinte rojo en vivo como para invalidar el
+// soltado y revertir en vez de guardar una posición imposible.
+function _dragInvalid(svg, excludeG, x, y, w, h) {
+  const SW = 380, SH = 190, tol = 0.5;
+  if (x < 2 - tol || y < 2 - tol || x + w > SW - 2 + tol || y + h > SH - 2 + tol) return true;
+  let collision = false;
+  svg.querySelectorAll(".cut-piece-g").forEach(other => {
+    if (other === excludeG || collision) return;
+    const r = other.querySelector("rect.piece-rect");
+    if (!r) return;
+    const ox = Number(r.getAttribute("x")), oy = Number(r.getAttribute("y"));
+    const ow = Number(r.getAttribute("width")), oh = Number(r.getAttribute("height"));
+    if (x < ox + ow - tol && ox < x + w - tol && y < oy + oh - tol && oy < y + h - tol) collision = true;
+  });
+  return collision;
+}
+
+// Crea (si no existen) las 2 líneas guía + el contorno de error, ocultos hasta que se usen.
+function _ensureDragOverlay(svg) {
+  let g = svg.querySelector(".drag-overlay-g");
+  if (g) return g;
+  g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  g.setAttribute("class", "drag-overlay-g");
+  g.style.pointerEvents = "none";
+  g.innerHTML = `
+    <line class="snap-guide-v" x1="0" y1="0" x2="0" y2="190" stroke="#2563EB" stroke-width="0.6" stroke-dasharray="3,2" display="none"/>
+    <line class="snap-guide-h" x1="0" y1="0" x2="380" y2="0" stroke="#2563EB" stroke-width="0.6" stroke-dasharray="3,2" display="none"/>`;
+  svg.appendChild(g);
+  return g;
+}
+
 let _lastPieceClick = null; // { pieceId, time } — usado para detectar doble clic a mano
 
 function rotatePieceManually(piece, g, svg) {
   if (piece.grain && !confirm("Esta pieza tiene veta marcada — rotarla manualmente puede no calzar con el resto. ¿Rotar igual?")) return;
   const sheetIndex = Number(svg.dataset.sheetIndex) || 0;
+  const rectEl = g.querySelector("rect.piece-rect");
+  // Rotar intercambia ancho/alto en el mismo lugar -- puede salirse de la lámina o pisar otra
+  // pieza que antes no tocaba. Se valida ANTES de aplicar, igual que al soltar un arrastre.
+  const x = Number(rectEl.getAttribute("x")), y = Number(rectEl.getAttribute("y"));
+  const w = Number(rectEl.getAttribute("width")), h = Number(rectEl.getAttribute("height"));
+  if (_dragInvalid(svg, g, x, y, h, w)) {
+    toast("No se puede rotar aquí — la pieza girada se saldría de la lámina o pisaría otra.", "error");
+    return;
+  }
   if (piece.manualPlacement) {
     piece.manualPlacement.rotated = !piece.manualPlacement.rotated;
   } else {
-    const rectEl = g.querySelector("rect");
-    const { cmX, cmY } = _svgPxToCm(svg, Number(rectEl.getAttribute("x")), Number(rectEl.getAttribute("y")));
+    const { cmX, cmY } = _svgPxToCm(svg, x, y);
     piece.manualPlacement = { sheetIndex, x: cmX, y: cmY, rotated: g.dataset.rotated !== "1" };
   }
   recalcCutsLayout();
@@ -2120,14 +2344,20 @@ els.cutsLayoutOutput?.addEventListener("pointerdown", (e) => {
   if (!g) return;
   const svg = g.closest("svg");
   if (!svg) return;
-  const rectEl = g.querySelector("rect");
+  const rectEl = g.querySelector("rect.piece-rect");
   const pt = _eventToSvgPoint(svg, e);
+  const kerfRects = Array.from(g.querySelectorAll("rect")).filter(r => r !== rectEl);
   _cutDrag = {
     pieceId: g.dataset.pieceId,
     svg, g,
     sheetIndex: Number(svg.dataset.sheetIndex) || 0,
     startX: pt.x, startY: pt.y,
     origX: Number(rectEl.getAttribute("x")), origY: Number(rectEl.getAttribute("y")),
+    origFill: rectEl.getAttribute("fill"),
+    // Las franjas de kerf (a la derecha/abajo de la pieza) deben moverse junto con ella durante
+    // el arrastre -- si no, se quedan "atrás" hasta que recalcCutsLayout() las reubique al
+    // soltar, lo que se ve como un glitch visual mientras se arrastra.
+    kerfRects: kerfRects.map(r => ({ el: r, dx: Number(r.getAttribute("x")) - Number(rectEl.getAttribute("x")), dy: Number(r.getAttribute("y")) - Number(rectEl.getAttribute("y")) })),
     rectEl, textEl: g.querySelector("text"), moved: false
   };
   g.setPointerCapture?.(e.pointerId);
@@ -2142,20 +2372,44 @@ els.cutsLayoutOutput?.addEventListener("pointermove", (e) => {
   const dx = pt.x - _cutDrag.startX, dy = pt.y - _cutDrag.startY;
   if (Math.abs(dx) > 2 || Math.abs(dy) > 2) _cutDrag.moved = true;
   if (!_cutDrag.moved) return;
-  const newX = _cutDrag.origX + dx, newY = _cutDrag.origY + dy;
+  const w = Number(_cutDrag.rectEl.getAttribute("width")), h = Number(_cutDrag.rectEl.getAttribute("height"));
+  const rawX = _cutDrag.origX + dx, rawY = _cutDrag.origY + dy;
+  const snap = _snapDragPosition(_cutDrag.svg, _cutDrag.g, rawX, rawY, w, h);
+  const newX = snap.x, newY = snap.y;
+  _cutDrag.lastX = newX; _cutDrag.lastY = newY;
+
   _cutDrag.rectEl.setAttribute("x", newX.toFixed(1));
   _cutDrag.rectEl.setAttribute("y", newY.toFixed(1));
   if (_cutDrag.textEl) {
-    const w = Number(_cutDrag.rectEl.getAttribute("width")), h = Number(_cutDrag.rectEl.getAttribute("height"));
     _cutDrag.textEl.setAttribute("x", (newX + w / 2).toFixed(1));
     _cutDrag.textEl.setAttribute("y", (newY + h / 2 + 3).toFixed(1));
   }
+  _cutDrag.kerfRects.forEach(({ el, dx: kdx, dy: kdy }) => {
+    el.setAttribute("x", (newX + kdx).toFixed(1));
+    el.setAttribute("y", (newY + kdy).toFixed(1));
+  });
+
+  // Guías magnéticas: solo se ven mientras el eje correspondiente está "atrapado".
+  const overlay = _ensureDragOverlay(_cutDrag.svg);
+  const vLine = overlay.querySelector(".snap-guide-v"), hLine = overlay.querySelector(".snap-guide-h");
+  if (snap.lineX != null) { vLine.setAttribute("x1", snap.lineX); vLine.setAttribute("x2", snap.lineX); vLine.setAttribute("display", ""); }
+  else vLine.setAttribute("display", "none");
+  if (snap.lineY != null) { hLine.setAttribute("y1", snap.lineY); hLine.setAttribute("y2", snap.lineY); hLine.setAttribute("display", ""); }
+  else hLine.setAttribute("display", "none");
+
+  // Tinte rojo en vivo si la posición actual se superpone con otra pieza o sale de la lámina —
+  // feedback inmediato de que soltar aquí se va a revertir, sin esperar a soltar para enterarse.
+  const invalid = _dragInvalid(_cutDrag.svg, _cutDrag.g, newX, newY, w, h);
+  _cutDrag.rectEl.setAttribute("fill", invalid ? "#FCA5A5" : _cutDrag.origFill);
+  _cutDrag.invalid = invalid;
 });
 
 els.cutsLayoutOutput?.addEventListener("pointerup", (e) => {
   if (!_cutDrag) return;
-  const { pieceId, svg, g, moved, rectEl, sheetIndex } = _cutDrag;
+  const { pieceId, svg, g, moved, rectEl, sheetIndex, origX, origY, origFill, invalid } = _cutDrag;
   const piece = state.editablePieces.find(p => p.id === pieceId);
+  const overlay = svg.querySelector(".drag-overlay-g");
+  overlay?.querySelectorAll("line").forEach(l => l.setAttribute("display", "none"));
 
   if (!moved) {
     // Clic sin arrastre — si es el segundo clic rápido sobre la misma pieza, rotar.
@@ -2172,6 +2426,16 @@ els.cutsLayoutOutput?.addEventListener("pointerup", (e) => {
   }
 
   _lastPieceClick = null;
+  if (invalid) {
+    // Se suelta sobre otra pieza o fuera de la lámina — revertir a la posición original en vez
+    // de guardar un acomodo imposible (la pieza física no puede ocupar ese lugar).
+    rectEl.setAttribute("x", origX.toFixed(1));
+    rectEl.setAttribute("y", origY.toFixed(1));
+    rectEl.setAttribute("fill", origFill);
+    toast("No se puede soltar ahí — se superpone con otra pieza o sale de la lámina.", "error");
+    _cutDrag = null;
+    return;
+  }
   if (piece && rectEl) {
     const { cmX, cmY } = _svgPxToCm(svg, Number(rectEl.getAttribute("x")), Number(rectEl.getAttribute("y")));
     const wasRotated = piece.manualPlacement?.rotated ?? (g.dataset.rotated === "1");
