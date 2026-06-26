@@ -777,6 +777,107 @@ textarea {
   font-size: 28px;
 }
 
+/* ── Cotización premium: portada, beneficios, condiciones comerciales ──── */
+.quote-doc-premium {
+  border-top: 6px solid var(--accent);
+  padding-top: 22px;
+}
+
+.quote-doc-cover {
+  align-items: flex-start;
+}
+
+.quote-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.quote-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.quote-doc-pill {
+  display: inline-flex;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: .02em;
+}
+
+.quote-doc-summary {
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  border-left: 3px solid var(--accent);
+  background: var(--surface-soft);
+  border-radius: 0 8px 8px 0;
+  font-size: 13.5px;
+}
+
+.quote-total div { width: 290px; }
+
+.quote-doc-benefits {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+
+.quote-doc-benefits li {
+  padding-left: 22px;
+  position: relative;
+  font-size: 13.5px;
+}
+
+.quote-doc-benefits li::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  font-weight: 800;
+}
+
+.quote-doc-terms {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px 24px;
+  margin: 0;
+}
+
+.quote-doc-terms dt {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+
+.quote-doc-terms dd {
+  margin: 2px 0 0;
+  font-size: 13.5px;
+}
+
+.quote-doc-footer {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 720px) {
+  .quote-meta { align-items: flex-start; }
+}
+
+@media print {
+  .quote-doc-premium { border-top-color: var(--accent) !important; }
+}
+
 .lock-panel {
   margin-top: 20px;
   padding: 26px;

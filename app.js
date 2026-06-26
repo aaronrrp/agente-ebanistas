@@ -1455,36 +1455,43 @@ function renderEbanistaMaterialQuotePaper(quote, tenant) {
   state.currentQuoteForPdf = { kind: "ebanista", quote, tenant };
   const theme = tenant?.theme || {};
   const logoHtml = (theme.logoBase64 || tenant?.logoBase64)
-    ? `<img src="${theme.logoBase64 || tenant.logoBase64}" alt="Logo" style="max-height:60px;max-width:160px;object-fit:contain;">`
+    ? `<img src="${theme.logoBase64 || tenant.logoBase64}" alt="Logo" style="max-height:64px;max-width:170px;object-fit:contain;">`
     : `<div class="quote-brand-mark">${escapeHtml((tenant?.companyName || "E")[0] || "E")}</div>`;
 
-  const subtotal = quote.items.reduce((s, it) => s + it.qty * it.unitPrice, 0);
-  const total = quote.manualTotal > 0 ? quote.manualTotal : (subtotal + (quote.manoObra || 0) + (quote.transport || 0));
+  const subtotalItems = quote.items.reduce((s, it) => s + it.qty * it.unitPrice, 0);
+  const subtotal = subtotalItems + (quote.manoObra || 0) + (quote.transport || 0);
+  const taxPercent = Number(quote.taxPercent) || 0;
+  const taxAmount = taxPercent > 0 ? subtotal * (taxPercent / 100) : 0;
+  const total = quote.manualTotal > 0 ? quote.manualTotal : subtotal + taxAmount;
   const validityDays = Math.max(1, Math.round((new Date(quote.dueDate) - new Date(quote.date)) / 86400000));
 
+  const benefitLines = String(quote.benefits || "").split(/\n|·|•/).map(s => s.trim()).filter(Boolean);
+  const terms = [
+    quote.deliveryTime ? { label: "Tiempo de entrega", value: quote.deliveryTime } : null,
+    quote.paymentTerms ? { label: "Forma de pago", value: quote.paymentTerms } : null,
+    quote.warranty ? { label: "Garantía", value: quote.warranty } : null,
+    { label: "Vigencia de la oferta", value: `${validityDays} día(s), hasta el ${formatQuoteDate(quote.dueDate)}` }
+  ].filter(Boolean);
+
   els.quotePaper.innerHTML = `
-    <article class="quote-doc">
-      <header>
+    <article class="quote-doc quote-doc-premium">
+      <header class="quote-doc-cover">
         <div class="quote-brand">
           ${logoHtml}
-          <strong>${escapeHtml(tenant?.companyName || "")}</strong>
-          ${theme.tagline ? `<span>${escapeHtml(theme.tagline)}</span>` : ""}
+          <div>
+            <strong>${escapeHtml(tenant?.companyName || "")}</strong>
+            ${theme.tagline ? `<span>${escapeHtml(theme.tagline)}</span>` : ""}
+          </div>
         </div>
         <div class="quote-meta">
-          ${quote.clientName ? `<strong>${escapeHtml(quote.clientName)}</strong>` : "Cliente sin asignar"}
-          ${quote.location ? `<br>${escapeHtml(quote.location)}` : ""}
+          <span class="quote-doc-pill">Cotización ${escapeHtml(quote.number)}</span>
+          <strong>${quote.clientName ? escapeHtml(quote.clientName) : "Cliente sin asignar"}</strong>
+          ${quote.location ? `<span>${escapeHtml(quote.location)}</span>` : ""}
+          <span class="muted">${formatQuoteDate(quote.date)}</span>
         </div>
       </header>
 
-      <h4>Número de cotización ${escapeHtml(quote.number)}</h4>
-      <table class="quote-table" style="margin-bottom:1rem">
-        <tbody>
-          <tr><th>Fecha de cotización</th><th>Vencimiento</th><th>Contacto</th></tr>
-          <tr><td>${formatQuoteDate(quote.date)}</td><td>${formatQuoteDate(quote.dueDate)}</td><td>${escapeHtml(tenant?.contactName || "")}</td></tr>
-        </tbody>
-      </table>
-
-      ${tenant?.materials ? `<h4>Resumen</h4><p>${escapeHtml(tenant.materials)}</p>` : ""}
+      ${tenant?.materials ? `<p class="quote-doc-summary">${escapeHtml(tenant.materials)}</p>` : ""}
 
       <table class="quote-table">
         <thead><tr><th>Descripción</th><th>Cantidad</th><th>Precio unitario</th><th>Importe</th></tr></thead>
@@ -1502,16 +1509,26 @@ function renderEbanistaMaterialQuotePaper(quote, tenant) {
       </table>
 
       <div class="quote-total">
-        <div><strong>Total $${total.toFixed(2)}</strong></div>
+        <div>
+          ${taxAmount > 0 ? `<span>Subtotal $${subtotal.toFixed(2)} · Impuesto (${taxPercent}%) $${taxAmount.toFixed(2)}</span>` : ""}
+          <strong>Total $${total.toFixed(2)}</strong>
+        </div>
       </div>
+
+      ${benefitLines.length ? `
+        <h4>Beneficios incluidos</h4>
+        <ul class="quote-doc-benefits">${benefitLines.map(b => `<li>${escapeHtml(b)}</li>`).join("")}</ul>
+      ` : ""}
 
       ${quote.notes ? `<h4>Notas</h4><p>${escapeHtml(quote.notes)}</p>` : ""}
 
-      <h4>Condiciones</h4>
-      <p>Validez de la oferta: ${validityDays} día(s), hasta el ${formatQuoteDate(quote.dueDate)}.</p>
-      ${tenant?.terms ? `<p>${escapeHtml(tenant.terms)}</p>` : ""}
+      <h4>Condiciones comerciales</h4>
+      <dl class="quote-doc-terms">
+        ${terms.map(t => `<div><dt>${escapeHtml(t.label)}</dt><dd>${escapeHtml(t.value)}</dd></div>`).join("")}
+      </dl>
+      ${tenant?.terms ? `<p class="muted">${escapeHtml(tenant.terms)}</p>` : ""}
 
-      <p class="muted" style="font-size:.78rem;margin-top:1rem">${escapeHtml(tenant?.contactName || "")}${tenant?.phone ? ` · ${escapeHtml(tenant.phone)}` : ""}${tenant?.email ? ` · ${escapeHtml(tenant.email)}` : ""}</p>
+      <p class="muted quote-doc-footer">${escapeHtml(tenant?.contactName || "")}${tenant?.phone ? ` · ${escapeHtml(tenant.phone)}` : ""}${tenant?.email ? ` · ${escapeHtml(tenant.email)}` : ""}</p>
     </article>
   `;
 }
@@ -7154,6 +7171,11 @@ els.quoteForm.addEventListener("submit", (event) => {
     manoObra: Number(document.getElementById("manoObraField")?.value) || 0,
     transport: Number(document.getElementById("transportField")?.value) || 0,
     manualTotal: Number(document.getElementById("manualTotal")?.value) || 0,
+    taxPercent: Number(document.getElementById("taxPercent")?.value) || 0,
+    deliveryTime: document.getElementById("deliveryTime")?.value.trim() || "",
+    paymentTerms: document.getElementById("paymentTerms")?.value.trim() || "",
+    warranty: document.getElementById("warranty")?.value.trim() || "",
+    benefits: document.getElementById("quoteBenefits")?.value.trim() || "",
     items: state.materialCartItems,
     createdAt: new Date().toISOString()
   };
@@ -7238,6 +7260,10 @@ document.getElementById("exportCutsBtn")?.addEventListener("click", exportCutsCS
 // ── Lámina: catálogo de precios del mercado (estándar + items "madera" del ebanista) ──
 const STANDARD_SHEET_DIMENSIONS_MM = { melamina_std: [2440, 1220], melamina_lg: [2750, 1830] };
 
+// Unos pocos items quedaron mal categorizados como "madera" al cargar el catálogo IMECA
+// (pisos vinílicos, vinil decorativo por metro lineal, retazos) — no son láminas para
+// cortar, así que se excluyen del selector aunque tengan esa categoría.
+const SHEET_EXCLUDE_NAME_RE = /^piso\b|\/lm\b|retazos?\s+varios/i;
 function getSheetCatalogEntries() {
   const prices = tenantPrices();
   const names = prices._names || {};
@@ -7246,6 +7272,7 @@ function getSheetCatalogEntries() {
     .map(k => ({ value: `std:${k}`, description: names[k] || defaultPriceNames[k] || k, unitPrice: Number(prices[k]) || 0 }));
   (prices.customItems || []).forEach((c, i) => {
     if ((c.category || "madera") !== "madera") return;
+    if (SHEET_EXCLUDE_NAME_RE.test(String(c.name || ""))) return;
     entries.push({ value: `custom:${i}`, description: c.name, unitPrice: Number(c.price) || 0 });
   });
   return entries;

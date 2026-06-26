@@ -72,6 +72,14 @@ class QuotePdf {
     return this;
   }
 
+  // Banda de color sólida a todo el ancho de la página (sin margen) — el acento
+  // "premium" de la portada, equivalente al border-top de .quote-doc-premium en
+  // pantalla. Se dibuja directo en el stream actual, no mueve el cursor de texto.
+  band({ height = 6, color = "0.09 0.42 0.36" } = {}) {
+    this.ops.push(`${color} rg 0 ${(PAGE_HEIGHT - height).toFixed(1)} ${PAGE_WIDTH} ${height} re f`);
+    return this;
+  }
+
   gap(amount = 8) {
     this._ensureSpace(amount);
     this.y -= amount;
@@ -189,8 +197,9 @@ function padCol(str, width) {
   return s.length > width ? s.slice(0, width - 2) + ".." : s + " ".repeat(width - s.length);
 }
 
-function buildQuotePdf({ quote, brand, taxLabel, defaultTaxPct = 0, extraLines = [] }) {
+function buildQuotePdf({ quote, brand, taxLabel, defaultTaxPct = 0, extraLines = [], summary = null }) {
   const doc = new QuotePdf();
+  doc.band();
 
   doc.text(brand?.name || "Cotización", { size: 18, font: FONT.bold });
   if (brand?.tagline) doc.text(brand.tagline, { size: 9, color: "0.4 0.4 0.4" });
@@ -200,6 +209,12 @@ function buildQuotePdf({ quote, brand, taxLabel, defaultTaxPct = 0, extraLines =
   if (quote.location) doc.text(`Ubicación: ${quote.location}`, { size: 9 });
   doc.text(`Fecha: ${quote.date || ""}    Vencimiento: ${quote.dueDate || ""}`, { size: 9 });
   doc.gap(10);
+
+  if (summary) {
+    doc.text("Resumen", { size: 10, font: FONT.bold });
+    doc.paragraph(summary, { size: 9 });
+    doc.gap(6);
+  }
   doc.hr();
   doc.gap(4);
 
@@ -222,8 +237,11 @@ function buildQuotePdf({ quote, brand, taxLabel, defaultTaxPct = 0, extraLines =
     const unitPrice = Number(it.unitPrice) || 0;
     const lineTotal = qty * unitPrice;
     subtotal += lineTotal;
-    const taxPct = it.taxPercent ?? defaultTaxPct;
-    const descLine = taxPct ? `${it.description} (${taxPct}% ${taxLabel || ""})` : String(it.description || "");
+    // El "% por línea" solo se muestra cuando el ITEM trae su propia tasa (caso
+    // vendedor) -- el impuesto general de una cotización de ebanista (defaultTaxPct
+    // sin override por línea) va únicamente en el resumen de totales, igual que en
+    // pantalla (renderEbanistaMaterialQuotePaper no lo repite por línea).
+    const descLine = it.taxPercent > 0 ? `${it.description} (${it.taxPercent}% ${taxLabel || ""})` : String(it.description || "");
     doc.row([
       { x: COL.desc, text: padCol(descLine, 35) },
       { x: COL.qty, text: padCol(`${qty} ${it.unit || ""}`, 13) },
@@ -250,14 +268,32 @@ function buildQuotePdf({ quote, brand, taxLabel, defaultTaxPct = 0, extraLines =
   doc.gap(4);
 
   const total = quote.manualTotal > 0 ? quote.manualTotal : subtotal + taxAmount;
-  if (taxAmount > 0) doc.text(`Subtotal ${money(subtotal - taxAmount)}  ·  ${taxLabel} ${money(taxAmount)}`, { size: 9, color: "0.4 0.4 0.4" });
+  if (taxAmount > 0) doc.text(`Subtotal ${money(subtotal - taxAmount)}  ·  ${taxLabel} (${defaultTaxPct}%) ${money(taxAmount)}`, { size: 9, color: "0.4 0.4 0.4" });
   doc.text(`Total: ${money(total)}`, { size: 13, font: FONT.bold, color: "0.09 0.42 0.36" });
+
+  const benefitLines = String(quote.benefits || "").split(/\n|·|•/).map(s => s.trim()).filter(Boolean);
+  if (benefitLines.length) {
+    doc.gap(10);
+    doc.text("Beneficios incluidos", { size: 10, font: FONT.bold });
+    for (const b of benefitLines) doc.text(`-  ${b}`, { size: 9 });
+  }
 
   if (quote.notes) {
     doc.gap(10);
     doc.text("Notas", { size: 10, font: FONT.bold });
     doc.paragraph(quote.notes, { size: 9 });
   }
+
+  const validityDays = Math.max(1, Math.round((new Date(quote.dueDate) - new Date(quote.date)) / 86400000) || 0);
+  const terms = [
+    quote.deliveryTime ? ["Tiempo de entrega", quote.deliveryTime] : null,
+    quote.paymentTerms ? ["Forma de pago", quote.paymentTerms] : null,
+    quote.warranty ? ["Garantía", quote.warranty] : null,
+    ["Vigencia de la oferta", `${validityDays} día(s), hasta el ${quote.dueDate || ""}`]
+  ].filter(Boolean);
+  doc.gap(10);
+  doc.text("Condiciones comerciales", { size: 10, font: FONT.bold });
+  for (const [label, value] of terms) doc.text(`${label}: ${value}`, { size: 9 });
 
   for (const line of extraLines) {
     if (!line) continue;

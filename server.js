@@ -1307,7 +1307,7 @@ async function handleQuotePdf(req, res) {
     return;
   }
 
-  let brand, taxLabel = null, defaultTaxPct = 0, extraLines = [];
+  let brand, taxLabel = null, defaultTaxPct = 0, extraLines = [], summary = null;
   if (kind === "seller") {
     const seller = payload.seller || {};
     const bp = seller.businessProfile || {};
@@ -1326,12 +1326,16 @@ async function handleQuotePdf(req, res) {
       tagline: tenant.theme?.tagline || "",
       footer: [tenant.contactName, tenant.phone, tenant.email].filter(Boolean).join(" · ")
     };
-    if (tenant.materials) extraLines.push({ title: "Resumen", body: tenant.materials });
-    if (tenant.terms) extraLines.push({ title: "Condiciones", body: tenant.terms });
+    if (Number(quote.taxPercent) > 0) {
+      taxLabel = "Impuesto";
+      defaultTaxPct = Number(quote.taxPercent);
+    }
+    summary = tenant.materials || null;
+    if (tenant.terms) extraLines.push({ title: "Condiciones adicionales", body: tenant.terms });
   }
 
   try {
-    const pdfBuffer = buildQuotePdf({ quote, brand, taxLabel, defaultTaxPct, extraLines });
+    const pdfBuffer = buildQuotePdf({ quote, brand, taxLabel, defaultTaxPct, extraLines, summary });
     const filename = `cotizacion-${(quote.number || "sin-numero").replace(/[^a-zA-Z0-9_-]/g, "")}.pdf`;
     res.writeHead(200, {
       "Content-Type": "application/pdf",

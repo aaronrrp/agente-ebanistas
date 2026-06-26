@@ -383,6 +383,14 @@
               <label>Transporte USD
                 <input id="transportField" type="number" min="0" step="1" placeholder="0 = no incluir">
               </label>
+
+              <h3 class="span-2" style="margin:8px 0 4px">Condiciones comerciales <span style="font-size:.75rem;font-weight:400;color:var(--muted)">(opcional, para una propuesta más formal)</span></h3>
+              <label>% Impuesto<input id="taxPercent" type="number" min="0" max="30" step="0.5" placeholder="0 = no incluir"></label>
+              <label>Tiempo de entrega<input id="deliveryTime" placeholder="Ej: 15 días hábiles"></label>
+              <label>Forma de pago<input id="paymentTerms" placeholder="Ej: 50% anticipo, 50% contra entrega"></label>
+              <label>Garantía<input id="warranty" placeholder="Ej: 1 año en herrajes y estructura"></label>
+              <label class="span-2">Beneficios destacados<textarea id="quoteBenefits" rows="2" placeholder="Ej: Diseño a medida · Instalación incluida · Materiales certificados"></textarea></label>
+
               <button class="primary-btn span-2" type="submit">Generar cotización</button>
               <button class="secondary-btn span-2" data-view-jump="cutsView" type="button">Ir a cortes</button>
             </form>
