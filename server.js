@@ -3,6 +3,7 @@ const path = require("node:path");
 const fs = require("node:fs");
 const crypto = require("node:crypto");
 const { readFile } = require("node:fs/promises");
+const { buildQuotePdf } = require("./pdf.js");
 
 const rootDir = __dirname;
 const port = Number(process.env.PORT || 5174);
@@ -1296,6 +1297,55 @@ async function handleEnhanceSketch(req, res) {
   }
 }
 
+// ── Cotización en PDF real (sin depender del diálogo de impresión del navegador) ──
+async function handleQuotePdf(req, res) {
+  const body = await readBody(req);
+  const payload = body ? JSON.parse(body) : {};
+  const { kind, quote } = payload;
+  if (!quote || !Array.isArray(quote.items)) {
+    sendJson(res, 400, { error: "Falta la cotización a exportar." });
+    return;
+  }
+
+  let brand, taxLabel = null, defaultTaxPct = 0, extraLines = [];
+  if (kind === "seller") {
+    const seller = payload.seller || {};
+    const bp = seller.businessProfile || {};
+    taxLabel = bp.taxLabel || "ITBMS";
+    defaultTaxPct = Number(bp.taxPercent) || 0;
+    brand = {
+      name: seller.company || seller.name || "Cotización",
+      footer: [bp.taxId, bp.website].filter(Boolean).join(" · ")
+    };
+    const bankLines = String(bp.bankAccounts || "").split("\n").map(l => l.trim()).filter(Boolean);
+    if (bankLines.length) extraLines.push({ title: "Cuentas para pago", body: bankLines.join("  /  ") });
+  } else {
+    const tenant = payload.tenant || {};
+    brand = {
+      name: tenant.companyName || "Cotización",
+      tagline: tenant.theme?.tagline || "",
+      footer: [tenant.contactName, tenant.phone, tenant.email].filter(Boolean).join(" · ")
+    };
+    if (tenant.materials) extraLines.push({ title: "Resumen", body: tenant.materials });
+    if (tenant.terms) extraLines.push({ title: "Condiciones", body: tenant.terms });
+  }
+
+  try {
+    const pdfBuffer = buildQuotePdf({ quote, brand, taxLabel, defaultTaxPct, extraLines });
+    const filename = `cotizacion-${(quote.number || "sin-numero").replace(/[^a-zA-Z0-9_-]/g, "")}.pdf`;
+    res.writeHead(200, {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Length": pdfBuffer.length,
+      "Access-Control-Allow-Origin": "*"
+    });
+    res.end(pdfBuffer);
+  } catch (e) {
+    console.error("[quote-pdf] error generando PDF:", e.message);
+    sendJson(res, 500, { error: "No se pudo generar el PDF: " + e.message });
+  }
+}
+
 async function handleGenerateImage(req, res) {
   const body = await readBody(req);
   const { prompt, quality: requestedQuality } = body ? JSON.parse(body) : {};
@@ -1809,6 +1859,7 @@ const server = http.createServer(async (req, res) => {
     if (method === "POST" && p === "/api/analyze-space")   { await handleSpaceAnalysis(req, res); return; }
     if (method === "POST" && p === "/api/generate-image")  { await handleGenerateImage(req, res); return; }
     if (method === "POST" && p === "/api/enhance-sketch")  { await handleEnhanceSketch(req, res); return; }
+    if (method === "POST" && p === "/api/quote-pdf")        { await handleQuotePdf(req, res); return; }
 
     // Auth
     if (method === "POST" && p === "/api/auth/admin")  { await handleAuthAdmin(req, res); return; }

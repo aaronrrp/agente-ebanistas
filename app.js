@@ -171,7 +171,8 @@ const state = {
   chatHistory: [],          // conversation memory — last N turns for AI context
   sellers: [],                // vendedores — siempre desde servidor, no localStorage
   sellerQuoteItems: [],       // líneas de la cotización de materiales que arma un vendedor
-  materialCartItems: []       // líneas de materiales que arma el ebanista en Cotizar
+  materialCartItems: [],      // líneas de materiales que arma el ebanista en Cotizar
+  currentQuoteForPdf: null    // { kind, quote, tenant?, seller? } — lo que ve "Descargar PDF"
 };
 
 if (!state.selectedTenantId || !state.tenants.some((tenant) => tenant.id === state.selectedTenantId)) {
@@ -1286,6 +1287,7 @@ function buildQuote(form) {
 
 function renderQuotePaper(quote) {
   const tenant = currentTenant();
+  state.currentQuoteForPdf = { kind: "ebanista", quote, tenant };
   const logoHtml = tenant.logoBase64
     ? `<img src="${tenant.logoBase64}" alt="Logo" style="max-height:48px;max-width:120px;object-fit:contain;">`
     : `<div class="quote-brand-mark">${tenant.companyName[0]}</div>`;
@@ -1369,6 +1371,7 @@ function renderQuotePaper(quote) {
 // Cotización de materiales que arma un vendedor — formato tipo factura (logo, datos fiscales,
 // cuentas bancarias), distinto de la cotización de muebles del ebanista (renderQuotePaper).
 function renderSellerQuotePaper(quote, seller) {
+  state.currentQuoteForPdf = { kind: "seller", quote, seller };
   const theme = seller?.theme || {};
   const bp = seller?.businessProfile || {};
   const logoHtml = theme.logoBase64
@@ -1449,6 +1452,7 @@ function formatQuoteDate(isoDate) {
 }
 
 function renderEbanistaMaterialQuotePaper(quote, tenant) {
+  state.currentQuoteForPdf = { kind: "ebanista", quote, tenant };
   const theme = tenant?.theme || {};
   const logoHtml = (theme.logoBase64 || tenant?.logoBase64)
     ? `<img src="${theme.logoBase64 || tenant.logoBase64}" alt="Logo" style="max-height:60px;max-width:160px;object-fit:contain;">`
@@ -7161,8 +7165,40 @@ els.quoteForm.addEventListener("submit", (event) => {
   toast("Cotización generada ✓");
 });
 
-els.printQuoteBtn.addEventListener("click", () => {
-  window.print();
+// Genera el PDF en el servidor y lo descarga directamente — no depende de que el
+// usuario encuentre "Guardar como PDF" en el diálogo de impresión del sistema.
+els.printQuoteBtn.addEventListener("click", async () => {
+  const ctx = state.currentQuoteForPdf;
+  if (!ctx?.quote) { toast("Genera la cotización primero.", "error"); return; }
+
+  const originalText = els.printQuoteBtn.textContent;
+  els.printQuoteBtn.disabled = true;
+  els.printQuoteBtn.textContent = "Generando PDF…";
+  try {
+    const res = await fetch("/api/quote-pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(ctx)
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Error ${res.status}`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `cotizacion-${ctx.quote.number || "sin-numero"}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    toast(`No se pudo generar el PDF: ${e.message}`, "error");
+  } finally {
+    els.printQuoteBtn.disabled = false;
+    els.printQuoteBtn.textContent = originalText;
+  }
 });
 
 // Color picker event delegation
