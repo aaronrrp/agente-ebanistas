@@ -690,11 +690,16 @@ function friendlyAiError(e) {
 
 // Precios aproximados por 1M tokens / por imagen — verificar en https://openai.com/api/pricing/
 // y ajustar estas constantes si cambian. Son para tener una idea de costo relativo entre
-// llamadas, no una factura exacta.
+// llamadas, no una factura exacta. gpt-image-1 factura por TOKENS (no por imagen a precio fijo
+// como dall-e) — el número de tokens de salida depende de quality/size, así que cuando la API
+// devuelve "usage" real lo usamos; el imagePerUnit de abajo es solo un respaldo si no viene.
 const PRICE_USD = {
   textInputPer1M: 0.40,
   textOutputPer1M: 1.60,
-  imagePerUnit: { low: 0.011, medium: 0.042, high: 0.167 } // gpt-image-1, 1024x1024
+  imageTextInputPer1M: 5.00,
+  imageInputPer1M: 10.00,
+  imageOutputPer1M: 40.00,
+  imagePerUnit: { low: 0.011, medium: 0.042, high: 0.167 } // respaldo si la API no manda "usage"
 };
 function logEstimatedCost(label, usage) {
   if (!usage) { console.log(`[costo] ${label}: sin datos de uso de tokens`); return; }
@@ -703,10 +708,18 @@ function logEstimatedCost(label, usage) {
   const cost = (inTok / 1e6) * PRICE_USD.textInputPer1M + (outTok / 1e6) * PRICE_USD.textOutputPer1M;
   console.log(`[costo] ${label}: ${inTok} tokens entrada + ${outTok} tokens salida ≈ $${cost.toFixed(4)} USD (estimado)`);
 }
-function logEstimatedImageCost(label, quality, source) {
+function logEstimatedImageCost(label, quality, source, usage) {
   if (source !== imageModel) { console.log(`[costo] ${label}: imagen gratis (${source})`); return; }
+  if (usage) {
+    const textIn = usage.input_tokens_details?.text_tokens ?? 0;
+    const imgIn = usage.input_tokens_details?.image_tokens ?? 0;
+    const outTok = usage.output_tokens || 0;
+    const cost = (textIn / 1e6) * PRICE_USD.imageTextInputPer1M + (imgIn / 1e6) * PRICE_USD.imageInputPer1M + (outTok / 1e6) * PRICE_USD.imageOutputPer1M;
+    console.log(`[costo] ${label}: ${textIn} tokens texto + ${imgIn} tokens imagen entrada + ${outTok} tokens salida (${quality}, ${source}) ≈ $${cost.toFixed(4)} USD (estimado, real de la API)`);
+    return;
+  }
   const cost = PRICE_USD.imagePerUnit[quality] ?? PRICE_USD.imagePerUnit.low;
-  console.log(`[costo] ${label}: 1 imagen ${quality} (${source}) ≈ $${cost.toFixed(4)} USD (estimado)`);
+  console.log(`[costo] ${label}: 1 imagen ${quality} (${source}) ≈ $${cost.toFixed(4)} USD (estimado, respaldo sin "usage")`);
 }
 
 async function callOpenAI(sysPrompt, userContent, useWebSearch = true) {
@@ -909,7 +922,7 @@ async function generateImageWithRetry(rawPrompt, quality = "high") {
   const elapsedMs = Date.now() - start;
   console.log(`[image] fin generación — ok=${result.ok} fuente=${result.source || "-"} tiempo=${elapsedMs}ms${result.ok ? "" : ` error="${result.error}"`}`);
   if (result.ok) {
-    logEstimatedImageCost("generateImageWithRetry", quality, result.source);
+    logEstimatedImageCost("generateImageWithRetry", quality, result.source, result.usage);
     imageCacheSet(cacheKey, result);
   }
   return result;
@@ -1171,12 +1184,12 @@ async function generateImageCascade(prompt, quality = "high") {
         signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS)
       });
       const ad = await ar.json();
-      console.log(`[gpt-image-1] status=${ar.status} err="${ad.error?.message || "ok"}"`);
+      console.log(`[gpt-image-1] status=${ar.status} err="${ad.error?.message || "ok"}" usage=${JSON.stringify(ad.usage || null)}`);
       if (ar.ok && ad.data?.[0]?.b64_json) {
-        return { ok: true, imageB64: ad.data[0].b64_json, source: imageModel };
+        return { ok: true, imageB64: ad.data[0].b64_json, source: imageModel, usage: ad.usage };
       }
       if (ar.ok && ad.data?.[0]?.url) {
-        return { ok: true, imageUrl: ad.data[0].url, source: imageModel };
+        return { ok: true, imageUrl: ad.data[0].url, source: imageModel, usage: ad.usage };
       }
       // 402 (no es un status real de la API, es nuestro marcador interno) para no confundir
       // "sin cuota" con el 503 genérico de "servidor ocupado/timeout" de más abajo — esos dos
@@ -1231,14 +1244,14 @@ async function editImageWithReference(imageDataUrl, prompt, quality = "high") {
       signal: AbortSignal.timeout(EDIT_TIMEOUT_MS)
     });
     const ad = await ar.json();
-    console.log(`[gpt-image-1-edit] status=${ar.status} err="${ad.error?.message || "ok"}"`);
+    console.log(`[gpt-image-1-edit] status=${ar.status} err="${ad.error?.message || "ok"}" usage=${JSON.stringify(ad.usage || null)}`);
     if (ar.ok && ad.data?.[0]?.b64_json) {
-      logEstimatedImageCost("editImageWithReference", quality, imageModel);
-      return { ok: true, imageB64: ad.data[0].b64_json, source: imageModel };
+      logEstimatedImageCost("editImageWithReference", quality, imageModel, ad.usage);
+      return { ok: true, imageB64: ad.data[0].b64_json, source: imageModel, usage: ad.usage };
     }
     if (ar.ok && ad.data?.[0]?.url) {
-      logEstimatedImageCost("editImageWithReference", quality, imageModel);
-      return { ok: true, imageUrl: ad.data[0].url, source: imageModel };
+      logEstimatedImageCost("editImageWithReference", quality, imageModel, ad.usage);
+      return { ok: true, imageUrl: ad.data[0].url, source: imageModel, usage: ad.usage };
     }
     if (ad.error?.code === "insufficient_quota") return { ok: false, status: 402, error: "La cuenta de OpenAI no tiene crédito/cuota disponible." };
     if (ar.status === 429) return { ok: false, status: 429, error: "Demasiadas solicitudes, espera un momento." };
