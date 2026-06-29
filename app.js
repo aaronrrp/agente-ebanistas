@@ -650,6 +650,7 @@ const ADMIN_TAB_LOADERS = {
   profesionales: loadAdminProfessionalsTab,
   empresas: loadAdminCompaniesTab,
   retazos: loadAdminRetazosTab,
+  publicidad: loadAdminAdsTab,
   analiticas: loadAdminAnalytics,
   moderacion: loadAdminModeration,
   configuracion: loadAdminPlansEditor,
@@ -930,6 +931,70 @@ async function loadAdminLogs() {
   } catch { el.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>'; }
 }
 document.getElementById("adm_loadLogsBtn")?.addEventListener("click", loadAdminLogs);
+
+// ── Publicidad / Marketplace (Fase 6) ────────────────────────────────────────
+const AD_TYPE_LABELS = { banner_principal: "Banner principal", banner_lateral: "Banner lateral", promocion: "Promoción", cupon: "Cupón" };
+
+async function loadAdminAdsTab() {
+  const el = document.getElementById("adm_adsList");
+  if (!el) return;
+  el.innerHTML = '<p class="login-hint">Cargando…</p>';
+  try {
+    const res = await fetch("/api/admin/ads", { headers: adminAuthHeaderAdmin() });
+    const list = res.ok ? await res.json() : [];
+    el.innerHTML = list.length ? list.map(ad => `
+      <div class="admin-entity-row" data-entity-id="${ad.id}">
+        <div class="admin-entity-info">
+          <strong>${escapeHtml(ad.title)}</strong>${statusBadgeHtml(ad.active ? "active" : "pending")}
+          <span>${escapeHtml(AD_TYPE_LABELS[ad.type] || ad.type)} · 👁 ${ad.stats.impressions} · 🖱 ${ad.stats.clicks}${ad.endsAt ? " · vence " + ad.endsAt : ""}</span>
+          ${ad.paymentNote ? `<span>💲 ${escapeHtml(ad.paymentNote)}</span>` : ""}
+        </div>
+        <div class="admin-entity-actions">
+          <button class="tiny-btn ${ad.active ? "" : "highlight-btn"}" type="button" data-toggle-ad="${ad.id}">${ad.active ? "⏸ Desactivar" : "▶ Activar"}</button>
+          <button class="tiny-btn danger" type="button" data-delete-ad="${ad.id}">🗑 Eliminar</button>
+        </div>
+      </div>`).join("") : '<p class="login-hint">No hay anuncios todavía.</p>';
+  } catch { el.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>'; }
+}
+document.getElementById("adm_refreshAdsBtn")?.addEventListener("click", loadAdminAdsTab);
+document.getElementById("adm_adsList")?.addEventListener("click", async (e) => {
+  const toggleBtn = e.target.closest("[data-toggle-ad]");
+  const delBtn = e.target.closest("[data-delete-ad]");
+  if (toggleBtn) {
+    await fetch(`/api/admin/ads/${toggleBtn.dataset.toggleAd}/toggle-active`, { method: "POST", headers: adminAuthHeaderAdmin() });
+    loadAdminAdsTab();
+  } else if (delBtn) {
+    if (!confirm("¿Eliminar este anuncio?")) return;
+    await fetch(`/api/admin/ads/${delBtn.dataset.deleteAd}`, { method: "DELETE", headers: adminAuthHeaderAdmin() });
+    loadAdminAdsTab();
+  }
+});
+
+document.getElementById("adm_createAdBtn")?.addEventListener("click", async () => {
+  const title = document.getElementById("adm_adTitle").value.trim();
+  if (!title) { toast("Falta el título.", "error"); return; }
+  const payload = {
+    type: document.getElementById("adm_adType").value,
+    title,
+    imageUrl: document.getElementById("adm_adImageUrl").value.trim(),
+    linkUrl: document.getElementById("adm_adLinkUrl").value.trim(),
+    couponCode: document.getElementById("adm_adCouponCode").value.trim(),
+    paymentNote: document.getElementById("adm_adPaymentNote").value.trim(),
+    endsAt: document.getElementById("adm_adEndsAt").value || null
+  };
+  try {
+    const res = await fetch("/api/admin/ads", { method: "POST", headers: adminAuthHeaderAdmin(), body: JSON.stringify(payload) });
+    if (!res.ok) { toast("No se pudo crear el anuncio.", "error"); return; }
+    toast("Anuncio creado (inactivo hasta que lo actives) ✓");
+    document.getElementById("adm_adTitle").value = "";
+    document.getElementById("adm_adImageUrl").value = "";
+    document.getElementById("adm_adLinkUrl").value = "";
+    document.getElementById("adm_adCouponCode").value = "";
+    document.getElementById("adm_adPaymentNote").value = "";
+    document.getElementById("adm_adEndsAt").value = "";
+    loadAdminAdsTab();
+  } catch { toast("Sin conexión al servidor.", "error"); }
+});
 
 function renderTenantForm(tenant) {
   if (!tenant) return;
@@ -8146,7 +8211,32 @@ function showPublicDirectorio() {
     regCatSel.innerHTML = PROFESSIONAL_CATEGORIES.map(c => `<option value="${c.value}">${c.label}</option>`).join("");
   }
   loadPublicDirectory();
+  loadPublicBanner();
 }
+
+// Banner principal del directorio público -- solo se ve si el admin creó y activó
+// uno (ver Fase 6 / adm_createAdBtn). Cuenta impresión una vez por carga y clic al
+// hacer clic, fire-and-forget -- no bloquea nada si falla.
+async function loadPublicBanner() {
+  const slot = document.getElementById("publicBannerSlot");
+  if (!slot) return;
+  try {
+    const res = await fetch("/api/ads?type=banner_principal");
+    const list = res.ok ? await res.json() : [];
+    if (!list.length) { slot.innerHTML = ""; return; }
+    const ad = list[0];
+    slot.innerHTML = `
+      <a href="${escapeHtml(ad.linkUrl || "#")}" target="_blank" rel="noopener" id="publicBannerLink" data-ad-id="${ad.id}" class="public-banner-link">
+        ${ad.imageUrl ? `<img src="${escapeHtml(ad.imageUrl)}" alt="${escapeHtml(ad.title)}">` : `<div class="public-banner-fallback">${escapeHtml(ad.title)}</div>`}
+      </a>`;
+    fetch(`/api/ads/${ad.id}/impression`, { method: "POST" }).catch(() => {});
+  } catch { slot.innerHTML = ""; }
+}
+document.getElementById("publicBannerSlot")?.addEventListener("click", (e) => {
+  const link = e.target.closest("[data-ad-id]");
+  if (!link) return;
+  fetch(`/api/ads/${link.dataset.adId}/click`, { method: "POST" }).catch(() => {});
+});
 
 function professionalCategoryLabel(value) {
   return PROFESSIONAL_CATEGORIES.find(c => c.value === value)?.label || value;

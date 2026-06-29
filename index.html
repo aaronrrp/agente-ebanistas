@@ -77,6 +77,8 @@
       <button id="publicLoginBtn" class="secondary-btn" type="button">Iniciar sesión</button>
     </header>
 
+    <div id="publicBannerSlot"></div>
+
     <main class="public-main">
       <div class="login-tabs" role="tablist" style="max-width:480px;margin:0 auto 18px">
         <button class="login-tab active" data-public-tab="profesionales" type="button" role="tab">Profesionales</button>
@@ -460,9 +462,47 @@
           </section>
         </div>
 
-        <!-- ── Publicidad (placeholder -- se completa en Fase 6) ────────────── -->
+        <!-- ── Publicidad ────────────────────────────────────────────────── -->
         <div class="admin-subpanel hidden" data-admin-panel="publicidad">
-          <section class="panel"><p class="login-hint">El marketplace de publicidad llega en la siguiente fase.</p></section>
+          <section class="panel">
+            <h3 style="margin:0 0 12px">Nuevo anuncio</h3>
+            <div class="form-grid">
+              <label>Tipo
+                <select id="adm_adType">
+                  <option value="banner_principal">Banner principal</option>
+                  <option value="banner_lateral">Banner lateral</option>
+                  <option value="promocion">Promoción</option>
+                  <option value="cupon">Cupón</option>
+                </select>
+              </label>
+              <label>Título*
+                <input id="adm_adTitle" type="text">
+              </label>
+              <label>URL de imagen
+                <input id="adm_adImageUrl" type="text" placeholder="https://...">
+              </label>
+              <label>URL de destino (al hacer clic)
+                <input id="adm_adLinkUrl" type="text" placeholder="https://...">
+              </label>
+              <label>Código de cupón (solo si tipo=cupón)
+                <input id="adm_adCouponCode" type="text">
+              </label>
+              <label>Nota de pago (solo la ve el admin)
+                <input id="adm_adPaymentNote" type="text" placeholder="Ej: Pagó $50 transferencia 29/06">
+              </label>
+              <label>Vence (opcional)
+                <input id="adm_adEndsAt" type="date">
+              </label>
+            </div>
+            <button class="primary-btn" id="adm_createAdBtn" type="button">+ Crear anuncio</button>
+          </section>
+          <section class="panel" style="margin-top:1.5rem">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+              <h3 style="margin:0">Anuncios</h3>
+              <button class="secondary-btn" id="adm_refreshAdsBtn" type="button">🔄 Actualizar</button>
+            </div>
+            <div id="adm_adsList"></div>
+          </section>
         </div>
 
         <!-- ── Analíticas ────────────────────────────────────────────────── -->

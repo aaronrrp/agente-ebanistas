@@ -1790,7 +1790,8 @@ const routeModules = [
   require("./routes/retazos.js"),
   require("./routes/upload.js"),
   require("./routes/admin-config.js"),
-  require("./routes/admin-dashboard.js")
+  require("./routes/admin-dashboard.js"),
+  require("./routes/ads.js")
 ];
 
 // ── Main router ─────────────────────────────────────────────────────────────

@@ -1986,3 +1986,11 @@ textarea {
 .admin-bar-row .admin-bar-label { flex: 0 0 160px; }
 .admin-bar-row .util-bar-wrap { flex: 1; }
 .admin-bar-row .admin-bar-count { flex: 0 0 36px; text-align: right; color: var(--muted); }
+
+/* ── Banner principal del directorio público (Fase 6) ─────────────────────── */
+.public-banner-link { display: block; max-width: 1080px; margin: 14px auto 0; padding: 0 18px; }
+.public-banner-link img { width: 100%; max-height: 160px; object-fit: cover; border-radius: 10px; display: block; }
+.public-banner-fallback {
+  background: var(--accent-soft); color: var(--accent-dark); border-radius: 10px;
+  padding: 18px; text-align: center; font-weight: 700;
+}
