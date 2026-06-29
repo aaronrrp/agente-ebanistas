@@ -7270,10 +7270,22 @@ function parseSpanishNumberWords(words) {
 }
 
 // Convierte el texto capturado por NUM (dígitos o palabras) a un número real.
+// "." y "," son ambiguos en español hablado/transcrito: "1.000" normalmente es mil (separador
+// de miles), pero "0.45"/"1,5" es un decimal real (grosor de canto, p.ej.). Un separador seguido
+// de EXACTAMENTE 3 dígitos casi siempre es agrupación de miles en este dominio -- las medidas en
+// mm rara vez llevan más de 1-2 decimales -- así que se distingue por la cantidad de dígitos
+// después del separador, no por asumir siempre que es decimal (eso convertía "1.000mm" en 1mm).
+function parseDigitToken(raw) {
+  const m = raw.match(/^(\d+)[.,](\d+)$/);
+  if (!m) return Number(raw);
+  const [, intPart, fracPart] = m;
+  return fracPart.length === 3 ? Number(intPart + fracPart) : Number(intPart + "." + fracPart);
+}
+
 function parseNumberToken(token) {
   const t = String(token || "").trim();
   if (!t) return null;
-  if (/^\d/.test(t)) return Number(t.replace(",", "."));
+  if (/^\d/.test(t)) return parseDigitToken(t);
   return parseSpanishNumberWords(t.toLowerCase().split(/\s+/));
 }
 
