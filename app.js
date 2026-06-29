@@ -7942,6 +7942,136 @@ document.getElementById("pf_submitRegisterBtn")?.addEventListener("click", async
   }
 });
 
+// ── Tabs del directorio público: Profesionales / Empresas ───────────────────
+document.querySelectorAll("[data-public-tab]").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("[data-public-tab]").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    const tab = btn.dataset.publicTab;
+    document.getElementById("publicDirectoryView").classList.toggle("hidden", tab !== "profesionales");
+    document.getElementById("publicRegisterView").classList.add("hidden");
+    document.getElementById("publicCompaniesView").classList.toggle("hidden", tab !== "empresas");
+    document.getElementById("publicCompanyRegisterView").classList.add("hidden");
+    if (tab === "profesionales") document.getElementById("publicDirectoryView").classList.remove("hidden");
+    if (tab === "empresas") { document.getElementById("publicCompaniesView").classList.remove("hidden"); loadPublicCompanies(); }
+  });
+});
+
+// ── Directorio de Empresas (mismo patrón que el de profesionales) ───────────
+const COMPANY_CATEGORIES = [
+  { value: "ferreteria", label: "Ferretería" },
+  { value: "melamina", label: "Melamina" },
+  { value: "herrajes", label: "Herrajes" },
+  { value: "mdf", label: "MDF" },
+  { value: "madera", label: "Madera" },
+  { value: "pinturas", label: "Pinturas" },
+  { value: "adhesivos", label: "Adhesivos" },
+  { value: "maquinaria", label: "Maquinaria" },
+  { value: "cnc", label: "CNC" },
+  { value: "herramientas", label: "Herramientas" },
+  { value: "transporte", label: "Transporte" },
+  { value: "marmol", label: "Mármol" },
+  { value: "vidrio", label: "Vidrio" },
+  { value: "otra", label: "Otra" }
+];
+
+function companyCategoryLabel(value) {
+  return COMPANY_CATEGORIES.find(c => c.value === value)?.label || value;
+}
+
+function ensureCompanyCategoryOptions() {
+  const filterSel = document.getElementById("co_filterCategory");
+  if (filterSel && filterSel.options.length <= 1) {
+    filterSel.innerHTML = '<option value="">Todas</option>' + COMPANY_CATEGORIES.map(c => `<option value="${c.value}">${c.label}</option>`).join("");
+  }
+  const regSel = document.getElementById("co_regCategory");
+  if (regSel && !regSel.options.length) {
+    regSel.innerHTML = COMPANY_CATEGORIES.map(c => `<option value="${c.value}">${c.label}</option>`).join("");
+  }
+}
+
+async function loadPublicCompanies() {
+  ensureCompanyCategoryOptions();
+  const grid = document.getElementById("publicCompaniesGrid");
+  if (!grid) return;
+  grid.innerHTML = '<p class="login-hint">Cargando…</p>';
+  const params = new URLSearchParams();
+  const category = document.getElementById("co_filterCategory")?.value;
+  const province = document.getElementById("co_filterProvince")?.value.trim();
+  const city = document.getElementById("co_filterCity")?.value.trim();
+  if (category) params.set("category", category);
+  if (province) params.set("province", province);
+  if (city) params.set("city", city);
+  try {
+    const res = await fetch(`/api/companies?${params.toString()}`);
+    const list = res.ok ? await res.json() : [];
+    if (!list.length) { grid.innerHTML = '<p class="login-hint">No hay empresas que coincidan todavía — sé la primera en registrarte.</p>'; return; }
+    grid.innerHTML = list.map(c => `
+      <div class="public-pro-card">
+        ${c.logoUrl ? `<img src="${escapeHtml(c.logoUrl)}" alt="" class="public-pro-photo">` : `<div class="public-pro-photo public-pro-photo-placeholder">${escapeHtml((c.name||"?")[0])}</div>`}
+        <div class="public-pro-body">
+          <strong>${escapeHtml(c.name)}</strong>
+          <span class="public-pro-category">${escapeHtml(companyCategoryLabel(c.category))}</span>
+          ${c.location?.city ? `<span class="public-pro-location">📍 ${escapeHtml(c.location.city)}${c.location.province ? ", " + escapeHtml(c.location.province) : ""}</span>` : ""}
+          ${c.description ? `<p class="public-pro-desc">${escapeHtml(c.description)}</p>` : ""}
+          ${c.products?.length ? `<p class="public-pro-desc"><strong>${c.products.length}</strong> producto(s) publicado(s)</p>` : ""}
+          <button class="primary-btn public-pro-contact" type="button" data-company-contact-id="${c.id}" data-contact-phone="${escapeHtml(c.whatsapp || c.phone || "")}">📞 Contactar</button>
+        </div>
+      </div>`).join("");
+  } catch {
+    grid.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>';
+  }
+}
+
+document.getElementById("co_applyFiltersBtn")?.addEventListener("click", loadPublicCompanies);
+document.getElementById("publicCompaniesGrid")?.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-company-contact-id]");
+  if (!btn) return;
+  fetch(`/api/companies/${btn.dataset.companyContactId}/contact-click`, { method: "POST" }).catch(() => {});
+  const phone = btn.dataset.contactPhone;
+  if (phone) window.open(`https://wa.me/${phone.replace(/[^0-9]/g, "")}`, "_blank");
+});
+
+document.getElementById("publicShowCompanyRegisterBtn")?.addEventListener("click", () => {
+  ensureCompanyCategoryOptions();
+  document.getElementById("publicCompaniesView").classList.add("hidden");
+  document.getElementById("publicCompanyRegisterView").classList.remove("hidden");
+});
+document.getElementById("publicBackToCompaniesBtn")?.addEventListener("click", () => {
+  document.getElementById("publicCompanyRegisterView").classList.add("hidden");
+  document.getElementById("publicCompaniesView").classList.remove("hidden");
+});
+
+document.getElementById("co_submitRegisterBtn")?.addEventListener("click", async () => {
+  const errEl = document.getElementById("co_registerError");
+  errEl.classList.add("hidden");
+  const name = document.getElementById("co_regName").value.trim();
+  const password = document.getElementById("co_regPassword").value;
+  if (!name) { errEl.textContent = "Falta el nombre de la empresa."; errEl.classList.remove("hidden"); return; }
+  if (!password || password.length < 4) { errEl.textContent = "La contraseña necesita al menos 4 caracteres."; errEl.classList.remove("hidden"); return; }
+  const payload = {
+    name, password,
+    category: document.getElementById("co_regCategory").value,
+    phone: document.getElementById("co_regPhone").value.trim(),
+    whatsapp: document.getElementById("co_regWhatsapp").value.trim(),
+    email: document.getElementById("co_regEmail").value.trim(),
+    location: { province: document.getElementById("co_regProvince").value.trim(), city: document.getElementById("co_regCity").value.trim() },
+    description: document.getElementById("co_regDescription").value.trim(),
+    schedule: document.getElementById("co_regSchedule").value.trim()
+  };
+  try {
+    const res = await fetch("/api/companies/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || "No se pudo registrar."; errEl.classList.remove("hidden"); return; }
+    toast(`¡Listo! Tu código de acceso es ${data.accessCode} — guárdalo para entrar a tu panel.`);
+    document.getElementById("publicCompanyRegisterView").classList.add("hidden");
+    document.getElementById("publicCompaniesView").classList.remove("hidden");
+  } catch {
+    errEl.textContent = "Sin conexión al servidor.";
+    errEl.classList.remove("hidden");
+  }
+});
+
 function setLoginError(msg) {
   const el = document.getElementById("loginError");
   el.textContent = msg;

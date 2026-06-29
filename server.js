@@ -1774,6 +1774,7 @@ async function serveStatic(req, res) {
 // require() plano, sin librería de ruteo — mismo mecanismo que ya usa pdf.js arriba.
 const routeModules = [
   require("./routes/professionals.js"),
+  require("./routes/companies.js"),
   require("./routes/upload.js")
 ];
 
