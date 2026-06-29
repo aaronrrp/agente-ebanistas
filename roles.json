@@ -1,0 +1,7 @@
+{
+  "administrador": { "label": "Administrador", "permissions": ["*"] },
+  "supervisor": { "label": "Supervisor", "permissions": ["users.view", "users.edit", "professionals.moderate", "companies.moderate", "retazos.moderate", "ads.manage"] },
+  "empresa": { "label": "Empresa", "permissions": ["company.self.edit", "ads.self.request"] },
+  "profesional": { "label": "Profesional", "permissions": ["professional.self.edit", "retazos.self.create"] },
+  "usuario_gratuito": { "label": "Usuario Gratuito", "permissions": ["retazos.self.create.limited", "directory.view"] }
+}

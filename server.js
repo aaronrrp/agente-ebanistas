@@ -1788,7 +1788,8 @@ const routeModules = [
   require("./routes/professionals.js"),
   require("./routes/companies.js"),
   require("./routes/retazos.js"),
-  require("./routes/upload.js")
+  require("./routes/upload.js"),
+  require("./routes/admin-config.js")
 ];
 
 // ── Main router ─────────────────────────────────────────────────────────────

@@ -1,0 +1,30 @@
+{
+  "gratuito": {
+    "label": "Usuario Gratuito",
+    "maxPortfolioPhotos": 3,
+    "maxRetazoListings": 2,
+    "canFeature": false,
+    "monthlyPrice": 0
+  },
+  "profesional": {
+    "label": "Profesional",
+    "maxPortfolioPhotos": 20,
+    "maxRetazoListings": 20,
+    "canFeature": true,
+    "monthlyPrice": 0
+  },
+  "empresa": {
+    "label": "Empresa",
+    "maxPortfolioPhotos": 50,
+    "maxRetazoListings": 100,
+    "canFeature": true,
+    "monthlyPrice": 0
+  },
+  "administrador": {
+    "label": "Administrador",
+    "maxPortfolioPhotos": null,
+    "maxRetazoListings": null,
+    "canFeature": true,
+    "monthlyPrice": 0
+  }
+}
