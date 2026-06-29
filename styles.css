@@ -1913,3 +1913,39 @@ textarea {
 .breakdown-piece-info .breakdown-piece-calc { font-style: italic; color: #92722a; }
 .breakdown-piece-card .tiny-btn { flex-shrink: 0; }
 .breakdown-piece-card .tiny-btn:disabled { opacity: .6; cursor: default; }
+
+/* ── Directorio Profesional (público, sin login) ─────────────────────────── */
+.public-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 24px; background: var(--ink); color: #fff;
+}
+.public-topbar .brand-lockup strong { display: block; font-size: 1rem; }
+.public-topbar-tagline { font-size: .78rem; color: rgba(255,255,255,.65); }
+.public-main { max-width: 1080px; margin: 0 auto; padding: 24px 18px 60px; }
+.public-hero { text-align: center; padding: 24px 0 32px; }
+.public-hero h1 { font-size: 1.8rem; margin: 6px 0 8px; }
+.public-hero-sub { color: var(--muted); margin: 0 0 18px; }
+.public-filters { margin-bottom: 20px; }
+.public-filters .form-grid { margin-bottom: 12px; }
+.public-directory-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px;
+}
+.public-pro-card {
+  border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
+  overflow: hidden; display: flex; flex-direction: column;
+}
+.public-pro-photo { width: 100%; height: 160px; object-fit: cover; display: block; background: var(--surface-soft); }
+.public-pro-photo-placeholder {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 2.4rem; font-weight: 800; color: var(--accent); background: var(--accent-soft);
+}
+.public-pro-body { padding: 14px; display: flex; flex-direction: column; gap: 4px; }
+.public-pro-body strong { font-size: 1.02rem; }
+.public-pro-company, .public-pro-category, .public-pro-location { font-size: .82rem; color: var(--muted); }
+.public-pro-desc { font-size: .85rem; margin: 6px 0; line-height: 1.4; }
+.public-pro-contact { margin-top: 8px; min-height: 44px; }
+
+@media (max-width: 720px) {
+  .public-topbar { padding: 12px 16px; }
+  .public-hero h1 { font-size: 1.4rem; }
+}

@@ -7812,7 +7812,135 @@ function showLogin() {
   document.getElementById("appLoading")?.remove();
   document.getElementById("loginScreen").style.display = "";
   document.getElementById("appShell").style.display = "none";
+  document.getElementById("publicShell").style.display = "none";
 }
+
+// ── Directorio Profesional (público, sin login) ─────────────────────────────
+// Mismas categorías que routes/professionals.js (CATEGORIES) -- duplicado a propósito
+// porque este archivo corre en el navegador y no puede require() un módulo del
+// servidor; mismo patrón que ya usa esta app para furnitureType/thickness, etc.
+const PROFESSIONAL_CATEGORIES = [
+  { value: "ebanista", label: "Ebanista" },
+  { value: "carpintero", label: "Carpintero" },
+  { value: "plomero", label: "Plomero" },
+  { value: "electricista", label: "Electricista" },
+  { value: "gypsum", label: "Gypsum" },
+  { value: "remodelador", label: "Remodelador" },
+  { value: "pintor", label: "Pintor" },
+  { value: "soldador", label: "Soldador" },
+  { value: "marmolista", label: "Marmolista" },
+  { value: "instalador_cocinas", label: "Instalador de cocinas" },
+  { value: "instalador_muebles", label: "Instalador de muebles" },
+  { value: "vidriero", label: "Vidriero" },
+  { value: "tecnico_ac", label: "Técnico de aire acondicionado" },
+  { value: "disenador_interiores", label: "Diseñador de interiores" },
+  { value: "otra", label: "Otra especialidad" }
+];
+
+function showPublicDirectorio() {
+  document.getElementById("appLoading")?.remove();
+  document.getElementById("loginScreen").style.display = "none";
+  document.getElementById("appShell").style.display = "none";
+  document.getElementById("publicShell").style.display = "";
+  const catSel = document.getElementById("pf_filterCategory");
+  if (catSel && catSel.options.length <= 1) {
+    catSel.innerHTML = '<option value="">Todas</option>' + PROFESSIONAL_CATEGORIES.map(c => `<option value="${c.value}">${c.label}</option>`).join("");
+  }
+  const regCatSel = document.getElementById("pf_regCategory");
+  if (regCatSel && !regCatSel.options.length) {
+    regCatSel.innerHTML = PROFESSIONAL_CATEGORIES.map(c => `<option value="${c.value}">${c.label}</option>`).join("");
+  }
+  loadPublicDirectory();
+}
+
+function professionalCategoryLabel(value) {
+  return PROFESSIONAL_CATEGORIES.find(c => c.value === value)?.label || value;
+}
+
+async function loadPublicDirectory() {
+  const grid = document.getElementById("publicDirectoryGrid");
+  if (!grid) return;
+  grid.innerHTML = '<p class="login-hint">Cargando…</p>';
+  const params = new URLSearchParams();
+  const category = document.getElementById("pf_filterCategory")?.value;
+  const province = document.getElementById("pf_filterProvince")?.value.trim();
+  const city = document.getElementById("pf_filterCity")?.value.trim();
+  const specialty = document.getElementById("pf_filterSpecialty")?.value.trim();
+  if (category) params.set("category", category);
+  if (province) params.set("province", province);
+  if (city) params.set("city", city);
+  if (specialty) params.set("specialty", specialty);
+  try {
+    const res = await fetch(`/api/professionals?${params.toString()}`);
+    const list = res.ok ? await res.json() : [];
+    if (!list.length) { grid.innerHTML = '<p class="login-hint">No hay profesionales que coincidan todavía — sé el primero en registrarte.</p>'; return; }
+    grid.innerHTML = list.map(p => `
+      <div class="public-pro-card">
+        ${p.photoUrl ? `<img src="${escapeHtml(p.photoUrl)}" alt="" class="public-pro-photo">` : `<div class="public-pro-photo public-pro-photo-placeholder">${escapeHtml((p.name||"?")[0])}</div>`}
+        <div class="public-pro-body">
+          <strong>${escapeHtml(p.name)}</strong>
+          ${p.company ? `<span class="public-pro-company">${escapeHtml(p.company)}</span>` : ""}
+          <span class="public-pro-category">${escapeHtml(professionalCategoryLabel(p.category))}${p.specialty ? " · " + escapeHtml(p.specialty) : ""}</span>
+          ${p.location?.city ? `<span class="public-pro-location">📍 ${escapeHtml(p.location.city)}${p.location.province ? ", " + escapeHtml(p.location.province) : ""}</span>` : ""}
+          ${p.description ? `<p class="public-pro-desc">${escapeHtml(p.description)}</p>` : ""}
+          <button class="primary-btn public-pro-contact" type="button" data-contact-id="${p.id}" data-contact-phone="${escapeHtml(p.whatsapp || p.phone || "")}">📞 Contactar</button>
+        </div>
+      </div>`).join("");
+  } catch {
+    grid.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>';
+  }
+}
+
+document.getElementById("publicLoginBtn")?.addEventListener("click", showLogin);
+document.getElementById("publicShowRegisterBtn")?.addEventListener("click", () => {
+  document.getElementById("publicDirectoryView").classList.add("hidden");
+  document.getElementById("publicRegisterView").classList.remove("hidden");
+});
+document.getElementById("publicBackToDirectoryBtn")?.addEventListener("click", () => {
+  document.getElementById("publicRegisterView").classList.add("hidden");
+  document.getElementById("publicDirectoryView").classList.remove("hidden");
+});
+document.getElementById("pf_applyFiltersBtn")?.addEventListener("click", loadPublicDirectory);
+document.getElementById("publicDirectoryGrid")?.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-contact-id]");
+  if (!btn) return;
+  fetch(`/api/professionals/${btn.dataset.contactId}/contact-click`, { method: "POST" }).catch(() => {});
+  const phone = btn.dataset.contactPhone;
+  if (phone) window.open(`https://wa.me/${phone.replace(/[^0-9]/g, "")}`, "_blank");
+});
+
+document.getElementById("pf_submitRegisterBtn")?.addEventListener("click", async () => {
+  const errEl = document.getElementById("pf_registerError");
+  errEl.classList.add("hidden");
+  const name = document.getElementById("pf_regName").value.trim();
+  const password = document.getElementById("pf_regPassword").value;
+  if (!name) { errEl.textContent = "Falta tu nombre."; errEl.classList.remove("hidden"); return; }
+  if (!password || password.length < 4) { errEl.textContent = "La contraseña necesita al menos 4 caracteres."; errEl.classList.remove("hidden"); return; }
+  const payload = {
+    name, password,
+    category: document.getElementById("pf_regCategory").value,
+    company: document.getElementById("pf_regCompany").value.trim(),
+    specialty: document.getElementById("pf_regSpecialty").value.trim(),
+    experienceYears: Number(document.getElementById("pf_regExperience").value) || 0,
+    phone: document.getElementById("pf_regPhone").value.trim(),
+    whatsapp: document.getElementById("pf_regWhatsapp").value.trim(),
+    email: document.getElementById("pf_regEmail").value.trim(),
+    location: { province: document.getElementById("pf_regProvince").value.trim(), city: document.getElementById("pf_regCity").value.trim() },
+    description: document.getElementById("pf_regDescription").value.trim(),
+    schedule: document.getElementById("pf_regSchedule").value.trim()
+  };
+  try {
+    const res = await fetch("/api/professionals/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || "No se pudo registrar."; errEl.classList.remove("hidden"); return; }
+    toast(`¡Listo! Tu código de acceso es ${data.accessCode} — guárdalo para entrar a tu panel.`);
+    document.getElementById("publicRegisterView").classList.add("hidden");
+    document.getElementById("publicDirectoryView").classList.remove("hidden");
+  } catch {
+    errEl.textContent = "Sin conexión al servidor.";
+    errEl.classList.remove("hidden");
+  }
+});
 
 function setLoginError(msg) {
   const el = document.getElementById("loginError");
@@ -8460,8 +8588,10 @@ async function tryAutoLogin() {
     }
   }
 
-  // ── 3. No valid session → show login ──────────────────────────────────────
-  showLogin();
+  // ── 3. Sin sesión válida ni link directo → directorio público por defecto
+  // (antes caía directo a showLogin(); el login sigue a un clic de distancia desde
+  // el botón "Iniciar sesión" del directorio, ver showPublicDirectorio()).
+  showPublicDirectorio();
 }
 
 // ── Margin percent live update (quote form) ────────────────────────────────
