@@ -536,6 +536,7 @@ function showView(viewId) {
   els.views.forEach((view) => view.classList.toggle("active", view.id === viewId));
   els.navItems.forEach((item) => item.classList.toggle("active", item.dataset.view === viewId));
   render();
+  if (viewId === "adminView" && AUTH.mode === "admin") loadAdminDashboard();
   if (viewId === "sellersView" && AUTH.mode === "admin") loadSellersFromServer();
   if (viewId === "quoteView" && AUTH.mode === "vendedor") loadSellerQuoteClientOptions();
   if (viewId === "quoteView" && AUTH.mode === "ebanista") resetMaterialCombo();
@@ -636,6 +637,299 @@ function renderAdmin() {
       </article>`;
   }).join("");
 }
+
+// ── Sub-tabs del Panel de Admin (Dashboard/Profesionales/Empresas/Retazos/...) ──
+// Mismo patrón que showView(): toggle de .active/.hidden + carga perezosa de datos
+// al entrar a cada sub-tab (no todo de una vez al loguearse como admin).
+function adminAuthHeaderAdmin() {
+  return { Authorization: `Bearer ${AUTH.token}`, "Content-Type": "application/json" };
+}
+
+const ADMIN_TAB_LOADERS = {
+  dashboard: loadAdminDashboard,
+  profesionales: loadAdminProfessionalsTab,
+  empresas: loadAdminCompaniesTab,
+  retazos: loadAdminRetazosTab,
+  analiticas: loadAdminAnalytics,
+  moderacion: loadAdminModeration,
+  configuracion: loadAdminPlansEditor,
+  logs: () => loadAdminLogs(),
+  seguridad: loadAdminRolesView
+};
+
+function showAdminTab(tabId) {
+  document.querySelectorAll("[data-admin-tab]").forEach(b => b.classList.toggle("active", b.dataset.adminTab === tabId));
+  document.querySelectorAll("[data-admin-panel]").forEach(p => p.classList.toggle("hidden", p.dataset.adminPanel !== tabId));
+  ADMIN_TAB_LOADERS[tabId]?.();
+}
+document.querySelectorAll("[data-admin-tab]").forEach(btn => {
+  btn.addEventListener("click", () => showAdminTab(btn.dataset.adminTab));
+});
+
+function statusBadgeHtml(status) {
+  const labels = { pending: "Pendiente", approved: "Aprobado", rejected: "Rechazado", suspended: "Suspendido", active: "Activo", removed: "Eliminado" };
+  return `<span class="admin-status-badge ${status}">${labels[status] || status}</span>`;
+}
+
+async function loadAdminDashboard() {
+  const metricsEl = document.getElementById("adm_dashboardMetrics");
+  const activityEl = document.getElementById("adm_dashboardActivity");
+  if (!metricsEl) return;
+  metricsEl.innerHTML = '<p class="login-hint">Cargando…</p>';
+  try {
+    const res = await fetch("/api/admin/dashboard", { headers: adminAuthHeaderAdmin() });
+    if (!res.ok) { metricsEl.innerHTML = '<p class="login-hint">No se pudo cargar.</p>'; return; }
+    const d = await res.json();
+    metricsEl.innerHTML = `
+      <article class="metric-card"><span>Ebanistas</span><strong>${d.ebanistas.total}</strong></article>
+      <article class="metric-card"><span>Vendedores</span><strong>${d.vendedores.total}</strong></article>
+      <article class="metric-card"><span>Profesionales</span><strong>${d.professionals.total}</strong></article>
+      <article class="metric-card"><span>Pend. profesionales</span><strong>${d.professionals.pending}</strong></article>
+      <article class="metric-card"><span>Empresas</span><strong>${d.companies.total}</strong></article>
+      <article class="metric-card"><span>Pend. empresas</span><strong>${d.companies.pending}</strong></article>
+      <article class="metric-card"><span>Retazos activos</span><strong>${d.retazos.total}</strong></article>
+      <article class="metric-card"><span>Envíos a vendedores</span><strong>${d.handoffs.total}</strong></article>`;
+    activityEl.innerHTML = d.recentActivity.length
+      ? d.recentActivity.map(e => `<div class="admin-log-row"><time>${new Date(e.ts).toLocaleString("es-PA")}</time><span>${escapeHtml(e.actorLabel || e.actorType)} — ${escapeHtml(e.action)}</span></div>`).join("")
+      : '<p class="login-hint">Sin actividad registrada todavía.</p>';
+  } catch {
+    metricsEl.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>';
+  }
+}
+
+function adminEntityRowHtml(entity, kind) {
+  const name = entity.name || entity.company || "(sin nombre)";
+  const sub = kind === "professional"
+    ? [professionalCategoryLabel(entity.category), entity.specialty, entity.location?.city].filter(Boolean).join(" · ")
+    : [companyCategoryLabel(entity.category), entity.location?.city].filter(Boolean).join(" · ");
+  const featuredTag = entity.featured ? ' <span class="admin-status-badge approved">★ Destacado</span>' : "";
+  return `
+    <div class="admin-entity-row" data-entity-id="${entity.id}">
+      <div class="admin-entity-info">
+        <strong>${escapeHtml(name)}</strong>${statusBadgeHtml(entity.status)}${featuredTag}
+        <span>${escapeHtml(sub)}</span>
+      </div>
+      <div class="admin-entity-actions">
+        ${entity.status !== "approved" ? `<button class="tiny-btn" type="button" data-admin-action="approve" data-kind="${kind}" data-id="${entity.id}">✓ Aprobar</button>` : ""}
+        ${entity.status !== "rejected" ? `<button class="tiny-btn danger" type="button" data-admin-action="reject" data-kind="${kind}" data-id="${entity.id}">✕ Rechazar</button>` : ""}
+        ${entity.status !== "suspended" ? `<button class="tiny-btn" type="button" data-admin-action="suspend" data-kind="${kind}" data-id="${entity.id}">⏸ Suspender</button>` : ""}
+        ${entity.featured
+          ? `<button class="tiny-btn" type="button" data-admin-action="unfeature" data-kind="${kind}" data-id="${entity.id}">☆ Quitar destacado</button>`
+          : `<button class="tiny-btn highlight-btn" type="button" data-admin-action="feature" data-kind="${kind}" data-id="${entity.id}">★ Destacar</button>`}
+      </div>
+    </div>`;
+}
+
+async function runAdminEntityAction(kind, id, action) {
+  const endpoint = kind === "professional" ? "professionals" : "companies";
+  let body = {};
+  if (action === "feature") {
+    const days = prompt("¿Por cuántos días queda destacado? (vacío = sin fecha límite)", "30");
+    if (days && Number(days) > 0) {
+      const d = new Date(); d.setDate(d.getDate() + Number(days));
+      body = { featuredUntil: d.toISOString().slice(0, 10) };
+    }
+  }
+  try {
+    const res = await fetch(`/api/admin/${endpoint}/${id}/${action}`, { method: "POST", headers: adminAuthHeaderAdmin(), body: JSON.stringify(body) });
+    if (!res.ok) { toast("No se pudo completar la acción.", "error"); return; }
+    toast("Listo ✓");
+    if (kind === "professional") loadAdminProfessionalsTab(); else loadAdminCompaniesTab();
+  } catch {
+    toast("Sin conexión al servidor.", "error");
+  }
+}
+
+document.getElementById("adm_professionalsList")?.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-admin-action]");
+  if (!btn) return;
+  runAdminEntityAction(btn.dataset.kind, btn.dataset.id, btn.dataset.adminAction);
+});
+document.getElementById("adm_companiesList")?.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-admin-action]");
+  if (!btn) return;
+  runAdminEntityAction(btn.dataset.kind, btn.dataset.id, btn.dataset.adminAction);
+});
+
+async function loadAdminProfessionalsTab() {
+  const el = document.getElementById("adm_professionalsList");
+  if (!el) return;
+  el.innerHTML = '<p class="login-hint">Cargando…</p>';
+  try {
+    const res = await fetch("/api/admin/professionals", { headers: adminAuthHeaderAdmin() });
+    const list = res.ok ? await res.json() : [];
+    el.innerHTML = list.length ? list.map(p => adminEntityRowHtml(p, "professional")).join("") : '<p class="login-hint">No hay profesionales registrados todavía.</p>';
+  } catch { el.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>'; }
+}
+document.getElementById("adm_refreshProfessionalsBtn")?.addEventListener("click", loadAdminProfessionalsTab);
+
+async function loadAdminCompaniesTab() {
+  const el = document.getElementById("adm_companiesList");
+  if (!el) return;
+  el.innerHTML = '<p class="login-hint">Cargando…</p>';
+  try {
+    const res = await fetch("/api/admin/companies", { headers: adminAuthHeaderAdmin() });
+    const list = res.ok ? await res.json() : [];
+    el.innerHTML = list.length ? list.map(c => adminEntityRowHtml(c, "company")).join("") : '<p class="login-hint">No hay empresas registradas todavía.</p>';
+  } catch { el.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>'; }
+}
+document.getElementById("adm_refreshCompaniesBtn")?.addEventListener("click", loadAdminCompaniesTab);
+
+async function loadAdminRetazosTab() {
+  const el = document.getElementById("adm_retazosList");
+  if (!el) return;
+  el.innerHTML = '<p class="login-hint">Cargando…</p>';
+  try {
+    const res = await fetch("/api/admin/retazos", { headers: adminAuthHeaderAdmin() });
+    const list = res.ok ? await res.json() : [];
+    el.innerHTML = list.length ? list.map(r => `
+      <div class="admin-entity-row" data-entity-id="${r.id}">
+        <div class="admin-entity-info">
+          <strong>${escapeHtml(materialLabel(r.material))}${r.color ? " · " + escapeHtml(r.color) : ""}${r.isInspiration ? " (inspiración)" : ""}</strong>${statusBadgeHtml(r.status)}
+          <span>${r.thickness ? r.thickness + "mm · " : ""}Cant: ${r.quantity} · ${escapeHtml(r.location?.city || "")} · ${r.ownerType}</span>
+        </div>
+        <div class="admin-entity-actions">
+          ${r.status !== "removed" ? `<button class="tiny-btn danger" type="button" data-remove-retazo="${r.id}">🗑 Eliminar</button>` : ""}
+        </div>
+      </div>`).join("") : '<p class="login-hint">No hay publicaciones todavía.</p>';
+  } catch { el.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>'; }
+}
+document.getElementById("adm_refreshRetazosBtn")?.addEventListener("click", loadAdminRetazosTab);
+document.getElementById("adm_retazosList")?.addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-remove-retazo]");
+  if (!btn) return;
+  if (!confirm("¿Eliminar esta publicación?")) return;
+  try {
+    const res = await fetch(`/api/admin/retazos/${btn.dataset.removeRetazo}`, { method: "DELETE", headers: adminAuthHeaderAdmin() });
+    if (res.ok) { toast("Eliminado ✓"); loadAdminRetazosTab(); } else toast("No se pudo eliminar.", "error");
+  } catch { toast("Sin conexión al servidor.", "error"); }
+});
+
+function categoryBarsHtml(list, labelFn) {
+  const counts = {};
+  list.forEach(item => { const k = item.category || "otra"; counts[k] = (counts[k] || 0) + 1; });
+  const max = Math.max(1, ...Object.values(counts));
+  return Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([cat, count]) => `
+    <div class="admin-bar-row">
+      <span class="admin-bar-label">${escapeHtml(labelFn(cat))}</span>
+      <div class="util-bar-wrap"><div class="util-bar" style="width:${Math.round(count / max * 100)}%"></div></div>
+      <span class="admin-bar-count">${count}</span>
+    </div>`).join("") || '<p class="login-hint">Sin datos todavía.</p>';
+}
+
+async function loadAdminAnalytics() {
+  const profEl = document.getElementById("adm_analyticsProfessionals");
+  const coEl = document.getElementById("adm_analyticsCompanies");
+  if (!profEl) return;
+  profEl.innerHTML = coEl.innerHTML = '<p class="login-hint">Cargando…</p>';
+  try {
+    const [profs, cos] = await Promise.all([
+      fetch("/api/admin/professionals", { headers: adminAuthHeaderAdmin() }).then(r => r.ok ? r.json() : []),
+      fetch("/api/admin/companies", { headers: adminAuthHeaderAdmin() }).then(r => r.ok ? r.json() : [])
+    ]);
+    profEl.innerHTML = categoryBarsHtml(profs, professionalCategoryLabel);
+    coEl.innerHTML = categoryBarsHtml(cos, companyCategoryLabel);
+  } catch {
+    profEl.innerHTML = coEl.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>';
+  }
+}
+
+async function loadAdminModeration() {
+  const el = document.getElementById("adm_moderationList");
+  if (!el) return;
+  el.innerHTML = '<p class="login-hint">Cargando…</p>';
+  try {
+    const [profs, cos] = await Promise.all([
+      fetch("/api/admin/professionals", { headers: adminAuthHeaderAdmin() }).then(r => r.ok ? r.json() : []),
+      fetch("/api/admin/companies", { headers: adminAuthHeaderAdmin() }).then(r => r.ok ? r.json() : [])
+    ]);
+    const pendingProfs = profs.filter(p => p.status === "pending");
+    const pendingCos = cos.filter(c => c.status === "pending");
+    if (!pendingProfs.length && !pendingCos.length) { el.innerHTML = '<p class="login-hint">No hay nada pendiente de revisión — todo al día ✓</p>'; return; }
+    el.innerHTML = [
+      ...pendingProfs.map(p => adminEntityRowHtml(p, "professional")),
+      ...pendingCos.map(c => adminEntityRowHtml(c, "company"))
+    ].join("");
+  } catch { el.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>'; }
+}
+// Reusa el mismo listener de acciones que profesionales/empresas (delegado por id, no por contenedor)
+document.getElementById("adm_moderationList")?.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-admin-action]");
+  if (!btn) return;
+  runAdminEntityAction(btn.dataset.kind, btn.dataset.id, btn.dataset.adminAction).then(loadAdminModeration);
+});
+
+async function loadAdminPlansEditor() {
+  const el = document.getElementById("adm_plansEditor");
+  if (!el) return;
+  el.innerHTML = '<p class="login-hint">Cargando…</p>';
+  try {
+    const plans = await (await fetch("/api/plans")).json();
+    el.innerHTML = Object.entries(plans).map(([key, plan]) => `
+      <div class="subsection" style="margin-bottom:10px">
+        <strong>${escapeHtml(plan.label)}</strong>
+        <div class="form-grid" style="margin-top:8px">
+          <label>Máx. fotos portafolio
+            <input type="number" min="0" data-plan-field="maxPortfolioPhotos" data-plan-key="${key}" value="${plan.maxPortfolioPhotos ?? ""}" placeholder="Sin límite">
+          </label>
+          <label>Máx. publicaciones de retazos
+            <input type="number" min="0" data-plan-field="maxRetazoListings" data-plan-key="${key}" value="${plan.maxRetazoListings ?? ""}" placeholder="Sin límite">
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-weight:400">
+            <input type="checkbox" data-plan-field="canFeature" data-plan-key="${key}" ${plan.canFeature ? "checked" : ""}> Puede destacarse
+          </label>
+        </div>
+      </div>`).join("");
+  } catch { el.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>'; }
+}
+document.getElementById("adm_savePlansBtn")?.addEventListener("click", async () => {
+  const updates = {};
+  document.querySelectorAll("[data-plan-key]").forEach(input => {
+    const key = input.dataset.planKey, field = input.dataset.planField;
+    updates[key] = updates[key] || {};
+    if (input.type === "checkbox") updates[key][field] = input.checked;
+    else updates[key][field] = input.value === "" ? null : Number(input.value);
+  });
+  try {
+    const res = await fetch("/api/admin/plans", { method: "PUT", headers: adminAuthHeaderAdmin(), body: JSON.stringify(updates) });
+    if (res.ok) toast("Planes guardados ✓"); else toast("No se pudo guardar.", "error");
+  } catch { toast("Sin conexión al servidor.", "error"); }
+});
+
+async function loadAdminRolesView() {
+  const el = document.getElementById("adm_rolesList");
+  if (!el) return;
+  el.innerHTML = '<p class="login-hint">Cargando…</p>';
+  try {
+    const res = await fetch("/api/roles", { headers: adminAuthHeaderAdmin() });
+    const roles = res.ok ? await res.json() : {};
+    el.innerHTML = Object.entries(roles).map(([key, role]) => `
+      <div class="subsection" style="margin-bottom:8px">
+        <strong>${escapeHtml(role.label)}</strong>
+        <p class="login-hint" style="margin-top:4px">${role.permissions.map(escapeHtml).join(", ")}</p>
+      </div>`).join("");
+  } catch { el.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>'; }
+}
+
+async function loadAdminLogs() {
+  const el = document.getElementById("adm_logsList");
+  if (!el) return;
+  el.innerHTML = '<p class="login-hint">Cargando…</p>';
+  const today = new Date().toISOString().slice(0, 10);
+  const from = document.getElementById("adm_logFrom")?.value || today;
+  const to = document.getElementById("adm_logTo")?.value || today;
+  const action = document.getElementById("adm_logActionFilter")?.value.trim();
+  const params = new URLSearchParams({ from, to });
+  if (action) params.set("action", action);
+  try {
+    const res = await fetch(`/api/admin/activity-log?${params.toString()}`, { headers: adminAuthHeaderAdmin() });
+    const list = res.ok ? await res.json() : [];
+    el.innerHTML = list.length
+      ? list.map(e => `<div class="admin-log-row"><time>${new Date(e.ts).toLocaleString("es-PA")}</time><span><strong>${escapeHtml(e.actorType)}</strong> ${escapeHtml(e.actorLabel || "")} — ${escapeHtml(e.action)}</span></div>`).join("")
+      : '<p class="login-hint">Sin eventos en ese rango.</p>';
+  } catch { el.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>'; }
+}
+document.getElementById("adm_loadLogsBtn")?.addEventListener("click", loadAdminLogs);
 
 function renderTenantForm(tenant) {
   if (!tenant) return;
@@ -7802,6 +8096,7 @@ const AUTH = {
 function showApp() {
   document.getElementById("appLoading")?.remove();
   document.getElementById("loginScreen").style.display = "none";
+  document.getElementById("publicShell").style.display = "none";
   document.getElementById("appShell").style.display = "";
   document.getElementById("logoutBtn").classList.toggle("hidden", AUTH.mode !== "admin");
   render();

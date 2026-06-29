@@ -8,7 +8,8 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { sendJson, readBody, getToken, hashPassword, verifyPassword, generatePassword, todayIso } = require("../lib/shared.js");
+const { sendJson, readBody, getToken, hashPassword, verifyPassword, generatePassword, todayIso, requireAdmin } = require("../lib/shared.js");
+const { logActivity } = require("../lib/activity-log.js");
 
 const PROFESSIONALS_FILE = path.join(__dirname, "..", "professionals.json");
 
@@ -124,6 +125,7 @@ async function handle(req, res, { method, p, parts }) {
     };
     professionals.push(professional);
     saveProfessionals(professionals);
+    logActivity({ actorType: "professional", actorId: professional.id, actorLabel: professional.name, action: "professional.registered", meta: { category: professional.category } });
     sendJson(res, 201, { ...publicProfessional(professional), passwordPlain });
     return true;
   }
@@ -138,6 +140,7 @@ async function handle(req, res, { method, p, parts }) {
     prof.lastAccessAt = new Date().toISOString();
     saveProfessionals(professionals);
     const token = createProfessionalSession(prof.id);
+    logActivity({ actorType: "professional", actorId: prof.id, actorLabel: prof.name, action: "auth.login" });
     sendJson(res, 200, { token, professional: publicProfessional(prof) });
     return true;
   }
@@ -209,7 +212,39 @@ async function handle(req, res, { method, p, parts }) {
     return true;
   }
 
+  // ── Moderación (admin) ──────────────────────────────────────────────────
+  if (method === "GET" && p === "/api/admin/professionals") {
+    if (!requireAdmin(req, res)) return true;
+    sendJson(res, 200, professionals.map(publicProfessional)); // incluye pending/rejected/suspended, a diferencia del listado público
+    return true;
+  }
+  if (parts[0] === "api" && parts[1] === "admin" && parts[2] === "professionals" && parts[3] && parts[4] && method === "POST") {
+    if (!requireAdmin(req, res)) return true;
+    const prof = professionals.find(x => x.id === parts[3]);
+    if (!prof) { sendJson(res, 404, { error: "No encontrado." }); return true; }
+    const action = parts[4];
+    if (action === "approve") { prof.status = "approved"; logActivity({ actorType: "admin", action: "professional.approved", meta: { id: prof.id, name: prof.name } }); }
+    else if (action === "reject") { prof.status = "rejected"; logActivity({ actorType: "admin", action: "professional.rejected", meta: { id: prof.id, name: prof.name } }); }
+    else if (action === "suspend") { prof.status = "suspended"; logActivity({ actorType: "admin", action: "professional.suspended", meta: { id: prof.id, name: prof.name } }); }
+    else if (action === "feature") {
+      const body = await readBody(req);
+      const data = body ? JSON.parse(body) : {};
+      prof.featured = true;
+      prof.featuredUntil = data.featuredUntil || null;
+      logActivity({ actorType: "admin", action: "professional.featured", meta: { id: prof.id, name: prof.name } });
+    }
+    else if (action === "unfeature") { prof.featured = false; prof.featuredUntil = null; }
+    else { sendJson(res, 400, { error: "Acción no reconocida." }); return true; }
+    saveProfessionals(professionals);
+    sendJson(res, 200, publicProfessional(prof));
+    return true;
+  }
+
   return false;
 }
 
-module.exports = { handle, CATEGORIES, getProfessionalSession, findProfessionalById: id => professionals.find(x => x.id === id) };
+module.exports = {
+  handle, CATEGORIES, getProfessionalSession,
+  findProfessionalById: id => professionals.find(x => x.id === id),
+  getAllProfessionals: () => professionals // referencia de solo lectura -- para conteos del dashboard (Fase 5)
+};

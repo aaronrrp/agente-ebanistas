@@ -1789,7 +1789,8 @@ const routeModules = [
   require("./routes/companies.js"),
   require("./routes/retazos.js"),
   require("./routes/upload.js"),
-  require("./routes/admin-config.js")
+  require("./routes/admin-config.js"),
+  require("./routes/admin-dashboard.js")
 ];
 
 // ── Main router ─────────────────────────────────────────────────────────────
@@ -1916,8 +1917,11 @@ const server = http.createServer(async (req, res) => {
     // exporta handle(req,res,{method,p,parts}) y devuelve true si ya respondió. Se
     // prueban DESPUÉS de todo el if-chain de arriba (que queda intacto) para que
     // ninguna ruta existente cambie de comportamiento; esto es solo para lo nuevo.
+    // tenants/sellers/handoffs son referencias de SOLO LECTURA para módulos que
+    // necesitan tallar conteos (dashboard) -- igual que getCallerIdentity, evita que
+    // un módulo nuevo tenga que requerir server.js de vuelta (circular).
     for (const mod of routeModules) {
-      if (await mod.handle(req, res, { method, p, parts, getCallerIdentity })) return;
+      if (await mod.handle(req, res, { method, p, parts, getCallerIdentity, tenants, sellers, handoffs })) return;
     }
 
     await serveStatic(req, res);

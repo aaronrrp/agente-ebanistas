@@ -9,7 +9,8 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { sendJson, readBody, getToken, hashPassword, verifyPassword, generatePassword } = require("../lib/shared.js");
+const { sendJson, readBody, getToken, hashPassword, verifyPassword, generatePassword, requireAdmin } = require("../lib/shared.js");
+const { logActivity } = require("../lib/activity-log.js");
 
 const RETAZOS_FILE = path.join(__dirname, "..", "retazos.json");
 const FREE_USERS_FILE = path.join(__dirname, "..", "usuarios_gratuitos.json");
@@ -179,6 +180,7 @@ async function handle(req, res, { method, p, parts, getCallerIdentity }) {
     };
     retazos.push(retazo);
     saveRetazos(retazos);
+    logActivity({ actorType: owner.ownerType, actorId: owner.ownerId, action: "retazo.posted", meta: { id: retazo.id, material: retazo.material, isInspiration: retazo.isInspiration } });
     sendJson(res, 201, retazo);
     return true;
   }
@@ -223,7 +225,26 @@ async function handle(req, res, { method, p, parts, getCallerIdentity }) {
     }
   }
 
+  // ── Moderación (admin) -- a diferencia de professionals/companies, retazos no
+  // tiene "aprobar" (se publican directos, ver comentario en identityToOwner) --
+  // solo "eliminar por reporte" tiene sentido aquí.
+  if (method === "GET" && p === "/api/admin/retazos") {
+    if (!requireAdmin(req, res)) return true;
+    sendJson(res, 200, retazos);
+    return true;
+  }
+  if (parts[0] === "api" && parts[1] === "admin" && parts[2] === "retazos" && parts[3] && method === "DELETE") {
+    if (!requireAdmin(req, res)) return true;
+    const retazo = retazos.find(x => x.id === parts[3]);
+    if (!retazo) { sendJson(res, 404, { error: "No encontrado." }); return true; }
+    retazo.status = "removed";
+    saveRetazos(retazos);
+    logActivity({ actorType: "admin", action: "retazo.removed_by_admin", meta: { id: retazo.id } });
+    sendJson(res, 200, { ok: true });
+    return true;
+  }
+
   return false;
 }
 
-module.exports = { handle, MATERIALS, getFreeUserSession };
+module.exports = { handle, MATERIALS, getFreeUserSession, getAllRetazos: () => retazos };

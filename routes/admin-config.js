@@ -63,7 +63,12 @@ async function handle(req, res, { method, p }) {
     if (!requireAdmin(req, res)) return true;
     const body = await readBody(req);
     const data = body ? JSON.parse(body) : {};
-    plans = { ...plans, ...data };
+    // Merge POR PLAN, no solo a nivel del objeto completo -- si no, mandar solo
+    // {gratuito: {maxRetazoListings: 3}} borraría label/monthlyPrice de "gratuito"
+    // en vez de solo actualizar ese campo (esto pasó en pruebas, era un bug real).
+    for (const key of Object.keys(data)) {
+      plans[key] = { ...plans[key], ...data[key] };
+    }
     savePlans(plans);
     sendJson(res, 200, plans);
     return true;
@@ -78,7 +83,9 @@ async function handle(req, res, { method, p }) {
     if (!requireAdmin(req, res)) return true;
     const body = await readBody(req);
     const data = body ? JSON.parse(body) : {};
-    roles = { ...roles, ...data };
+    for (const key of Object.keys(data)) {
+      roles[key] = { ...roles[key], ...data[key] };
+    }
     saveRoles(roles);
     sendJson(res, 200, roles);
     return true;

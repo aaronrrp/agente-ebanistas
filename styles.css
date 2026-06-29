@@ -1949,3 +1949,40 @@ textarea {
   .public-topbar { padding: 12px 16px; }
   .public-hero h1 { font-size: 1.4rem; }
 }
+
+/* ── Sub-tabs del panel de Admin (mismo look que .login-tabs, pero con wrap
+   porque acá son 11 pestañas, no 2-3) ───────────────────────────────────── */
+.admin-subtabs {
+  display: flex; flex-wrap: wrap; gap: .4rem; background: #f1f5f9;
+  border-radius: 10px; padding: .3rem; margin-bottom: 1.25rem;
+}
+.admin-subtab {
+  padding: .5rem .9rem; border-radius: 8px; border: none;
+  background: transparent; font-size: .82rem; font-weight: 600;
+  color: #64748b; cursor: pointer; transition: all .18s; white-space: nowrap;
+}
+.admin-subtab.active { background: #fff; color: #0f172a; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+.admin-subpanel.hidden { display: none; }
+
+.admin-entity-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  padding: 12px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface-soft); margin-bottom: 8px;
+}
+.admin-entity-info { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 2px; }
+.admin-entity-info strong { font-size: .92rem; }
+.admin-entity-info span { font-size: .78rem; color: var(--muted); }
+.admin-status-badge {
+  display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: .72rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .02em;
+}
+.admin-status-badge.pending { background: var(--warn-soft); color: var(--warn); }
+.admin-status-badge.approved, .admin-status-badge.active { background: var(--accent-soft); color: var(--accent-dark); }
+.admin-status-badge.rejected, .admin-status-badge.suspended, .admin-status-badge.removed { background: var(--danger-soft); color: var(--danger); }
+.admin-entity-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.admin-log-row { display: flex; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--line); font-size: .82rem; }
+.admin-log-row time { color: var(--muted); flex-shrink: 0; white-space: nowrap; }
+.admin-bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; font-size: .85rem; }
+.admin-bar-row .admin-bar-label { flex: 0 0 160px; }
+.admin-bar-row .util-bar-wrap { flex: 1; }
+.admin-bar-row .admin-bar-count { flex: 0 0 36px; text-align: right; color: var(--muted); }

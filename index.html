@@ -400,86 +400,210 @@
         <div class="section-heading">
           <div>
             <p class="eyebrow">Panel admin</p>
-            <h2>Controla acceso y suscripciones</h2>
+            <h2>Panel de administración</h2>
           </div>
-          <button id="addTenantBtn" class="primary-btn" type="button">Nuevo ebanista</button>
         </div>
 
-        <div class="metrics-grid">
-          <article class="metric-card"><span>Clientes activos</span><strong id="activeCount">0</strong></article>
-          <article class="metric-card"><span>Suspendidos</span><strong id="suspendedCount">0</strong></article>
-          <article class="metric-card"><span>Cotizaciones</span><strong id="quoteCount">0</strong></article>
+        <div class="admin-subtabs" role="tablist">
+          <button class="admin-subtab active" data-admin-tab="dashboard" type="button">Dashboard</button>
+          <button class="admin-subtab" data-admin-tab="profesionales" type="button">Profesionales</button>
+          <button class="admin-subtab" data-admin-tab="empresas" type="button">Empresas</button>
+          <button class="admin-subtab" data-admin-tab="retazos" type="button">Retazos</button>
+          <button class="admin-subtab" data-admin-tab="publicidad" type="button">Publicidad</button>
+          <button class="admin-subtab" data-admin-tab="analiticas" type="button">Analíticas</button>
+          <button class="admin-subtab" data-admin-tab="moderacion" type="button">Moderación</button>
+          <button class="admin-subtab" data-admin-tab="configuracion" type="button">Configuración</button>
+          <button class="admin-subtab" data-admin-tab="logs" type="button">Logs</button>
+          <button class="admin-subtab" data-admin-tab="seguridad" type="button">Seguridad</button>
+          <button class="admin-subtab" data-admin-tab="ebanistas" type="button">Ebanistas</button>
         </div>
 
-        <div class="content-grid admin-grid-single">
-          <section class="panel">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-              <h3 style="margin:0">Ebanistas registrados</h3>
-              <button class="secondary-btn" id="resetDemoBtn" type="button" style="font-size:.8rem">Restaurar demo</button>
-            </div>
-            <div id="tenantList" class="tenant-list"></div>
+        <!-- ── Dashboard ─────────────────────────────────────────────────── -->
+        <div class="admin-subpanel active" data-admin-panel="dashboard">
+          <div class="metrics-grid" id="adm_dashboardMetrics"></div>
+          <section class="panel" style="margin-top:1.5rem">
+            <h3 style="margin:0 0 12px">Actividad reciente</h3>
+            <div id="adm_dashboardActivity"></div>
           </section>
         </div>
-        <!-- Prices section -->
-        <section class="panel" style="margin-top:1.5rem">
-          <details>
-            <summary style="cursor:pointer;font-weight:600;font-size:1rem;padding:.5rem 0;list-style:none;display:flex;align-items:center;gap:.5rem">
-              <span>💲</span> Precios de mercado
-              <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:.5rem">El IA usa estos valores al cotizar</span>
-            </summary>
-            <div style="padding-top:1rem">
-              <!-- All price groups rendered dynamically by renderPricesForm() -->
-              <div id="pricesGrid" class="prices-grid"></div>
 
-              <!-- Add custom price item form -->
-              <div style="border-top:1px solid #E5E7EB;padding-top:1rem;margin-top:.75rem">
-                <h4 class="price-group-title" style="margin-bottom:.6rem">➕ Agregar precio personalizado</h4>
-                <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-                  <input id="newPriceName" placeholder="Nombre del ítem (ej: Bisagra especial 95°)" style="flex:3;min-width:160px;padding:.35rem .5rem;border:1px solid #D1D5DB;border-radius:6px;font-size:.85rem">
-                  <input id="newPriceValue" type="number" placeholder="$ Precio" min="0" step="0.01" style="flex:0 0 90px;padding:.35rem .5rem;border:1px solid #D1D5DB;border-radius:6px;font-size:.85rem">
-                  <select id="newPriceCategory" style="flex:2;min-width:150px;padding:.35rem .5rem;border:1px solid #D1D5DB;border-radius:6px;font-size:.85rem;background:#fff">
-                    <option value="madera">🪵 Madera / Melamina</option>
-                    <option value="canto">🔄 Canto PVC</option>
-                    <option value="bisagras">🔩 Bisagras y correderas</option>
-                    <option value="jaladores">🪝 Jaladores</option>
-                    <option value="mano">🚚 Mano de obra</option>
-                    <option value="adhesivos">🧴 Pegamentos y solventes</option>
-                    <option value="cerraduras">🔐 Cerraduras y herrajes</option>
-                    <option value="herramientas">🛠️ Herramientas y equipo</option>
-                    <option value="organizacion">🗄️ Cocina y organización</option>
-                  </select>
-                  <button id="addCustomPriceBtn" class="secondary-btn" type="button" style="font-size:.85rem">+ Agregar</button>
+        <!-- ── Profesionales ─────────────────────────────────────────────── -->
+        <div class="admin-subpanel hidden" data-admin-panel="profesionales">
+          <section class="panel">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+              <h3 style="margin:0">Profesionales registrados</h3>
+              <button class="secondary-btn" id="adm_refreshProfessionalsBtn" type="button">🔄 Actualizar</button>
+            </div>
+            <div id="adm_professionalsList"></div>
+          </section>
+        </div>
+
+        <!-- ── Empresas ──────────────────────────────────────────────────── -->
+        <div class="admin-subpanel hidden" data-admin-panel="empresas">
+          <section class="panel">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+              <h3 style="margin:0">Empresas registradas</h3>
+              <button class="secondary-btn" id="adm_refreshCompaniesBtn" type="button">🔄 Actualizar</button>
+            </div>
+            <div id="adm_companiesList"></div>
+          </section>
+        </div>
+
+        <!-- ── Retazos ───────────────────────────────────────────────────── -->
+        <div class="admin-subpanel hidden" data-admin-panel="retazos">
+          <section class="panel">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+              <h3 style="margin:0">Publicaciones del Centro de Retazos</h3>
+              <button class="secondary-btn" id="adm_refreshRetazosBtn" type="button">🔄 Actualizar</button>
+            </div>
+            <div id="adm_retazosList"></div>
+          </section>
+        </div>
+
+        <!-- ── Publicidad (placeholder -- se completa en Fase 6) ────────────── -->
+        <div class="admin-subpanel hidden" data-admin-panel="publicidad">
+          <section class="panel"><p class="login-hint">El marketplace de publicidad llega en la siguiente fase.</p></section>
+        </div>
+
+        <!-- ── Analíticas ────────────────────────────────────────────────── -->
+        <div class="admin-subpanel hidden" data-admin-panel="analiticas">
+          <section class="panel">
+            <h3 style="margin:0 0 12px">Profesionales por categoría</h3>
+            <div id="adm_analyticsProfessionals"></div>
+          </section>
+          <section class="panel" style="margin-top:1.5rem">
+            <h3 style="margin:0 0 12px">Empresas por categoría</h3>
+            <div id="adm_analyticsCompanies"></div>
+          </section>
+        </div>
+
+        <!-- ── Moderación (resumen de lo que necesita atención) ─────────────── -->
+        <div class="admin-subpanel hidden" data-admin-panel="moderacion">
+          <section class="panel">
+            <h3 style="margin:0 0 12px">Pendientes de revisión</h3>
+            <div id="adm_moderationList"></div>
+          </section>
+        </div>
+
+        <!-- ── Configuración (planes, sin tocar código) ─────────────────────── -->
+        <div class="admin-subpanel hidden" data-admin-panel="configuracion">
+          <section class="panel">
+            <h3 style="margin:0 0 12px">Planes</h3>
+            <div id="adm_plansEditor"></div>
+            <button class="primary-btn" id="adm_savePlansBtn" type="button" style="margin-top:12px">Guardar planes</button>
+          </section>
+          <!-- Prices section (ya existía, solo se movió aquí dentro) -->
+          <section class="panel" style="margin-top:1.5rem">
+            <details>
+              <summary style="cursor:pointer;font-weight:600;font-size:1rem;padding:.5rem 0;list-style:none;display:flex;align-items:center;gap:.5rem">
+                <span>💲</span> Precios de mercado
+                <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:.5rem">El IA usa estos valores al cotizar</span>
+              </summary>
+              <div style="padding-top:1rem">
+                <div id="pricesGrid" class="prices-grid"></div>
+                <div style="border-top:1px solid #E5E7EB;padding-top:1rem;margin-top:.75rem">
+                  <h4 class="price-group-title" style="margin-bottom:.6rem">➕ Agregar precio personalizado</h4>
+                  <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                    <input id="newPriceName" placeholder="Nombre del ítem (ej: Bisagra especial 95°)" style="flex:3;min-width:160px;padding:.35rem .5rem;border:1px solid #D1D5DB;border-radius:6px;font-size:.85rem">
+                    <input id="newPriceValue" type="number" placeholder="$ Precio" min="0" step="0.01" style="flex:0 0 90px;padding:.35rem .5rem;border:1px solid #D1D5DB;border-radius:6px;font-size:.85rem">
+                    <select id="newPriceCategory" style="flex:2;min-width:150px;padding:.35rem .5rem;border:1px solid #D1D5DB;border-radius:6px;font-size:.85rem;background:#fff">
+                      <option value="madera">🪵 Madera / Melamina</option>
+                      <option value="canto">🔄 Canto PVC</option>
+                      <option value="bisagras">🔩 Bisagras y correderas</option>
+                      <option value="jaladores">🪝 Jaladores</option>
+                      <option value="mano">🚚 Mano de obra</option>
+                      <option value="adhesivos">🧴 Pegamentos y solventes</option>
+                      <option value="cerraduras">🔐 Cerraduras y herrajes</option>
+                      <option value="herramientas">🛠️ Herramientas y equipo</option>
+                      <option value="organizacion">🗄️ Cocina y organización</option>
+                    </select>
+                    <button id="addCustomPriceBtn" class="secondary-btn" type="button" style="font-size:.85rem">+ Agregar</button>
+                  </div>
+                </div>
+                <div style="display:flex;gap:.75rem;margin-top:1rem">
+                  <button id="savePricesBtn" class="primary-btn" type="button">Guardar precios</button>
+                  <button id="resetPricesBtn" class="secondary-btn" type="button">Restaurar defecto</button>
                 </div>
               </div>
+            </details>
+          </section>
+        </div>
 
-              <div style="display:flex;gap:.75rem;margin-top:1rem">
-                <button id="savePricesBtn" class="primary-btn" type="button">Guardar precios</button>
-                <button id="resetPricesBtn" class="secondary-btn" type="button">Restaurar defecto</button>
-              </div>
+        <!-- ── Logs / Auditoría ──────────────────────────────────────────── -->
+        <div class="admin-subpanel hidden" data-admin-panel="logs">
+          <section class="panel">
+            <div class="form-grid" style="margin-bottom:12px">
+              <label>Desde
+                <input id="adm_logFrom" type="date">
+              </label>
+              <label>Hasta
+                <input id="adm_logTo" type="date">
+              </label>
+              <label>Acción contiene
+                <input id="adm_logActionFilter" type="text" placeholder="Ej: professional, auth.login">
+              </label>
             </div>
-          </details>
-        </section>
+            <button class="secondary-btn" id="adm_loadLogsBtn" type="button">🔍 Buscar</button>
+            <div id="adm_logsList" style="margin-top:12px"></div>
+          </section>
+        </div>
 
-        <!-- Hidden form elements kept for compatibility with renderTenantForm -->
-        <form id="tenantForm" style="display:none">
-          <input type="hidden" id="tenantId">
-          <input type="hidden" id="companyName">
-          <input type="hidden" id="contactName">
-          <input type="hidden" id="phone">
-          <input type="hidden" id="email">
-          <select id="status" style="display:none"><option value="active">Activo</option><option value="past_due">Vencido</option><option value="suspended">Suspendido</option></select>
-          <input type="hidden" id="expiresAt">
-          <input type="hidden" id="margin">
-          <input type="hidden" id="installBase">
-          <input type="hidden" id="transportBase">
-          <textarea id="materials" style="display:none"></textarea>
-          <textarea id="terms" style="display:none"></textarea>
-          <textarea id="catalogFurnitureTypes" style="display:none"></textarea>
-          <textarea id="catalogEdgeOptions" style="display:none"></textarea>
-          <textarea id="catalogHingeOptions" style="display:none"></textarea>
-          <textarea id="catalogSlideOptions" style="display:none"></textarea>
-          <textarea id="catalogHandleOptions" style="display:none"></textarea>
-        </form>
+        <!-- ── Seguridad (roles y permisos) ──────────────────────────────── -->
+        <div class="admin-subpanel hidden" data-admin-panel="seguridad">
+          <section class="panel">
+            <h3 style="margin:0 0 8px">Roles y permisos</h3>
+            <p class="login-hint">Cada rol solo puede hacer lo que está en su lista de permisos ("*" = todo).</p>
+            <div id="adm_rolesList"></div>
+          </section>
+        </div>
+
+        <!-- ── Ebanistas (lo que ya existía, sin cambios) ────────────────────── -->
+        <div class="admin-subpanel hidden" data-admin-panel="ebanistas">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Ebanistas</p>
+              <h2>Controla acceso y suscripciones</h2>
+            </div>
+            <button id="addTenantBtn" class="primary-btn" type="button">Nuevo ebanista</button>
+          </div>
+
+          <div class="metrics-grid">
+            <article class="metric-card"><span>Clientes activos</span><strong id="activeCount">0</strong></article>
+            <article class="metric-card"><span>Suspendidos</span><strong id="suspendedCount">0</strong></article>
+            <article class="metric-card"><span>Cotizaciones</span><strong id="quoteCount">0</strong></article>
+          </div>
+
+          <div class="content-grid admin-grid-single">
+            <section class="panel">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+                <h3 style="margin:0">Ebanistas registrados</h3>
+                <button class="secondary-btn" id="resetDemoBtn" type="button" style="font-size:.8rem">Restaurar demo</button>
+              </div>
+              <div id="tenantList" class="tenant-list"></div>
+            </section>
+          </div>
+
+          <!-- Hidden form elements kept for compatibility with renderTenantForm -->
+          <form id="tenantForm" style="display:none">
+            <input type="hidden" id="tenantId">
+            <input type="hidden" id="companyName">
+            <input type="hidden" id="contactName">
+            <input type="hidden" id="phone">
+            <input type="hidden" id="email">
+            <select id="status" style="display:none"><option value="active">Activo</option><option value="past_due">Vencido</option><option value="suspended">Suspendido</option></select>
+            <input type="hidden" id="expiresAt">
+            <input type="hidden" id="margin">
+            <input type="hidden" id="installBase">
+            <input type="hidden" id="transportBase">
+            <textarea id="materials" style="display:none"></textarea>
+            <textarea id="terms" style="display:none"></textarea>
+            <textarea id="catalogFurnitureTypes" style="display:none"></textarea>
+            <textarea id="catalogEdgeOptions" style="display:none"></textarea>
+            <textarea id="catalogHingeOptions" style="display:none"></textarea>
+            <textarea id="catalogSlideOptions" style="display:none"></textarea>
+            <textarea id="catalogHandleOptions" style="display:none"></textarea>
+          </form>
+        </div>
       </section>
 
       <section id="clientView" class="view">

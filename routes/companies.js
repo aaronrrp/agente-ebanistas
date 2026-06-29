@@ -6,7 +6,8 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { sendJson, readBody, getToken, hashPassword, verifyPassword, generatePassword } = require("../lib/shared.js");
+const { sendJson, readBody, getToken, hashPassword, verifyPassword, generatePassword, requireAdmin } = require("../lib/shared.js");
+const { logActivity } = require("../lib/activity-log.js");
 
 const COMPANIES_FILE = path.join(__dirname, "..", "companies.json");
 
@@ -25,7 +26,13 @@ function saveCompanies(list) {
 let companies = loadCompanies();
 
 function publicCompany(c) {
-  const { passwordHash, passwordSalt, paymentNote, ...rest } = c; // paymentNote es solo para el admin (Fase 5), nunca sale al público ni a la empresa misma
+  const { passwordHash, passwordSalt, paymentNote, ...rest } = c; // paymentNote es solo para el admin, nunca sale al público ni a la empresa misma
+  return rest;
+}
+// Para las vistas de Admin: todo MENOS las contraseñas -- a diferencia de
+// publicCompany(), el admin sí necesita ver/editar paymentNote.
+function adminCompanyView(c) {
+  const { passwordHash, passwordSalt, ...rest } = c;
   return rest;
 }
 
@@ -109,6 +116,7 @@ async function handle(req, res, { method, p, parts }) {
     };
     companies.push(company);
     saveCompanies(companies);
+    logActivity({ actorType: "company", actorId: company.id, actorLabel: company.name, action: "company.registered", meta: { category: company.category } });
     sendJson(res, 201, { ...publicCompany(company), passwordPlain });
     return true;
   }
@@ -122,6 +130,7 @@ async function handle(req, res, { method, p, parts }) {
     company.lastAccessAt = new Date().toISOString();
     saveCompanies(companies);
     const token = createCompanySession(company.id);
+    logActivity({ actorType: "company", actorId: company.id, actorLabel: company.name, action: "auth.login" });
     sendJson(res, 200, { token, company: publicCompany(company) });
     return true;
   }
@@ -259,7 +268,40 @@ async function handle(req, res, { method, p, parts }) {
     return true;
   }
 
+  // ── Moderación (admin) ──────────────────────────────────────────────────
+  if (method === "GET" && p === "/api/admin/companies") {
+    if (!requireAdmin(req, res)) return true;
+    sendJson(res, 200, companies.map(adminCompanyView));
+    return true;
+  }
+  if (parts[0] === "api" && parts[1] === "admin" && parts[2] === "companies" && parts[3] && parts[4] && method === "POST") {
+    if (!requireAdmin(req, res)) return true;
+    const company = findCompanyById(parts[3]);
+    if (!company) { sendJson(res, 404, { error: "No encontrado." }); return true; }
+    const action = parts[4];
+    if (action === "approve") { company.status = "approved"; logActivity({ actorType: "admin", action: "company.approved", meta: { id: company.id, name: company.name } }); }
+    else if (action === "reject") { company.status = "rejected"; logActivity({ actorType: "admin", action: "company.rejected", meta: { id: company.id, name: company.name } }); }
+    else if (action === "suspend") { company.status = "suspended"; logActivity({ actorType: "admin", action: "company.suspended", meta: { id: company.id, name: company.name } }); }
+    else if (action === "feature") {
+      const body = await readBody(req);
+      const data = body ? JSON.parse(body) : {};
+      company.featured = true;
+      company.featuredUntil = data.featuredUntil || null;
+      logActivity({ actorType: "admin", action: "company.featured", meta: { id: company.id, name: company.name } });
+    }
+    else if (action === "unfeature") { company.featured = false; company.featuredUntil = null; }
+    else if (action === "set-payment-note") {
+      const body = await readBody(req);
+      const data = body ? JSON.parse(body) : {};
+      company.paymentNote = data.paymentNote || "";
+    }
+    else { sendJson(res, 400, { error: "Acción no reconocida." }); return true; }
+    saveCompanies(companies);
+    sendJson(res, 200, adminCompanyView(company));
+    return true;
+  }
+
   return false;
 }
 
-module.exports = { handle, CATEGORIES, getCompanySession, findCompanyById };
+module.exports = { handle, CATEGORIES, getCompanySession, findCompanyById, getAllCompanies: () => companies };
