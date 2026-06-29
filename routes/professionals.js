@@ -212,4 +212,4 @@ async function handle(req, res, { method, p, parts }) {
   return false;
 }
 
-module.exports = { handle, CATEGORIES };
+module.exports = { handle, CATEGORIES, getProfessionalSession, findProfessionalById: id => professionals.find(x => x.id === id) };

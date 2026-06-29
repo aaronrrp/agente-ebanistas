@@ -262,4 +262,4 @@ async function handle(req, res, { method, p, parts }) {
   return false;
 }
 
-module.exports = { handle, CATEGORIES };
+module.exports = { handle, CATEGORIES, getCompanySession, findCompanyById };

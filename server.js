@@ -9,6 +9,12 @@ const {
   generatePassword, hashPassword, verifyPassword, makeStableId, todayIso, dataUrlToBlob,
   adminSessions, SESSION_TTL, createSession, isValidSession, requireAdmin
 } = require("./lib/shared.js");
+// require() está cacheado por Node -- estas referencias apuntan a los MISMOS módulos
+// (y las mismas Map() de sesión) que usa el dispatcher de routeModules más abajo.
+// getCallerIdentity() los necesita para reconocer a los 3 tipos de cuenta nuevos.
+const { getProfessionalSession } = require("./routes/professionals.js");
+const { getCompanySession } = require("./routes/companies.js");
+const { getFreeUserSession } = require("./routes/retazos.js");
 
 const rootDir = __dirname;
 const port = Number(process.env.PORT || 5174);
@@ -120,6 +126,12 @@ function getCallerIdentity(req) {
   if (eb) return { role: "ebanista", tenantId: eb.tenantId };
   const se = getSellerSession(token);
   if (se) return { role: "vendedor", sellerId: se.sellerId };
+  const pro = getProfessionalSession(token);
+  if (pro) return { role: "professional", professionalId: pro.professionalId };
+  const co = getCompanySession(token);
+  if (co) return { role: "company", companyId: co.companyId };
+  const fu = getFreeUserSession(token);
+  if (fu) return { role: "usuario_gratuito", freeUserId: fu.freeUserId };
   return null;
 }
 
@@ -1775,6 +1787,7 @@ async function serveStatic(req, res) {
 const routeModules = [
   require("./routes/professionals.js"),
   require("./routes/companies.js"),
+  require("./routes/retazos.js"),
   require("./routes/upload.js")
 ];
 
@@ -1903,7 +1916,7 @@ const server = http.createServer(async (req, res) => {
     // prueban DESPUÉS de todo el if-chain de arriba (que queda intacto) para que
     // ninguna ruta existente cambie de comportamiento; esto es solo para lo nuevo.
     for (const mod of routeModules) {
-      if (await mod.handle(req, res, { method, p, parts })) return;
+      if (await mod.handle(req, res, { method, p, parts, getCallerIdentity })) return;
     }
 
     await serveStatic(req, res);

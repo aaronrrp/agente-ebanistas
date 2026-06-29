@@ -7943,17 +7943,22 @@ document.getElementById("pf_submitRegisterBtn")?.addEventListener("click", async
 });
 
 // ── Tabs del directorio público: Profesionales / Empresas ───────────────────
+const PUBLIC_SUBVIEW_IDS = [
+  "publicDirectoryView", "publicRegisterView", "publicCompaniesView", "publicCompanyRegisterView",
+  "publicRetazosView", "rz_loginGateView", "rz_publishView"
+];
+function hideAllPublicSubviews() {
+  PUBLIC_SUBVIEW_IDS.forEach(id => document.getElementById(id)?.classList.add("hidden"));
+}
 document.querySelectorAll("[data-public-tab]").forEach(btn => {
   btn.addEventListener("click", () => {
     document.querySelectorAll("[data-public-tab]").forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
     const tab = btn.dataset.publicTab;
-    document.getElementById("publicDirectoryView").classList.toggle("hidden", tab !== "profesionales");
-    document.getElementById("publicRegisterView").classList.add("hidden");
-    document.getElementById("publicCompaniesView").classList.toggle("hidden", tab !== "empresas");
-    document.getElementById("publicCompanyRegisterView").classList.add("hidden");
+    hideAllPublicSubviews();
     if (tab === "profesionales") document.getElementById("publicDirectoryView").classList.remove("hidden");
     if (tab === "empresas") { document.getElementById("publicCompaniesView").classList.remove("hidden"); loadPublicCompanies(); }
+    if (tab === "retazos") { document.getElementById("publicRetazosView").classList.remove("hidden"); loadPublicRetazos(); loadPublicInspiration(); }
   });
 });
 
@@ -8066,6 +8071,193 @@ document.getElementById("co_submitRegisterBtn")?.addEventListener("click", async
     toast(`¡Listo! Tu código de acceso es ${data.accessCode} — guárdalo para entrar a tu panel.`);
     document.getElementById("publicCompanyRegisterView").classList.add("hidden");
     document.getElementById("publicCompaniesView").classList.remove("hidden");
+  } catch {
+    errEl.textContent = "Sin conexión al servidor.";
+    errEl.classList.remove("hidden");
+  }
+});
+
+// ── Centro Sostenible de Retazos ─────────────────────────────────────────────
+// Publicar requiere alguna sesión (ebanista/profesional/empresa/usuario gratuito).
+// El estado de "con qué identidad estoy publicando" vive aparte del AUTH principal
+// (que es para el panel logueado de toda la vida) -- mismo motivo que
+// professionalSessions/companySessions están separados de adminSessions en el
+// servidor: roles nuevos no deben mezclarse con los que ya funcionan.
+let _publicPostAuth = JSON.parse(sessionStorage.getItem("publicPostAuth") || "null"); // {token, role}
+
+function setPublicPostAuth(token, role) {
+  _publicPostAuth = { token, role };
+  sessionStorage.setItem("publicPostAuth", JSON.stringify(_publicPostAuth));
+}
+
+function materialLabel(m) {
+  return { melamina: "Melamina", mdf: "MDF", madera: "Madera", triplay: "Triplay", otro: "Otro" }[m] || m;
+}
+
+function retazoCardHtml(r) {
+  const dims = r.dimensions?.width && r.dimensions?.height ? `${r.dimensions.width}×${r.dimensions.height}mm` : "";
+  const priceLabel = r.isFree ? "Gratis" : `$${Number(r.price || 0).toFixed(2)}`;
+  return `
+    <div class="public-pro-card">
+      ${r.photos?.[0] ? `<img src="${escapeHtml(r.photos[0])}" alt="" class="public-pro-photo">` : `<div class="public-pro-photo public-pro-photo-placeholder">♻️</div>`}
+      <div class="public-pro-body">
+        <strong>${escapeHtml(materialLabel(r.material))}${r.color ? " · " + escapeHtml(r.color) : ""}</strong>
+        <span class="public-pro-category">${[r.thickness ? r.thickness + "mm" : "", dims, `Cant: ${r.quantity || 1}`].filter(Boolean).join(" · ")}</span>
+        ${r.location?.city ? `<span class="public-pro-location">📍 ${escapeHtml(r.location.city)}</span>` : ""}
+        <strong style="color:var(--accent);margin-top:4px">${priceLabel}</strong>
+        <button class="primary-btn public-pro-contact" type="button" data-retazo-contact-id="${r.id}" data-contact-phone="${escapeHtml(r.contact?.whatsapp || r.contact?.phone || "")}">📞 Contactar</button>
+      </div>
+    </div>`;
+}
+
+async function loadPublicRetazos() {
+  const grid = document.getElementById("publicRetazosGrid");
+  if (!grid) return;
+  grid.innerHTML = '<p class="login-hint">Cargando…</p>';
+  const params = new URLSearchParams();
+  const material = document.getElementById("rz_filterMaterial")?.value;
+  const thickness = document.getElementById("rz_filterThickness")?.value;
+  const color = document.getElementById("rz_filterColor")?.value.trim();
+  const city = document.getElementById("rz_filterCity")?.value.trim();
+  const freeOnly = document.getElementById("rz_filterFreeOnly")?.checked;
+  if (material) params.set("material", material);
+  if (thickness) params.set("thickness", thickness);
+  if (color) params.set("color", color);
+  if (city) params.set("city", city);
+  if (freeOnly) params.set("isFree", "true");
+  try {
+    const res = await fetch(`/api/retazos?${params.toString()}`);
+    const list = res.ok ? await res.json() : [];
+    grid.innerHTML = list.length ? list.map(retazoCardHtml).join("") : '<p class="login-hint">No hay retazos publicados todavía que coincidan.</p>';
+  } catch {
+    grid.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>';
+  }
+}
+
+async function loadPublicInspiration() {
+  const grid = document.getElementById("publicInspirationGrid");
+  if (!grid) return;
+  grid.innerHTML = '<p class="login-hint">Cargando…</p>';
+  try {
+    const res = await fetch("/api/retazos?isInspiration=true");
+    const list = res.ok ? await res.json() : [];
+    grid.innerHTML = list.length ? list.map(retazoCardHtml).join("") : '<p class="login-hint">Todavía no hay proyectos de inspiración publicados.</p>';
+  } catch {
+    grid.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>';
+  }
+}
+
+document.getElementById("rz_applyFiltersBtn")?.addEventListener("click", loadPublicRetazos);
+document.getElementById("publicRetazosGrid")?.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-retazo-contact-id]");
+  if (!btn) return;
+  const phone = btn.dataset.contactPhone;
+  if (phone) window.open(`https://wa.me/${phone.replace(/[^0-9]/g, "")}`, "_blank");
+});
+
+document.getElementById("rz_showPublishBtn")?.addEventListener("click", () => {
+  hideAllPublicSubviews();
+  if (_publicPostAuth?.token) document.getElementById("rz_publishView").classList.remove("hidden");
+  else document.getElementById("rz_loginGateView").classList.remove("hidden");
+});
+document.getElementById("rz_backFromGateBtn")?.addEventListener("click", () => {
+  hideAllPublicSubviews();
+  document.getElementById("publicRetazosView").classList.remove("hidden");
+});
+document.getElementById("rz_backFromPublishBtn")?.addEventListener("click", () => {
+  hideAllPublicSubviews();
+  document.getElementById("publicRetazosView").classList.remove("hidden");
+});
+
+document.querySelectorAll("[data-gate-tab]").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("[data-gate-tab]").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    const tab = btn.dataset.gateTab;
+    document.getElementById("rz_gateLoginPanel").classList.toggle("hidden", tab !== "login");
+    document.getElementById("rz_gateRegisterPanel").classList.toggle("hidden", tab !== "register");
+  });
+});
+
+// "Ya tengo cuenta": probamos los 4 tipos de login en secuencia con el mismo código
+// y contraseña -- evita pedirle al usuario que recuerde "qué tipo" de cuenta es,
+// que para el público de 30-65 años sin experiencia técnica es una pregunta rara.
+document.getElementById("rz_gateLoginBtn")?.addEventListener("click", async () => {
+  const errEl = document.getElementById("rz_gateError");
+  errEl.classList.add("hidden");
+  const code = document.getElementById("rz_gateLoginCode").value.trim();
+  const password = document.getElementById("rz_gateLoginPassword").value;
+  if (!code || !password) { errEl.textContent = "Completa código y contraseña."; errEl.classList.remove("hidden"); return; }
+  const attempts = [
+    { url: "/api/auth/professional", role: "professional" },
+    { url: "/api/auth/company", role: "company" },
+    { url: "/api/auth/free-user", role: "usuario_gratuito" },
+    { url: "/api/auth/ebanista", role: "ebanista" },
+    { url: "/api/auth/seller", role: "vendedor" }
+  ];
+  for (const attempt of attempts) {
+    try {
+      const res = await fetch(attempt.url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, password }) });
+      if (res.ok) {
+        const data = await res.json();
+        setPublicPostAuth(data.token, attempt.role);
+        hideAllPublicSubviews();
+        document.getElementById("rz_publishView").classList.remove("hidden");
+        return;
+      }
+    } catch { errEl.textContent = "Sin conexión al servidor."; errEl.classList.remove("hidden"); return; }
+  }
+  errEl.textContent = "Código o contraseña incorrectos.";
+  errEl.classList.remove("hidden");
+});
+
+document.getElementById("rz_gateRegisterBtn")?.addEventListener("click", async () => {
+  const errEl = document.getElementById("rz_gateError");
+  errEl.classList.add("hidden");
+  const name = document.getElementById("rz_gateRegName").value.trim();
+  const password = document.getElementById("rz_gateRegPassword").value;
+  if (!name) { errEl.textContent = "Falta tu nombre."; errEl.classList.remove("hidden"); return; }
+  if (!password || password.length < 4) { errEl.textContent = "La contraseña necesita al menos 4 caracteres."; errEl.classList.remove("hidden"); return; }
+  try {
+    const res = await fetch("/api/free-users/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, password }) });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || "No se pudo registrar."; errEl.classList.remove("hidden"); return; }
+    const login = await (await fetch("/api/auth/free-user", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: data.accessCode, password }) })).json();
+    setPublicPostAuth(login.token, "usuario_gratuito");
+    toast(`Cuenta creada — tu código es ${data.accessCode}, guárdalo.`);
+    hideAllPublicSubviews();
+    document.getElementById("rz_publishView").classList.remove("hidden");
+  } catch {
+    errEl.textContent = "Sin conexión al servidor.";
+    errEl.classList.remove("hidden");
+  }
+});
+
+document.getElementById("rz_submitPublishBtn")?.addEventListener("click", async () => {
+  const errEl = document.getElementById("rz_publishError");
+  errEl.classList.add("hidden");
+  if (!_publicPostAuth?.token) { errEl.textContent = "Tu sesión expiró, inicia sesión de nuevo."; errEl.classList.remove("hidden"); return; }
+  const payload = {
+    material: document.getElementById("rz_pubMaterial").value,
+    color: document.getElementById("rz_pubColor").value.trim(),
+    thickness: Number(document.getElementById("rz_pubThickness").value) || 0,
+    quantity: Number(document.getElementById("rz_pubQuantity").value) || 1,
+    dimensions: { width: Number(document.getElementById("rz_pubWidth").value) || 0, height: Number(document.getElementById("rz_pubHeight").value) || 0 },
+    price: Number(document.getElementById("rz_pubPrice").value) || 0,
+    isFree: (Number(document.getElementById("rz_pubPrice").value) || 0) === 0,
+    location: { province: document.getElementById("rz_pubProvince").value.trim(), city: document.getElementById("rz_pubCity").value.trim() },
+    contact: { whatsapp: document.getElementById("rz_pubWhatsapp").value.trim() },
+    isInspiration: document.getElementById("rz_pubIsInspiration").checked
+  };
+  try {
+    const res = await fetch("/api/retazos", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${_publicPostAuth.token}` }, body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || "No se pudo publicar."; errEl.classList.remove("hidden"); return; }
+    toast("¡Publicado! ✓");
+    hideAllPublicSubviews();
+    document.getElementById("publicRetazosView").classList.remove("hidden");
+    loadPublicRetazos();
+    loadPublicInspiration();
   } catch {
     errEl.textContent = "Sin conexión al servidor.";
     errEl.classList.remove("hidden");
