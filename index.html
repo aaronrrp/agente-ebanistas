@@ -18,15 +18,17 @@
 
   <!-- ── LOGIN SCREEN ─────────────────────────────────────────── -->
   <div id="loginScreen" class="login-screen" style="display:none">
+    <button id="loginBackBtn" class="login-back-btn" type="button">← Volver al inicio</button>
     <div class="login-card">
       <div class="login-logo">🪚</div>
       <h1 class="login-title">Agente Ebanistas</h1>
       <p class="login-subtitle">Plataforma SaaS para muebles a la medida</p>
 
-      <div class="login-tabs" role="tablist">
-        <button class="login-tab active" data-login-tab="code" type="button" role="tab">Soy ebanista</button>
-        <button class="login-tab" data-login-tab="seller" type="button" role="tab">Soy vendedor</button>
-        <button class="login-tab" data-login-tab="admin" type="button" role="tab">Administrador</button>
+      <div class="login-tabs" role="tablist" style="flex-wrap:wrap">
+        <button class="login-tab active" data-login-tab="code" type="button" role="tab">Ebanista</button>
+        <button class="login-tab" data-login-tab="company" type="button" role="tab">Empresa</button>
+        <button class="login-tab" data-login-tab="seller" type="button" role="tab">Vendedor</button>
+        <button class="login-tab" data-login-tab="admin" type="button" role="tab">Admin</button>
       </div>
 
       <!-- Tab: ebanista por código -->
@@ -38,6 +40,17 @@
         <input id="loginEbPasswordInput" class="login-input hidden" type="password"
                placeholder="Tu contraseña" autocomplete="current-password">
         <button id="loginCodeBtn" class="primary-btn login-btn" type="button">Ingresar →</button>
+      </div>
+
+      <!-- Tab: empresa -->
+      <div id="loginCompanyPanel" class="login-panel hidden" role="tabpanel">
+        <p class="login-hint">Accede con las credenciales que recibiste al activar tu cuenta de empresa.</p>
+        <input id="loginCompanyCode" class="login-input" type="text"
+               placeholder="Código de acceso (ej: ferreteria-abc123)"
+               autocomplete="off" autocapitalize="none" spellcheck="false">
+        <input id="loginCompanyPassword" class="login-input" type="password"
+               placeholder="Contraseña" autocomplete="current-password">
+        <button id="loginCompanyBtn" class="primary-btn login-btn" type="button">Entrar →</button>
       </div>
 
       <!-- Tab: vendedor por código -->
@@ -74,6 +87,13 @@
           <span class="public-topbar-tagline">Directorio Profesional</span>
         </div>
       </div>
+      <nav class="public-nav-links" aria-label="Navegación pública">
+        <button class="public-nav-link active" data-public-nav="inicio" type="button">Inicio</button>
+        <button class="public-nav-link" data-public-nav="directorio" type="button">Directorio</button>
+        <button class="public-nav-link" data-public-nav="empresas" type="button">Empresas</button>
+        <button class="public-nav-link" data-public-nav="profesionales" type="button">Profesionales</button>
+        <button class="public-nav-link" data-public-nav="retazos" type="button">♻️ Centro Sostenible</button>
+      </nav>
       <button id="publicLoginBtn" class="secondary-btn" type="button">Iniciar sesión</button>
     </header>
 
@@ -381,6 +401,368 @@
     </main>
   </div>
   <!-- ── END DIRECTORIO PROFESIONAL ───────────────────────────────── -->
+
+  <!-- ── PORTAL DE EMPRESA (panel privado por empresa) ─────────────── -->
+  <div id="companyShell" style="display:none">
+    <div id="coSidebarOverlay" class="co-sidebar-overlay" onclick="document.getElementById('companyShell').classList.remove('co-open')"></div>
+    <aside class="co-sidebar">
+      <!-- Brand -->
+      <div class="co-brand">
+        <div class="co-brand-logo" id="co_sidebarLogo">🏢</div>
+        <div class="co-brand-text">
+          <strong id="co_sidebarName">Mi Empresa</strong>
+          <span>Portal Empresa</span>
+        </div>
+      </div>
+      <!-- Nav -->
+      <nav class="co-nav">
+        <button class="co-nav-item active" data-co-view="coDashboard">📊 <span>Dashboard</span></button>
+        <button class="co-nav-item" data-co-view="coMiEmpresa">🏢 <span>Mi Empresa</span></button>
+        <button class="co-nav-item" data-co-view="coSucursales">📍 <span>Sucursales</span></button>
+        <button class="co-nav-item" data-co-view="coProductos">📦 <span>Productos</span></button>
+        <button class="co-nav-item" data-co-view="coCategorias">🗂️ <span>Categorías</span></button>
+        <button class="co-nav-item" data-co-view="coPromociones">🏷️ <span>Promociones</span></button>
+        <button class="co-nav-item" data-co-view="coPublicidad">📣 <span>Publicidad</span></button>
+        <button class="co-nav-item" data-co-view="coPedidos">🛒 <span>Pedidos</span></button>
+        <button class="co-nav-item" data-co-view="coSolicitudes">📋 <span>Solicitudes</span></button>
+        <button class="co-nav-item" data-co-view="coClientes">👥 <span>Clientes</span></button>
+        <button class="co-nav-item" data-co-view="coEstadisticas">📈 <span>Estadísticas</span></button>
+        <button class="co-nav-item" data-co-view="coPerfil">👤 <span>Perfil</span></button>
+        <button class="co-nav-item" data-co-view="coConfiguracion">⚙️ <span>Configuración</span></button>
+      </nav>
+      <!-- Footer -->
+      <div class="co-sidebar-footer">
+        <button id="coLogoutBtn" class="co-logout-btn" type="button">← Cerrar sesión</button>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <div class="co-main">
+      <!-- Topbar móvil -->
+      <header class="co-topbar">
+        <button class="co-menu-btn" id="coMenuBtn" type="button" aria-label="Menú">☰</button>
+        <span id="co_topbarTitle">Dashboard</span>
+        <div></div>
+      </header>
+
+      <div class="co-content">
+
+        <!-- ── Dashboard ─────────────────────────────────────── -->
+        <div id="coDashboard" class="co-view">
+          <div class="co-page-header">
+            <div><h2>Dashboard</h2><p class="login-hint">Resumen de actividad de tu empresa.</p></div>
+          </div>
+          <div id="coDashboardContent"><p class="login-hint">Cargando…</p></div>
+        </div>
+
+        <!-- ── Mi Empresa ─────────────────────────────────────── -->
+        <div id="coMiEmpresa" class="co-view hidden">
+          <div class="co-page-header">
+            <div><h2>Mi Empresa</h2><p class="login-hint">Edita la información pública de tu empresa.</p></div>
+            <button id="coSaveEmpresaBtn" class="primary-btn" type="button">💾 Guardar cambios</button>
+          </div>
+          <div id="coMiEmpresaContent"><p class="login-hint">Cargando…</p></div>
+        </div>
+
+        <!-- ── Sucursales ─────────────────────────────────────── -->
+        <div id="coSucursales" class="co-view hidden">
+          <div class="co-page-header">
+            <div><h2>Sucursales</h2><p class="login-hint">Administra las sucursales de tu empresa.</p></div>
+            <button id="coAddBranchBtn" class="primary-btn" type="button">+ Nueva sucursal</button>
+          </div>
+          <div id="coSucursalesContent"><p class="login-hint">Cargando…</p></div>
+        </div>
+
+        <!-- ── Productos ─────────────────────────────────────── -->
+        <div id="coProductos" class="co-view hidden">
+          <div class="co-page-header">
+            <div><h2>Productos</h2><p class="login-hint">Administra el catálogo de tu empresa.</p></div>
+            <button id="coAddProductBtn" class="primary-btn" type="button">+ Nuevo producto</button>
+          </div>
+          <div style="margin-bottom:12px">
+            <input id="coProductSearch" type="text" placeholder="🔍 Buscar producto…"
+              style="width:100%;max-width:340px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:.9rem">
+          </div>
+          <div id="coProductosContent"><p class="login-hint">Cargando…</p></div>
+        </div>
+
+        <!-- ── Categorías ─────────────────────────────────────── -->
+        <div id="coCategorias" class="co-view hidden">
+          <div class="co-page-header">
+            <div><h2>Categorías</h2><p class="login-hint">Organiza tu catálogo por categorías y subcategorías.</p></div>
+            <button id="coAddCatBtn" class="primary-btn" type="button">+ Nueva categoría</button>
+          </div>
+          <div id="coCategoriasContent"><p class="login-hint">Cargando…</p></div>
+        </div>
+
+        <!-- ── Promociones ─────────────────────────────────────── -->
+        <div id="coPromociones" class="co-view hidden">
+          <div class="co-page-header">
+            <div><h2>Promociones</h2><p class="login-hint">Crea y gestiona tus promociones.</p></div>
+            <button id="coAddPromoBtn" class="primary-btn" type="button">+ Nueva promoción</button>
+          </div>
+          <div id="coPromocionesContent"><p class="login-hint">Cargando…</p></div>
+        </div>
+
+        <!-- ── Publicidad ─────────────────────────────────────── -->
+        <div id="coPublicidad" class="co-view hidden">
+          <div class="co-page-header">
+            <div><h2>Publicidad</h2><p class="login-hint">Estadísticas de tus campañas.</p></div>
+          </div>
+          <div id="coPublicidadContent"><p class="login-hint">Cargando…</p></div>
+        </div>
+
+        <!-- ── Pedidos ─────────────────────────────────────── -->
+        <div id="coPedidos" class="co-view hidden">
+          <div class="co-page-header">
+            <div><h2>Pedidos</h2><p class="login-hint">Gestión de pedidos — próximamente.</p></div>
+          </div>
+          <div class="co-coming-soon">🛒<br>Módulo de Pedidos<br><small>Disponible próximamente</small></div>
+        </div>
+
+        <!-- ── Solicitudes ─────────────────────────────────────── -->
+        <div id="coSolicitudes" class="co-view hidden">
+          <div class="co-page-header">
+            <div><h2>Solicitudes de Cotización</h2><p class="login-hint">Solicitudes de clientes dirigidas a tu empresa.</p></div>
+          </div>
+          <div id="coSolicitudesContent"><p class="login-hint">Cargando…</p></div>
+        </div>
+
+        <!-- ── Clientes ─────────────────────────────────────── -->
+        <div id="coClientes" class="co-view hidden">
+          <div class="co-page-header">
+            <div><h2>Clientes</h2><p class="login-hint">Directorio de clientes — próximamente.</p></div>
+          </div>
+          <div class="co-coming-soon">👥<br>Módulo de Clientes<br><small>Disponible próximamente</small></div>
+        </div>
+
+        <!-- ── Estadísticas ─────────────────────────────────────── -->
+        <div id="coEstadisticas" class="co-view hidden">
+          <div class="co-page-header">
+            <div><h2>Estadísticas</h2><p class="login-hint">Métricas de visibilidad y actividad.</p></div>
+          </div>
+          <div id="coEstadisticasContent"><p class="login-hint">Cargando…</p></div>
+        </div>
+
+        <!-- ── Perfil ─────────────────────────────────────── -->
+        <div id="coPerfil" class="co-view hidden">
+          <div class="co-page-header">
+            <div><h2>Perfil Público</h2><p class="login-hint">Vista previa de cómo apareces en el directorio.</p></div>
+            <a id="coPublicProfileLink" href="#" target="_blank" class="secondary-btn" style="text-decoration:none">🌐 Ver en directorio</a>
+          </div>
+          <div id="coPerfilContent"><p class="login-hint">Cargando…</p></div>
+        </div>
+
+        <!-- ── Configuración ─────────────────────────────────────── -->
+        <div id="coConfiguracion" class="co-view hidden">
+          <div class="co-page-header">
+            <div><h2>Configuración</h2><p class="login-hint">Ajustes de tu cuenta.</p></div>
+          </div>
+          <div id="coConfiguracionContent"><p class="login-hint">Cargando…</p></div>
+        </div>
+
+      </div><!-- /.co-content -->
+    </div><!-- /.co-main -->
+
+    <!-- ── Modal: Sucursal ─────────────────────────────────────── -->
+    <div id="coBranchModal" class="modal-overlay hidden">
+      <div class="modal-box" style="max-width:540px">
+        <button class="modal-close-btn" id="coBranchModalClose" type="button">✕</button>
+        <h3 id="coBranchModalTitle">Nueva sucursal</h3>
+        <div class="form-grid">
+          <label class="span-2">Nombre de la sucursal*
+            <input id="coB_name" type="text" placeholder="Ej: Sucursal Centro">
+          </label>
+          <label>Provincia
+            <input id="coB_province" type="text">
+          </label>
+          <label>Ciudad
+            <input id="coB_city" type="text">
+          </label>
+          <label class="span-2">Dirección
+            <input id="coB_address" type="text" placeholder="Calle, número, referencia">
+          </label>
+          <label>Teléfono
+            <input id="coB_phone" type="text">
+          </label>
+          <label>Responsable
+            <input id="coB_manager" type="text">
+          </label>
+          <label class="span-2">Horario
+            <input id="coB_schedule" type="text" placeholder="Ej: Lun-Vie 8am-6pm, Sáb 9am-1pm">
+          </label>
+          <label>Estado
+            <select id="coB_status">
+              <option value="active">Activa</option>
+              <option value="inactive">Inactiva</option>
+            </select>
+          </label>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:16px">
+          <button id="coBranchSaveBtn" class="primary-btn" type="button">Guardar</button>
+          <button id="coBranchModalClose2" class="secondary-btn" type="button">Cancelar</button>
+        </div>
+        <p id="coBranchError" class="login-error hidden"></p>
+      </div>
+    </div>
+
+    <!-- ── Modal: Producto ─────────────────────────────────────── -->
+    <div id="coProductModal" class="modal-overlay hidden">
+      <div class="modal-box" style="max-width:640px">
+        <button class="modal-close-btn" id="coProductModalClose" type="button">✕</button>
+        <h3 id="coProductModalTitle">Nuevo producto</h3>
+        <div class="form-grid">
+          <label class="span-2">Nombre del producto*
+            <input id="coP_name" type="text">
+          </label>
+          <label>Código interno
+            <input id="coP_code" type="text" placeholder="Ej: MEL-001">
+          </label>
+          <label>SKU
+            <input id="coP_sku" type="text">
+          </label>
+          <label>Categoría
+            <select id="coP_category"><option value="">— Sin categoría —</option></select>
+          </label>
+          <label>Subcategoría
+            <select id="coP_subcategory"><option value="">— Sin subcategoría —</option></select>
+          </label>
+          <label>Marca
+            <input id="coP_brand" type="text">
+          </label>
+          <label>Proveedor
+            <input id="coP_supplier" type="text">
+          </label>
+          <label>Material
+            <input id="coP_material" type="text" placeholder="Ej: Melamina, MDF, Vidrio">
+          </label>
+          <label>Color
+            <input id="coP_color" type="text">
+          </label>
+          <label>Espesor (mm)
+            <input id="coP_thickness" type="number" min="0" step="0.1">
+          </label>
+          <label>Medidas
+            <input id="coP_dimensions" type="text" placeholder="Ej: 244x183 cm">
+          </label>
+          <label>Peso (kg)
+            <input id="coP_weight" type="number" min="0" step="0.1">
+          </label>
+          <label>Presentación
+            <input id="coP_presentation" type="text" placeholder="Ej: Plancha, unidad, caja">
+          </label>
+          <label>Precio
+            <input id="coP_price" type="number" min="0" step="0.01">
+          </label>
+          <label>Precio oferta
+            <input id="coP_salePrice" type="number" min="0" step="0.01">
+          </label>
+          <label>Estado
+            <select id="coP_status">
+              <option value="active">Activo</option>
+              <option value="inactive">Inactivo</option>
+            </select>
+          </label>
+          <label>Disponibilidad
+            <select id="coP_availability">
+              <option value="in_stock">En stock</option>
+              <option value="on_order">Bajo pedido</option>
+              <option value="out_of_stock">Sin stock</option>
+            </select>
+          </label>
+          <label class="span-2">Descripción
+            <textarea id="coP_description" rows="3" placeholder="Descripción del producto…"></textarea>
+          </label>
+          <label class="span-2">URL de foto principal
+            <input id="coP_photoUrl" type="url" placeholder="https://…">
+          </label>
+          <label class="span-2">Etiquetas (separadas por coma)
+            <input id="coP_tags" type="text" placeholder="Ej: importado, oferta, nuevo">
+          </label>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:16px">
+          <button id="coProductSaveBtn" class="primary-btn" type="button">Guardar producto</button>
+          <button id="coProductModalClose2" class="secondary-btn" type="button">Cancelar</button>
+        </div>
+        <p id="coProductError" class="login-error hidden"></p>
+      </div>
+    </div>
+
+    <!-- ── Modal: Categoría ─────────────────────────────────────── -->
+    <div id="coCatModal" class="modal-overlay hidden">
+      <div class="modal-box" style="max-width:480px">
+        <button class="modal-close-btn" id="coCatModalClose" type="button">✕</button>
+        <h3 id="coCatModalTitle">Nueva categoría</h3>
+        <div class="form-grid">
+          <label class="span-2">Nombre*
+            <input id="coCat_name" type="text">
+          </label>
+          <label class="span-2">Categoría padre (dejar vacío = categoría raíz)
+            <select id="coCat_parent"><option value="">— Raíz —</option></select>
+          </label>
+          <label class="span-2">Descripción
+            <input id="coCat_description" type="text">
+          </label>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:16px">
+          <button id="coCatSaveBtn" class="primary-btn" type="button">Guardar</button>
+          <button id="coCatModalClose2" class="secondary-btn" type="button">Cancelar</button>
+        </div>
+        <p id="coCatError" class="login-error hidden"></p>
+      </div>
+    </div>
+
+    <!-- ── Modal: Promoción ─────────────────────────────────────── -->
+    <div id="coPromoModal" class="modal-overlay hidden">
+      <div class="modal-box" style="max-width:540px">
+        <button class="modal-close-btn" id="coPromoModalClose" type="button">✕</button>
+        <h3 id="coPromoModalTitle">Nueva promoción</h3>
+        <div class="form-grid">
+          <label class="span-2">Título*
+            <input id="coPr_title" type="text" placeholder="Ej: Oferta de temporada">
+          </label>
+          <label>Tipo
+            <select id="coPr_type">
+              <option value="descuento">Descuento</option>
+              <option value="combo">Combo</option>
+              <option value="liquidacion">Liquidación</option>
+              <option value="destacado">Producto destacado</option>
+              <option value="nuevo">Nuevo ingreso</option>
+              <option value="temporal">Oferta temporal</option>
+            </select>
+          </label>
+          <label>Descuento (%)
+            <input id="coPr_discount" type="number" min="0" max="100">
+          </label>
+          <label>Fecha inicio
+            <input id="coPr_startsAt" type="date">
+          </label>
+          <label>Fecha fin
+            <input id="coPr_endsAt" type="date">
+          </label>
+          <label class="span-2">Descripción
+            <textarea id="coPr_description" rows="3"></textarea>
+          </label>
+          <label class="span-2">URL de imagen
+            <input id="coPr_photoUrl" type="url">
+          </label>
+          <label>Estado
+            <select id="coPr_active">
+              <option value="true">Activa</option>
+              <option value="false">Inactiva</option>
+            </select>
+          </label>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:16px">
+          <button id="coPromoSaveBtn" class="primary-btn" type="button">Guardar</button>
+          <button id="coPromoModalClose2" class="secondary-btn" type="button">Cancelar</button>
+        </div>
+        <p id="coPromoError" class="login-error hidden"></p>
+      </div>
+    </div>
+
+  </div>
+  <!-- ── END PORTAL DE EMPRESA ──────────────────────────────────── -->
 
   <div class="app-shell" id="appShell" style="display:none">
     <aside class="sidebar">

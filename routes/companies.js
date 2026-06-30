@@ -153,7 +153,11 @@ async function handle(req, res, { method, p, parts }) {
     if (!company) { sendJson(res, 404, { error: "No encontrado." }); return true; }
     const body = await readBody(req);
     const data = body ? JSON.parse(body) : {};
-    for (const field of ["description", "phone", "whatsapp", "email", "schedule", "logoUrl", "location", "socialLinks", "photos"]) {
+    for (const field of [
+      "name", "businessName", "ruc", "description", "phone", "whatsapp", "email",
+      "schedule", "logoUrl", "coverUrl", "location", "socialLinks", "photos",
+      "services", "coverage"
+    ]) {
       if (data[field] !== undefined) company[field] = data[field];
     }
     if (CATEGORIES.includes(data.category)) company.category = data.category;
@@ -176,6 +180,13 @@ async function handle(req, res, { method, p, parts }) {
   }
 
   // Productos y promociones embebidos -- /api/companies/me/products, /api/companies/me/promotions
+  if (p === "/api/companies/me/products" && method === "GET") {
+    const session = requireCompany(req, res); if (!session) return true;
+    const company = findCompanyById(session.companyId);
+    if (!company) { sendJson(res, 404, { error: "No encontrado." }); return true; }
+    sendJson(res, 200, company.products || []);
+    return true;
+  }
   if (p === "/api/companies/me/products" && method === "POST") {
     const session = requireCompany(req, res); if (!session) return true;
     const company = findCompanyById(session.companyId);
@@ -183,7 +194,21 @@ async function handle(req, res, { method, p, parts }) {
     const body = await readBody(req);
     const data = body ? JSON.parse(body) : {};
     if (!data.name) { sendJson(res, 400, { error: "Falta el nombre del producto." }); return true; }
-    const product = { id: crypto.randomUUID(), name: data.name, description: data.description || "", priceRef: data.priceRef || "", photoUrl: data.photoUrl || "", featured: false };
+    const tagsRaw = Array.isArray(data.tags) ? data.tags : (data.tags ? String(data.tags).split(",").map(t => t.trim()).filter(Boolean) : []);
+    const product = {
+      id: crypto.randomUUID(),
+      name: data.name, code: data.code || "", sku: data.sku || "",
+      category: data.category || "", subcategory: data.subcategory || "",
+      brand: data.brand || "", supplier: data.supplier || "",
+      material: data.material || "", color: data.color || "",
+      thickness: Number(data.thickness) || 0, dimensions: data.dimensions || "",
+      weight: Number(data.weight) || 0, presentation: data.presentation || "",
+      price: Number(data.price) || 0, salePrice: Number(data.salePrice) || 0,
+      status: data.status === "inactive" ? "inactive" : "active",
+      availability: ["in_stock", "on_order", "out_of_stock"].includes(data.availability) ? data.availability : "in_stock",
+      description: data.description || "", photoUrl: data.photoUrl || "",
+      tags: tagsRaw, featured: false, createdAt: new Date().toISOString()
+    };
     company.products.push(product);
     saveCompanies(companies);
     sendJson(res, 201, product);
@@ -199,13 +224,65 @@ async function handle(req, res, { method, p, parts }) {
       const data = body ? JSON.parse(body) : {};
       const product = company.products.find(x => x.id === productId);
       if (!product) { sendJson(res, 404, { error: "Producto no encontrado." }); return true; }
-      for (const field of ["name", "description", "priceRef", "photoUrl"]) if (data[field] !== undefined) product[field] = data[field];
+      const productFields = ["name", "code", "sku", "category", "subcategory", "brand", "supplier", "material", "color", "thickness", "dimensions", "weight", "presentation", "price", "salePrice", "status", "availability", "description", "photoUrl", "tags"];
+      for (const field of productFields) if (data[field] !== undefined) product[field] = data[field];
+      if (data.tags !== undefined && !Array.isArray(product.tags)) {
+        product.tags = String(data.tags).split(",").map(t => t.trim()).filter(Boolean);
+      }
       saveCompanies(companies);
       sendJson(res, 200, product);
       return true;
     }
     if (method === "DELETE") {
       company.products = company.products.filter(x => x.id !== productId);
+      saveCompanies(companies);
+      sendJson(res, 200, { ok: true });
+      return true;
+    }
+  }
+
+  // ── Categorías (/api/companies/me/categories) ───────────────────────────
+  if (p === "/api/companies/me/categories" && method === "GET") {
+    const session = requireCompany(req, res); if (!session) return true;
+    const company = findCompanyById(session.companyId);
+    if (!company) { sendJson(res, 404, { error: "No encontrado." }); return true; }
+    sendJson(res, 200, company.categories || []);
+    return true;
+  }
+  if (p === "/api/companies/me/categories" && method === "POST") {
+    const session = requireCompany(req, res); if (!session) return true;
+    const company = findCompanyById(session.companyId);
+    if (!company) { sendJson(res, 404, { error: "No encontrado." }); return true; }
+    const body = await readBody(req);
+    const data = body ? JSON.parse(body) : {};
+    if (!data.name || !String(data.name).trim()) { sendJson(res, 400, { error: "Falta el nombre de la categoría." }); return true; }
+    if (!company.categories) company.categories = [];
+    const cat = { id: crypto.randomUUID(), name: String(data.name).trim(), description: data.description || "", parentId: data.parentId || null, createdAt: new Date().toISOString() };
+    company.categories.push(cat);
+    saveCompanies(companies);
+    sendJson(res, 201, cat);
+    return true;
+  }
+  if (parts[0] === "api" && parts[1] === "companies" && parts[2] === "me" && parts[3] === "categories" && parts[4]) {
+    const session = requireCompany(req, res); if (!session) return true;
+    const company = findCompanyById(session.companyId);
+    if (!company) { sendJson(res, 404, { error: "No encontrado." }); return true; }
+    const catId = parts[4];
+    if (method === "PUT") {
+      const body = await readBody(req);
+      const data = body ? JSON.parse(body) : {};
+      const cat = (company.categories || []).find(c => c.id === catId);
+      if (!cat) { sendJson(res, 404, { error: "Categoría no encontrada." }); return true; }
+      for (const f of ["name", "description", "parentId"]) if (data[f] !== undefined) cat[f] = data[f];
+      saveCompanies(companies);
+      sendJson(res, 200, cat);
+      return true;
+    }
+    if (method === "DELETE") {
+      if (!company.categories) company.categories = [];
+      company.categories = company.categories.filter(c => c.id !== catId);
+      // Orphan children by clearing their parentId
+      company.categories.forEach(c => { if (c.parentId === catId) c.parentId = null; });
       saveCompanies(companies);
       sendJson(res, 200, { ok: true });
       return true;
@@ -241,6 +318,64 @@ async function handle(req, res, { method, p, parts }) {
     }
     if (method === "DELETE") {
       company.promotions = company.promotions.filter(x => x.id !== promoId);
+      saveCompanies(companies);
+      sendJson(res, 200, { ok: true });
+      return true;
+    }
+  }
+
+  // ── Sucursales (/api/companies/me/branches) ─────────────────────────────
+  if (p === "/api/companies/me/branches" && method === "GET") {
+    const session = requireCompany(req, res); if (!session) return true;
+    const company = findCompanyById(session.companyId);
+    if (!company) { sendJson(res, 404, { error: "No encontrado." }); return true; }
+    sendJson(res, 200, company.branches || []);
+    return true;
+  }
+  if (p === "/api/companies/me/branches" && method === "POST") {
+    const session = requireCompany(req, res); if (!session) return true;
+    const company = findCompanyById(session.companyId);
+    if (!company) { sendJson(res, 404, { error: "No encontrado." }); return true; }
+    const body = await readBody(req);
+    const data = body ? JSON.parse(body) : {};
+    if (!data.name || !String(data.name).trim()) { sendJson(res, 400, { error: "Falta el nombre de la sucursal." }); return true; }
+    const branch = {
+      id: crypto.randomUUID(),
+      name: String(data.name).trim(),
+      address: data.address || "",
+      province: data.province || "",
+      city: data.city || "",
+      phone: data.phone || "",
+      schedule: data.schedule || "",
+      manager: data.manager || "",
+      status: "active",
+      createdAt: new Date().toISOString()
+    };
+    if (!company.branches) company.branches = [];
+    company.branches.push(branch);
+    saveCompanies(companies);
+    sendJson(res, 201, branch);
+    return true;
+  }
+  if (parts[0] === "api" && parts[1] === "companies" && parts[2] === "me" && parts[3] === "branches" && parts[4]) {
+    const session = requireCompany(req, res); if (!session) return true;
+    const company = findCompanyById(session.companyId);
+    if (!company) { sendJson(res, 404, { error: "No encontrado." }); return true; }
+    const branchId = parts[4];
+    if (method === "PUT") {
+      const body = await readBody(req);
+      const data = body ? JSON.parse(body) : {};
+      const branch = (company.branches || []).find(b => b.id === branchId);
+      if (!branch) { sendJson(res, 404, { error: "Sucursal no encontrada." }); return true; }
+      for (const f of ["name", "address", "province", "city", "phone", "schedule", "manager", "status"]) {
+        if (data[f] !== undefined) branch[f] = data[f];
+      }
+      saveCompanies(companies);
+      sendJson(res, 200, branch);
+      return true;
+    }
+    if (method === "DELETE") {
+      company.branches = (company.branches || []).filter(b => b.id !== branchId);
       saveCompanies(companies);
       sendJson(res, 200, { ok: true });
       return true;

@@ -8387,6 +8387,7 @@ function showApp() {
   document.getElementById("appLoading")?.remove();
   document.getElementById("loginScreen").style.display = "none";
   document.getElementById("publicShell").style.display = "none";
+  document.getElementById("companyShell").style.display = "none";
   document.getElementById("appShell").style.display = "";
   document.getElementById("logoutBtn").classList.toggle("hidden", AUTH.mode !== "admin");
   render();
@@ -8398,6 +8399,7 @@ function showLogin() {
   document.getElementById("loginScreen").style.display = "";
   document.getElementById("appShell").style.display = "none";
   document.getElementById("publicShell").style.display = "none";
+  document.getElementById("companyShell").style.display = "none";
 }
 
 // ── Directorio Profesional (público, sin login) ─────────────────────────────
@@ -8426,6 +8428,7 @@ function showPublicDirectorio() {
   document.getElementById("appLoading")?.remove();
   document.getElementById("loginScreen").style.display = "none";
   document.getElementById("appShell").style.display = "none";
+  document.getElementById("companyShell").style.display = "none";
   document.getElementById("publicShell").style.display = "";
   const catSel = document.getElementById("pf_filterCategory");
   if (catSel && catSel.options.length <= 1) {
@@ -9039,6 +9042,7 @@ document.querySelectorAll("[data-login-tab]").forEach(btn => {
     btn.classList.add("active");
     const tab = btn.dataset.loginTab;
     document.getElementById("loginCodePanel").classList.toggle("hidden", tab !== "code");
+    document.getElementById("loginCompanyPanel").classList.toggle("hidden", tab !== "company");
     document.getElementById("loginSellerPanel").classList.toggle("hidden", tab !== "seller");
     document.getElementById("loginAdminPanel").classList.toggle("hidden", tab !== "admin");
     if (tab === "code") _resetEbLoginStep();
@@ -9564,6 +9568,22 @@ async function tryAutoLogin() {
         if (res.ok) { _loginAsSeller(await res.json(), savedSellerToken); return; }
       } catch {}
     }
+  }
+
+  if (savedMode === "company") {
+    const savedCoToken = sessionStorage.getItem("coToken");
+    if (savedCoToken && window.location.protocol !== "file:") {
+      try {
+        const res = await fetch("/api/auth/company/check", { headers: { Authorization: `Bearer ${savedCoToken}` } });
+        const data = res.ok ? await res.json() : null;
+        if (data?.valid) {
+          const meRes = await fetch("/api/companies/me", { headers: { Authorization: `Bearer ${savedCoToken}` } });
+          if (meRes.ok) { _loginAsCompany(await meRes.json(), savedCoToken); return; }
+        }
+      } catch {}
+    }
+    sessionStorage.removeItem("coToken");
+    sessionStorage.removeItem("ebAuthMode");
   }
 
   // ── 3. Sin sesión válida ni link directo → directorio público por defecto
@@ -10363,4 +10383,952 @@ async function _deleteProduct(productId) {
     if (!res.ok) { alert((await res.json()).error || "Error"); return; }
     await _loadCompanyProducts(_selectedCatalogCompanyId);
   } catch { alert("Sin conexión."); }
+}
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// PORTAL DE EMPRESA  (v45)
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+// â”€â”€ Estado de sesiÃ³n de empresa â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+AUTH.coToken = null;
+AUTH.companyId = null;
+AUTH.companyData = null;
+
+// â”€â”€ Muestra el portal de empresa â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function showCompanyShell() {
+  document.getElementById("appLoading")?.remove();
+  document.getElementById("loginScreen").style.display = "none";
+  document.getElementById("appShell").style.display = "none";
+  document.getElementById("publicShell").style.display = "none";
+  document.getElementById("companyShell").style.display = "";
+}
+
+// â”€â”€ Login como empresa â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function _loginAsCompany(company, token) {
+  AUTH.mode = "company";
+  AUTH.coToken = token;
+  AUTH.companyId = company.id;
+  AUTH.companyData = company;
+  sessionStorage.setItem("ebAuthMode", "company");
+  sessionStorage.setItem("coToken", token);
+  const nameEl = document.getElementById("co_sidebarName");
+  if (nameEl) nameEl.textContent = company.name || "Mi Empresa";
+  const logoEl = document.getElementById("co_sidebarLogo");
+  if (logoEl) logoEl.textContent = company.logoUrl ? "" : "ðŸ¢";
+  if (company.logoUrl && logoEl) {
+    logoEl.innerHTML = `<img src="${escapeHtml(company.logoUrl)}" alt="" style="width:36px;height:36px;border-radius:8px;object-fit:cover">`;
+  }
+  showCompanyShell();
+  coShowView("coDashboard");
+}
+
+// â”€â”€ NavegaciÃ³n del panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const CO_VIEW_TITLES = {
+  coDashboard: "Dashboard", coMiEmpresa: "Mi Empresa", coSucursales: "Sucursales",
+  coProductos: "Productos", coCategorias: "CategorÃ­as", coPromociones: "Promociones",
+  coPublicidad: "Publicidad", coPedidos: "Pedidos", coSolicitudes: "Solicitudes de CotizaciÃ³n",
+  coClientes: "Clientes", coEstadisticas: "EstadÃ­sticas", coPerfil: "Perfil PÃºblico",
+  coConfiguracion: "ConfiguraciÃ³n"
+};
+
+function coShowView(viewId) {
+  document.querySelectorAll(".co-view").forEach(v => v.classList.toggle("hidden", v.id !== viewId));
+  document.querySelectorAll(".co-nav-item").forEach(b => {
+    b.classList.toggle("active", b.dataset.coView === viewId);
+  });
+  const titleEl = document.getElementById("co_topbarTitle");
+  if (titleEl) titleEl.textContent = CO_VIEW_TITLES[viewId] || viewId;
+  // Close mobile sidebar
+  document.getElementById("companyShell")?.classList.remove("co-open");
+
+  // Lazy-load each view on first click
+  if (viewId === "coDashboard") renderCoDashboard();
+  else if (viewId === "coMiEmpresa") renderCoMiEmpresa();
+  else if (viewId === "coSucursales") renderCoSucursales();
+  else if (viewId === "coProductos") renderCoProductos();
+  else if (viewId === "coCategorias") renderCoCategorias();
+  else if (viewId === "coPromociones") renderCoPromociones();
+  else if (viewId === "coPublicidad") renderCoPublicidad();
+  else if (viewId === "coSolicitudes") renderCoSolicitudes();
+  else if (viewId === "coEstadisticas") renderCoEstadisticas();
+  else if (viewId === "coPerfil") renderCoPerfil();
+  else if (viewId === "coConfiguracion") renderCoConfiguracion();
+}
+
+// â”€â”€ Sidebar nav click â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+document.querySelectorAll(".co-nav-item[data-co-view]").forEach(btn => {
+  btn.addEventListener("click", () => coShowView(btn.dataset.coView));
+});
+
+// â”€â”€ Mobile sidebar toggle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+document.getElementById("coMenuBtn")?.addEventListener("click", () => {
+  document.getElementById("companyShell")?.classList.toggle("co-open");
+});
+
+// â”€â”€ Helper: request header con token de empresa â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function coAuthHeader() {
+  return { Authorization: `Bearer ${AUTH.coToken || ""}`, "Content-Type": "application/json" };
+}
+
+// â”€â”€ Logout de empresa â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+async function coLogout() {
+  if (AUTH.coToken) {
+    try { await fetch("/api/auth/company/logout", { method: "POST", headers: coAuthHeader() }); } catch {}
+  }
+  AUTH.mode = null; AUTH.coToken = null; AUTH.companyId = null; AUTH.companyData = null;
+  sessionStorage.removeItem("ebAuthMode");
+  sessionStorage.removeItem("coToken");
+  showPublicDirectorio();
+}
+document.getElementById("coLogoutBtn")?.addEventListener("click", coLogout);
+
+// â”€â”€ Login con cÃ³digo + contraseÃ±a (empresa) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+document.getElementById("loginCompanyBtn")?.addEventListener("click", async () => {
+  const code = document.getElementById("loginCompanyCode").value.trim();
+  const password = document.getElementById("loginCompanyPassword").value;
+  if (!code || !password) { setLoginError("Completa cÃ³digo y contraseÃ±a."); return; }
+  try {
+    const res = await fetch("/api/auth/company", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, password })
+    });
+    const data = await res.json();
+    if (!res.ok) { setLoginError(data.error || "CÃ³digo o contraseÃ±a incorrectos."); return; }
+    setLoginError("");
+    _loginAsCompany(data.company, data.token);
+  } catch { setLoginError("Sin conexiÃ³n al servidor."); }
+});
+document.getElementById("loginCompanyCode")?.addEventListener("keydown", e => {
+  if (e.key === "Enter") document.getElementById("loginCompanyBtn").click();
+});
+document.getElementById("loginCompanyPassword")?.addEventListener("keydown", e => {
+  if (e.key === "Enter") document.getElementById("loginCompanyBtn").click();
+});
+
+// â”€â”€ "â† Volver al inicio" en la pantalla de login â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+document.getElementById("loginBackBtn")?.addEventListener("click", () => {
+  showPublicDirectorio();
+});
+
+// â”€â”€ Public nav links â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+document.querySelectorAll("[data-public-nav]").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("[data-public-nav]").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    const nav = btn.dataset.publicNav;
+    // Map nav slugs to the publicShell sub-views
+    hideAllPublicSubviews();
+    if (nav === "inicio") {
+      document.getElementById("publicDirectorioView")?.classList.remove("hidden");
+    } else if (nav === "directorio") {
+      document.getElementById("publicDirectorioView")?.classList.remove("hidden");
+    } else if (nav === "empresas") {
+      document.getElementById("publicCompaniesView")?.classList.remove("hidden");
+      loadPublicCompanies?.();
+    } else if (nav === "profesionales") {
+      document.getElementById("publicDirectorioView")?.classList.remove("hidden");
+      document.getElementById("pf_filterCategory")?.focus();
+    } else if (nav === "retazos") {
+      document.getElementById("publicRetazosView")?.classList.remove("hidden");
+      loadPublicRetazos?.();
+    }
+  });
+});
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// DASHBOARD
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+async function renderCoDashboard() {
+  const el = document.getElementById("coDashboardContent");
+  if (!el) return;
+  const c = AUTH.companyData || {};
+  const products = c.products?.length || 0;
+  const promos = c.promotions?.length || 0;
+  const branches = c.branches?.length || 0;
+  const views = c.views || 0;
+  const clicks = c.contactClicks || 0;
+  el.innerHTML = `
+    <div class="co-stat-grid">
+      <div class="co-stat-card">
+        <div class="co-stat-value">${products}</div>
+        <div class="co-stat-label">Productos</div>
+      </div>
+      <div class="co-stat-card">
+        <div class="co-stat-value">${promos}</div>
+        <div class="co-stat-label">Promociones</div>
+      </div>
+      <div class="co-stat-card">
+        <div class="co-stat-value">${branches}</div>
+        <div class="co-stat-label">Sucursales</div>
+      </div>
+      <div class="co-stat-card">
+        <div class="co-stat-value">${views}</div>
+        <div class="co-stat-label">Visitas al perfil</div>
+      </div>
+      <div class="co-stat-card">
+        <div class="co-stat-value">${clicks}</div>
+        <div class="co-stat-label">Clics en contacto</div>
+      </div>
+    </div>
+    <div class="co-section-card" style="margin-top:24px">
+      <h3 style="margin:0 0 8px">Accesos rÃ¡pidos</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <button class="secondary-btn" type="button" onclick="coShowView('coProductos')">ðŸ“¦ Agregar producto</button>
+        <button class="secondary-btn" type="button" onclick="coShowView('coPromociones')">ðŸ·ï¸ Nueva promociÃ³n</button>
+        <button class="secondary-btn" type="button" onclick="coShowView('coSucursales')">ðŸ“ Nueva sucursal</button>
+        <button class="secondary-btn" type="button" onclick="coShowView('coMiEmpresa')">ðŸ¢ Editar perfil</button>
+      </div>
+    </div>`;
+}
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// MI EMPRESA
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+async function renderCoMiEmpresa() {
+  const el = document.getElementById("coMiEmpresaContent");
+  if (!el) return;
+  try {
+    const res = await fetch("/api/companies/me", { headers: coAuthHeader() });
+    if (!res.ok) { el.innerHTML = '<p class="login-hint">Error cargando datos.</p>'; return; }
+    const c = await res.json();
+    AUTH.companyData = c;
+    el.innerHTML = `
+      <div class="co-section-card">
+        <h3>InformaciÃ³n principal</h3>
+        <div class="form-grid">
+          <label class="span-2">Nombre comercial*
+            <input id="coE_name" type="text" value="${escapeHtml(c.name || "")}">
+          </label>
+          <label class="span-2">RazÃ³n social
+            <input id="coE_businessName" type="text" value="${escapeHtml(c.businessName || "")}">
+          </label>
+          <label>RUC / NÃºmero fiscal
+            <input id="coE_ruc" type="text" value="${escapeHtml(c.ruc || "")}">
+          </label>
+          <label>CategorÃ­a
+            <input id="coE_category" type="text" value="${escapeHtml(c.category || "")}" placeholder="Ej: ferreteria, muebleriaâ€¦">
+          </label>
+          <label class="span-2">DescripciÃ³n
+            <textarea id="coE_description" rows="3">${escapeHtml(c.description || "")}</textarea>
+          </label>
+        </div>
+      </div>
+      <div class="co-section-card">
+        <h3>Contacto</h3>
+        <div class="form-grid">
+          <label>TelÃ©fono
+            <input id="coE_phone" type="text" value="${escapeHtml(c.phone || "")}">
+          </label>
+          <label>WhatsApp
+            <input id="coE_whatsapp" type="text" value="${escapeHtml(c.whatsapp || "")}">
+          </label>
+          <label class="span-2">Email
+            <input id="coE_email" type="email" value="${escapeHtml(c.email || "")}">
+          </label>
+          <label>Provincia
+            <input id="coE_province" type="text" value="${escapeHtml(c.location?.province || "")}">
+          </label>
+          <label>Ciudad
+            <input id="coE_city" type="text" value="${escapeHtml(c.location?.city || "")}">
+          </label>
+          <label class="span-2">DirecciÃ³n
+            <input id="coE_address" type="text" value="${escapeHtml(c.location?.address || "")}">
+          </label>
+          <label class="span-2">Horario de atenciÃ³n
+            <input id="coE_schedule" type="text" value="${escapeHtml(c.schedule || "")}" placeholder="Ej: Lun-Vie 8am-6pm">
+          </label>
+        </div>
+      </div>
+      <div class="co-section-card">
+        <h3>Redes y presencia online</h3>
+        <div class="form-grid">
+          <label>Sitio web
+            <input id="coE_website" type="url" value="${escapeHtml(c.socialLinks?.website || "")}">
+          </label>
+          <label>Facebook
+            <input id="coE_facebook" type="text" value="${escapeHtml(c.socialLinks?.facebook || "")}">
+          </label>
+          <label>Instagram
+            <input id="coE_instagram" type="text" value="${escapeHtml(c.socialLinks?.instagram || "")}">
+          </label>
+          <label>TikTok
+            <input id="coE_tiktok" type="text" value="${escapeHtml(c.socialLinks?.tiktok || "")}">
+          </label>
+        </div>
+      </div>
+      <div class="co-section-card">
+        <h3>ImÃ¡genes</h3>
+        <div class="form-grid">
+          <label class="span-2">URL de logo
+            <input id="coE_logoUrl" type="url" value="${escapeHtml(c.logoUrl || "")}" placeholder="https://â€¦">
+          </label>
+          <label class="span-2">URL de imagen de portada
+            <input id="coE_coverUrl" type="url" value="${escapeHtml(c.coverUrl || "")}" placeholder="https://â€¦">
+          </label>
+        </div>
+      </div>
+      <div class="co-section-card">
+        <h3>Servicios y cobertura</h3>
+        <div class="form-grid">
+          <label class="span-2">Servicios que ofrece
+            <textarea id="coE_services" rows="3" placeholder="Ej: Venta de materiales, instalaciÃ³n, diseÃ±oâ€¦">${escapeHtml((c.services || []).join(", "))}</textarea>
+          </label>
+          <label class="span-2">Zonas de cobertura
+            <input id="coE_coverage" type="text" value="${escapeHtml((c.coverage || []).join(", "))}" placeholder="Ej: Quito, Guayaquil, Cuenca">
+          </label>
+        </div>
+      </div>
+      <p id="coEmpresaError" class="login-error hidden"></p>`;
+  } catch { el.innerHTML = '<p class="login-hint">Error de conexiÃ³n.</p>'; }
+}
+
+document.getElementById("coSaveEmpresaBtn")?.addEventListener("click", async () => {
+  const errEl = document.getElementById("coEmpresaError");
+  errEl?.classList.add("hidden");
+  const payload = {
+    name: document.getElementById("coE_name")?.value.trim(),
+    businessName: document.getElementById("coE_businessName")?.value.trim(),
+    ruc: document.getElementById("coE_ruc")?.value.trim(),
+    description: document.getElementById("coE_description")?.value.trim(),
+    phone: document.getElementById("coE_phone")?.value.trim(),
+    whatsapp: document.getElementById("coE_whatsapp")?.value.trim(),
+    email: document.getElementById("coE_email")?.value.trim(),
+    location: {
+      province: document.getElementById("coE_province")?.value.trim() || "",
+      city: document.getElementById("coE_city")?.value.trim() || "",
+      address: document.getElementById("coE_address")?.value.trim() || ""
+    },
+    schedule: document.getElementById("coE_schedule")?.value.trim(),
+    logoUrl: document.getElementById("coE_logoUrl")?.value.trim(),
+    coverUrl: document.getElementById("coE_coverUrl")?.value.trim(),
+    socialLinks: {
+      website: document.getElementById("coE_website")?.value.trim() || "",
+      facebook: document.getElementById("coE_facebook")?.value.trim() || "",
+      instagram: document.getElementById("coE_instagram")?.value.trim() || "",
+      tiktok: document.getElementById("coE_tiktok")?.value.trim() || ""
+    },
+    services: (document.getElementById("coE_services")?.value || "").split(",").map(s => s.trim()).filter(Boolean),
+    coverage: (document.getElementById("coE_coverage")?.value || "").split(",").map(s => s.trim()).filter(Boolean)
+  };
+  if (!payload.name) { if (errEl) { errEl.textContent = "El nombre comercial es obligatorio."; errEl.classList.remove("hidden"); } return; }
+  try {
+    const res = await fetch("/api/companies/me", { method: "PUT", headers: coAuthHeader(), body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (!res.ok) { if (errEl) { errEl.textContent = data.error || "Error guardando."; errEl.classList.remove("hidden"); } return; }
+    AUTH.companyData = data;
+    const nameEl = document.getElementById("co_sidebarName");
+    if (nameEl) nameEl.textContent = data.name || "Mi Empresa";
+    toast("Datos guardados âœ“");
+  } catch { if (errEl) { errEl.textContent = "Sin conexiÃ³n al servidor."; errEl.classList.remove("hidden"); } }
+});
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// SUCURSALES
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+let _coBranchEditId = null;
+
+async function renderCoSucursales() {
+  const el = document.getElementById("coSucursalesContent");
+  if (!el) return;
+  el.innerHTML = '<p class="login-hint">Cargandoâ€¦</p>';
+  try {
+    const res = await fetch("/api/companies/me/branches", { headers: coAuthHeader() });
+    const list = res.ok ? await res.json() : [];
+    if (!list.length) { el.innerHTML = '<p class="login-hint">AÃºn no tienes sucursales. Haz clic en "+ Nueva sucursal" para agregar la primera.</p>'; return; }
+    el.innerHTML = `<div class="co-branch-list">${list.map(b => `
+      <div class="co-branch-card">
+        <div style="flex:1">
+          <strong>${escapeHtml(b.name)}</strong>
+          <span class="co-branch-status-${b.status === "active" ? "active" : "inactive"}">${b.status === "active" ? "Activa" : "Inactiva"}</span>
+          ${b.address ? `<div style="font-size:.85rem;color:var(--muted)">ðŸ“ ${escapeHtml(b.address)}${b.city ? ", " + escapeHtml(b.city) : ""}</div>` : ""}
+          ${b.phone ? `<div style="font-size:.85rem;color:var(--muted)">ðŸ“ž ${escapeHtml(b.phone)}</div>` : ""}
+          ${b.schedule ? `<div style="font-size:.85rem;color:var(--muted)">ðŸ• ${escapeHtml(b.schedule)}</div>` : ""}
+          ${b.manager ? `<div style="font-size:.85rem;color:var(--muted)">ðŸ‘¤ ${escapeHtml(b.manager)}</div>` : ""}
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="secondary-btn" data-edit-branch="${b.id}" type="button">Editar</button>
+          <button class="secondary-btn" data-delete-branch="${b.id}" type="button" style="color:var(--red,#e53e3e)">Eliminar</button>
+        </div>
+      </div>`).join("")}</div>`;
+  } catch { el.innerHTML = '<p class="login-hint">Error de conexiÃ³n.</p>'; }
+}
+
+function coOpenBranchModal(branch) {
+  _coBranchEditId = branch?.id || null;
+  document.getElementById("coBranchModalTitle").textContent = branch ? "Editar sucursal" : "Nueva sucursal";
+  document.getElementById("coB_name").value = branch?.name || "";
+  document.getElementById("coB_province").value = branch?.province || "";
+  document.getElementById("coB_city").value = branch?.city || "";
+  document.getElementById("coB_address").value = branch?.address || "";
+  document.getElementById("coB_phone").value = branch?.phone || "";
+  document.getElementById("coB_manager").value = branch?.manager || "";
+  document.getElementById("coB_schedule").value = branch?.schedule || "";
+  document.getElementById("coB_status").value = branch?.status || "active";
+  document.getElementById("coBranchError").classList.add("hidden");
+  document.getElementById("coBranchModal").classList.remove("hidden");
+}
+
+document.getElementById("coAddBranchBtn")?.addEventListener("click", () => coOpenBranchModal(null));
+
+document.getElementById("coSucursalesContent")?.addEventListener("click", async (e) => {
+  const editId = e.target.closest("[data-edit-branch]")?.dataset.editBranch;
+  if (editId) {
+    const res = await fetch("/api/companies/me/branches", { headers: coAuthHeader() });
+    const list = res.ok ? await res.json() : [];
+    coOpenBranchModal(list.find(b => b.id === editId));
+    return;
+  }
+  const delId = e.target.closest("[data-delete-branch]")?.dataset.deleteBranch;
+  if (delId && confirm("Â¿Eliminar esta sucursal?")) {
+    await fetch(`/api/companies/me/branches/${delId}`, { method: "DELETE", headers: coAuthHeader() });
+    renderCoSucursales();
+  }
+});
+
+document.getElementById("coBranchSaveBtn")?.addEventListener("click", async () => {
+  const errEl = document.getElementById("coBranchError");
+  errEl.classList.add("hidden");
+  const payload = {
+    name: document.getElementById("coB_name").value.trim(),
+    province: document.getElementById("coB_province").value.trim(),
+    city: document.getElementById("coB_city").value.trim(),
+    address: document.getElementById("coB_address").value.trim(),
+    phone: document.getElementById("coB_phone").value.trim(),
+    manager: document.getElementById("coB_manager").value.trim(),
+    schedule: document.getElementById("coB_schedule").value.trim(),
+    status: document.getElementById("coB_status").value
+  };
+  if (!payload.name) { errEl.textContent = "El nombre es obligatorio."; errEl.classList.remove("hidden"); return; }
+  try {
+    const url = _coBranchEditId ? `/api/companies/me/branches/${_coBranchEditId}` : "/api/companies/me/branches";
+    const method = _coBranchEditId ? "PUT" : "POST";
+    const res = await fetch(url, { method, headers: coAuthHeader(), body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || "Error guardando."; errEl.classList.remove("hidden"); return; }
+    document.getElementById("coBranchModal").classList.add("hidden");
+    renderCoSucursales();
+    // Refresh dashboard stat
+    const c = AUTH.companyData;
+    if (c) {
+      const brRes = await fetch("/api/companies/me/branches", { headers: coAuthHeader() });
+      if (brRes.ok) { const branches = await brRes.json(); c.branches = branches; renderCoDashboard(); }
+    }
+  } catch { errEl.textContent = "Sin conexiÃ³n al servidor."; errEl.classList.remove("hidden"); }
+});
+
+["coBranchModalClose", "coBranchModalClose2"].forEach(id => {
+  document.getElementById(id)?.addEventListener("click", () => document.getElementById("coBranchModal").classList.add("hidden"));
+});
+document.getElementById("coBranchModal")?.addEventListener("click", e => {
+  if (e.target === document.getElementById("coBranchModal")) document.getElementById("coBranchModal").classList.add("hidden");
+});
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// CATEGORÃAS
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+let _coCatEditId = null;
+let _coCatList = [];
+
+async function renderCoCategorias() {
+  const el = document.getElementById("coCategoriasContent");
+  if (!el) return;
+  el.innerHTML = '<p class="login-hint">Cargandoâ€¦</p>';
+  try {
+    const res = await fetch("/api/companies/me/categories", { headers: coAuthHeader() });
+    _coCatList = res.ok ? await res.json() : [];
+    if (!_coCatList.length) { el.innerHTML = '<p class="login-hint">Sin categorÃ­as. Agrega la primera con el botÃ³n de arriba.</p>'; return; }
+    const roots = _coCatList.filter(c => !c.parentId);
+    const children = _coCatList.filter(c => c.parentId);
+    el.innerHTML = `<div class="co-cat-tree">${roots.map(r => `
+      <div class="co-cat-row">
+        <span><strong>${escapeHtml(r.name)}</strong>${r.description ? ` â€” <span style="color:var(--muted);font-size:.85rem">${escapeHtml(r.description)}</span>` : ""}</span>
+        <div style="display:flex;gap:6px">
+          <button class="secondary-btn" data-edit-cat="${r.id}" type="button">Editar</button>
+          <button class="secondary-btn" data-delete-cat="${r.id}" type="button" style="color:var(--red,#e53e3e)">Eliminar</button>
+        </div>
+      </div>
+      ${children.filter(c => c.parentId === r.id).map(sub => `
+      <div class="co-cat-child">
+        <span>â†³ ${escapeHtml(sub.name)}${sub.description ? ` â€” <span style="color:var(--muted);font-size:.8rem">${escapeHtml(sub.description)}</span>` : ""}</span>
+        <div style="display:flex;gap:6px">
+          <button class="secondary-btn" data-edit-cat="${sub.id}" type="button">Editar</button>
+          <button class="secondary-btn" data-delete-cat="${sub.id}" type="button" style="color:var(--red,#e53e3e)">Eliminar</button>
+        </div>
+      </div>`).join("")}`).join("")}</div>`;
+    _populateCatSelects();
+  } catch { el.innerHTML = '<p class="login-hint">Error de conexiÃ³n.</p>'; }
+}
+
+function _populateCatSelects() {
+  const parentSel = document.getElementById("coCat_parent");
+  if (parentSel) {
+    parentSel.innerHTML = '<option value="">â€” RaÃ­z â€”</option>' +
+      _coCatList.filter(c => !c.parentId).map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
+  }
+  const productCatSel = document.getElementById("coP_category");
+  if (productCatSel) {
+    productCatSel.innerHTML = '<option value="">â€” Sin categorÃ­a â€”</option>' +
+      _coCatList.filter(c => !c.parentId).map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
+    _updateSubcategorySelect(productCatSel.value);
+  }
+}
+
+function _updateSubcategorySelect(parentId) {
+  const subSel = document.getElementById("coP_subcategory");
+  if (!subSel) return;
+  const subs = _coCatList.filter(c => c.parentId === parentId);
+  subSel.innerHTML = '<option value="">â€” Sin subcategorÃ­a â€”</option>' +
+    subs.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
+}
+
+document.getElementById("coP_category")?.addEventListener("change", e => _updateSubcategorySelect(e.target.value));
+
+function coOpenCatModal(cat) {
+  _coCatEditId = cat?.id || null;
+  document.getElementById("coCatModalTitle").textContent = cat ? "Editar categorÃ­a" : "Nueva categorÃ­a";
+  document.getElementById("coCat_name").value = cat?.name || "";
+  document.getElementById("coCat_description").value = cat?.description || "";
+  const parentSel = document.getElementById("coCat_parent");
+  if (parentSel) parentSel.value = cat?.parentId || "";
+  document.getElementById("coCatError").classList.add("hidden");
+  document.getElementById("coCatModal").classList.remove("hidden");
+}
+
+document.getElementById("coAddCatBtn")?.addEventListener("click", () => {
+  if (!_coCatList.length) {
+    const res2 = fetch("/api/companies/me/categories", { headers: coAuthHeader() })
+      .then(r => r.ok ? r.json() : [])
+      .then(list => { _coCatList = list; _populateCatSelects(); coOpenCatModal(null); });
+  } else {
+    coOpenCatModal(null);
+  }
+});
+
+document.getElementById("coCategoriasContent")?.addEventListener("click", async (e) => {
+  const editId = e.target.closest("[data-edit-cat]")?.dataset.editCat;
+  if (editId) { coOpenCatModal(_coCatList.find(c => c.id === editId)); return; }
+  const delId = e.target.closest("[data-delete-cat]")?.dataset.deleteCat;
+  if (delId && confirm("Â¿Eliminar esta categorÃ­a? Las subcategorÃ­as pasarÃ¡n a ser raÃ­z.")) {
+    await fetch(`/api/companies/me/categories/${delId}`, { method: "DELETE", headers: coAuthHeader() });
+    renderCoCategorias();
+  }
+});
+
+document.getElementById("coCatSaveBtn")?.addEventListener("click", async () => {
+  const errEl = document.getElementById("coCatError");
+  errEl.classList.add("hidden");
+  const payload = {
+    name: document.getElementById("coCat_name").value.trim(),
+    description: document.getElementById("coCat_description").value.trim(),
+    parentId: document.getElementById("coCat_parent").value || null
+  };
+  if (!payload.name) { errEl.textContent = "El nombre es obligatorio."; errEl.classList.remove("hidden"); return; }
+  try {
+    const url = _coCatEditId ? `/api/companies/me/categories/${_coCatEditId}` : "/api/companies/me/categories";
+    const res = await fetch(url, { method: _coCatEditId ? "PUT" : "POST", headers: coAuthHeader(), body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || "Error guardando."; errEl.classList.remove("hidden"); return; }
+    document.getElementById("coCatModal").classList.add("hidden");
+    renderCoCategorias();
+  } catch { errEl.textContent = "Sin conexiÃ³n al servidor."; errEl.classList.remove("hidden"); }
+});
+
+["coCatModalClose", "coCatModalClose2"].forEach(id => {
+  document.getElementById(id)?.addEventListener("click", () => document.getElementById("coCatModal").classList.add("hidden"));
+});
+document.getElementById("coCatModal")?.addEventListener("click", e => {
+  if (e.target === document.getElementById("coCatModal")) document.getElementById("coCatModal").classList.add("hidden");
+});
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// PRODUCTOS
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+let _coProductEditId = null;
+let _coProductList = [];
+
+async function renderCoProductos() {
+  const el = document.getElementById("coProductosContent");
+  if (!el) return;
+  el.innerHTML = '<p class="login-hint">Cargandoâ€¦</p>';
+  // Also load categories for selects
+  try {
+    const [prRes, catRes] = await Promise.all([
+      fetch("/api/companies/me/products", { headers: coAuthHeader() }),
+      fetch("/api/companies/me/categories", { headers: coAuthHeader() })
+    ]);
+    _coProductList = prRes.ok ? await prRes.json() : [];
+    _coCatList = catRes.ok ? await catRes.json() : [];
+    _populateCatSelects();
+    _coRenderProductGrid();
+  } catch { el.innerHTML = '<p class="login-hint">Error de conexiÃ³n.</p>'; }
+}
+
+function _coRenderProductGrid(filter) {
+  const el = document.getElementById("coProductosContent");
+  if (!el) return;
+  const q = (filter || document.getElementById("coProductSearch")?.value || "").toLowerCase();
+  const list = q ? _coProductList.filter(p => (p.name || "").toLowerCase().includes(q) || (p.code || "").toLowerCase().includes(q) || (p.description || "").toLowerCase().includes(q)) : _coProductList;
+  if (!list.length) { el.innerHTML = '<p class="login-hint">Sin productos' + (q ? ' que coincidan con "' + escapeHtml(q) + '"' : ". Agrega el primero con el botÃ³n de arriba.") + '</p>'; return; }
+  el.innerHTML = `<div class="co-product-grid">${list.map(p => {
+    const catName = _coCatList.find(c => c.id === p.category)?.name || p.category || "";
+    return `<div class="co-product-card">
+      ${p.photoUrl ? `<img src="${escapeHtml(p.photoUrl)}" class="co-product-thumb" alt="">` : `<div class="co-product-thumb" style="background:var(--line);display:flex;align-items:center;justify-content:center;font-size:2rem">ðŸ“¦</div>`}
+      <div class="co-product-info">
+        ${catName ? `<span class="co-cat-badge">${escapeHtml(catName)}</span>` : ""}
+        <strong style="display:block;margin:4px 0">${escapeHtml(p.name)}</strong>
+        ${p.code ? `<span style="font-size:.8rem;color:var(--muted)">${escapeHtml(p.code)}</span>` : ""}
+        ${p.salePrice > 0 ? `<span class="co-price">$${Number(p.salePrice).toFixed(2)}</span> <span class="co-sale-price">$${Number(p.price).toFixed(2)}</span>` : (p.price > 0 ? `<span class="co-price">$${Number(p.price).toFixed(2)}</span>` : "")}
+        <div class="co-product-actions">
+          <button class="secondary-btn" data-edit-product="${p.id}" type="button">Editar</button>
+          <button class="secondary-btn" data-delete-product="${p.id}" type="button" style="color:var(--red,#e53e3e)">Eliminar</button>
+        </div>
+      </div>
+    </div>`;
+  }).join("")}</div>`;
+}
+
+document.getElementById("coProductSearch")?.addEventListener("input", e => _coRenderProductGrid(e.target.value));
+
+function coOpenProductModal(product) {
+  _coProductEditId = product?.id || null;
+  document.getElementById("coProductModalTitle").textContent = product ? "Editar producto" : "Nuevo producto";
+  const fields = { coP_name: "name", coP_code: "code", coP_sku: "sku", coP_brand: "brand", coP_supplier: "supplier", coP_material: "material", coP_color: "color", coP_thickness: "thickness", coP_dimensions: "dimensions", coP_weight: "weight", coP_presentation: "presentation", coP_price: "price", coP_salePrice: "salePrice", coP_description: "description", coP_photoUrl: "photoUrl" };
+  for (const [id, key] of Object.entries(fields)) {
+    const inp = document.getElementById(id);
+    if (inp) inp.value = product ? (product[key] ?? "") : "";
+  }
+  document.getElementById("coP_status").value = product?.status || "active";
+  document.getElementById("coP_availability").value = product?.availability || "in_stock";
+  document.getElementById("coP_tags").value = product?.tags?.join(", ") || "";
+  _populateCatSelects();
+  const catSel = document.getElementById("coP_category");
+  if (catSel && product?.category) catSel.value = product.category;
+  _updateSubcategorySelect(catSel?.value || "");
+  const subSel = document.getElementById("coP_subcategory");
+  if (subSel && product?.subcategory) subSel.value = product.subcategory;
+  document.getElementById("coProductError").classList.add("hidden");
+  document.getElementById("coProductModal").classList.remove("hidden");
+}
+
+document.getElementById("coAddProductBtn")?.addEventListener("click", async () => {
+  if (!_coCatList.length) {
+    try { const r = await fetch("/api/companies/me/categories", { headers: coAuthHeader() }); _coCatList = r.ok ? await r.json() : []; } catch {}
+  }
+  coOpenProductModal(null);
+});
+
+document.getElementById("coProductosContent")?.addEventListener("click", async (e) => {
+  const editId = e.target.closest("[data-edit-product]")?.dataset.editProduct;
+  if (editId) { coOpenProductModal(_coProductList.find(p => p.id === editId)); return; }
+  const delId = e.target.closest("[data-delete-product]")?.dataset.deleteProduct;
+  if (delId && confirm("Â¿Eliminar este producto?")) {
+    await fetch(`/api/companies/me/products/${delId}`, { method: "DELETE", headers: coAuthHeader() });
+    renderCoProductos();
+  }
+});
+
+document.getElementById("coProductSaveBtn")?.addEventListener("click", async () => {
+  const errEl = document.getElementById("coProductError");
+  errEl.classList.add("hidden");
+  const payload = {
+    name: document.getElementById("coP_name")?.value.trim(),
+    code: document.getElementById("coP_code")?.value.trim(),
+    sku: document.getElementById("coP_sku")?.value.trim(),
+    category: document.getElementById("coP_category")?.value,
+    subcategory: document.getElementById("coP_subcategory")?.value,
+    brand: document.getElementById("coP_brand")?.value.trim(),
+    supplier: document.getElementById("coP_supplier")?.value.trim(),
+    material: document.getElementById("coP_material")?.value.trim(),
+    color: document.getElementById("coP_color")?.value.trim(),
+    thickness: document.getElementById("coP_thickness")?.value,
+    dimensions: document.getElementById("coP_dimensions")?.value.trim(),
+    weight: document.getElementById("coP_weight")?.value,
+    presentation: document.getElementById("coP_presentation")?.value.trim(),
+    price: document.getElementById("coP_price")?.value,
+    salePrice: document.getElementById("coP_salePrice")?.value,
+    status: document.getElementById("coP_status")?.value,
+    availability: document.getElementById("coP_availability")?.value,
+    description: document.getElementById("coP_description")?.value.trim(),
+    photoUrl: document.getElementById("coP_photoUrl")?.value.trim(),
+    tags: (document.getElementById("coP_tags")?.value || "").split(",").map(t => t.trim()).filter(Boolean)
+  };
+  if (!payload.name) { errEl.textContent = "El nombre del producto es obligatorio."; errEl.classList.remove("hidden"); return; }
+  try {
+    const url = _coProductEditId ? `/api/companies/me/products/${_coProductEditId}` : "/api/companies/me/products";
+    const res = await fetch(url, { method: _coProductEditId ? "PUT" : "POST", headers: coAuthHeader(), body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || "Error guardando."; errEl.classList.remove("hidden"); return; }
+    document.getElementById("coProductModal").classList.add("hidden");
+    renderCoProductos();
+    renderCoDashboard();
+  } catch { errEl.textContent = "Sin conexiÃ³n al servidor."; errEl.classList.remove("hidden"); }
+});
+
+["coProductModalClose", "coProductModalClose2"].forEach(id => {
+  document.getElementById(id)?.addEventListener("click", () => document.getElementById("coProductModal").classList.add("hidden"));
+});
+document.getElementById("coProductModal")?.addEventListener("click", e => {
+  if (e.target === document.getElementById("coProductModal")) document.getElementById("coProductModal").classList.add("hidden");
+});
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// PROMOCIONES
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+let _coPromoEditId = null;
+
+async function renderCoPromociones() {
+  const el = document.getElementById("coPromocionesContent");
+  if (!el) return;
+  el.innerHTML = '<p class="login-hint">Cargandoâ€¦</p>';
+  try {
+    const res = await fetch("/api/companies/me", { headers: coAuthHeader() });
+    const c = res.ok ? await res.json() : null;
+    const list = c?.promotions || [];
+    if (!list.length) { el.innerHTML = '<p class="login-hint">Sin promociones activas. Crea la primera con el botÃ³n de arriba.</p>'; return; }
+    const now = new Date().toISOString().slice(0, 10);
+    el.innerHTML = `<div class="co-promo-grid">${list.map(pr => {
+      const expired = pr.endsAt && pr.endsAt < now;
+      return `<div class="co-promo-card${expired ? " co-promo-expired" : ""}">
+        ${pr.photoUrl ? `<img src="${escapeHtml(pr.photoUrl)}" class="co-promo-thumb" alt="">` : ""}
+        <div style="flex:1">
+          <strong>${escapeHtml(pr.title)}</strong>
+          ${pr.discountText ? `<span style="color:var(--accent);font-weight:700"> â€” ${escapeHtml(pr.discountText)}</span>` : ""}
+          ${pr.description ? `<p style="font-size:.85rem;color:var(--muted);margin:4px 0">${escapeHtml(pr.description)}</p>` : ""}
+          ${pr.endsAt ? `<span style="font-size:.8rem;color:${expired ? "var(--red,#e53e3e)" : "var(--muted)"}">Hasta ${pr.endsAt}${expired ? " (vencida)" : ""}</span>` : ""}
+          <span class="co-branch-status-${pr.active ? "active" : "inactive"}" style="display:block;margin-top:4px">${pr.active ? "Activa" : "Inactiva"}</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <button class="secondary-btn" data-edit-promo="${pr.id}" type="button">Editar</button>
+          <button class="secondary-btn" data-delete-promo="${pr.id}" type="button" style="color:var(--red,#e53e3e)">Eliminar</button>
+        </div>
+      </div>`;
+    }).join("")}</div>`;
+  } catch { el.innerHTML = '<p class="login-hint">Error de conexiÃ³n.</p>'; }
+}
+
+function coOpenPromoModal(promo) {
+  _coPromoEditId = promo?.id || null;
+  document.getElementById("coPromoModalTitle").textContent = promo ? "Editar promociÃ³n" : "Nueva promociÃ³n";
+  document.getElementById("coPr_title").value = promo?.title || "";
+  document.getElementById("coPr_type").value = promo?.type || "descuento";
+  document.getElementById("coPr_discount").value = promo?.discount || "";
+  document.getElementById("coPr_startsAt").value = promo?.startsAt || "";
+  document.getElementById("coPr_endsAt").value = promo?.endsAt || "";
+  document.getElementById("coPr_description").value = promo?.description || "";
+  document.getElementById("coPr_photoUrl").value = promo?.photoUrl || "";
+  document.getElementById("coPr_active").value = String(promo?.active !== false);
+  document.getElementById("coPromoError").classList.add("hidden");
+  document.getElementById("coPromoModal").classList.remove("hidden");
+}
+
+document.getElementById("coAddPromoBtn")?.addEventListener("click", () => coOpenPromoModal(null));
+
+document.getElementById("coPromocionesContent")?.addEventListener("click", async (e) => {
+  const editId = e.target.closest("[data-edit-promo]")?.dataset.editPromo;
+  if (editId) {
+    const res = await fetch("/api/companies/me", { headers: coAuthHeader() });
+    const c = res.ok ? await res.json() : null;
+    coOpenPromoModal(c?.promotions?.find(p => p.id === editId));
+    return;
+  }
+  const delId = e.target.closest("[data-delete-promo]")?.dataset.deletePromo;
+  if (delId && confirm("Â¿Eliminar esta promociÃ³n?")) {
+    await fetch(`/api/companies/me/promotions/${delId}`, { method: "DELETE", headers: coAuthHeader() });
+    renderCoPromociones();
+    renderCoDashboard();
+  }
+});
+
+document.getElementById("coPromoSaveBtn")?.addEventListener("click", async () => {
+  const errEl = document.getElementById("coPromoError");
+  errEl.classList.add("hidden");
+  const discount = Number(document.getElementById("coPr_discount")?.value);
+  const discountText = discount > 0 ? `${discount}% OFF` : "";
+  const payload = {
+    title: document.getElementById("coPr_title")?.value.trim(),
+    type: document.getElementById("coPr_type")?.value,
+    discount,
+    discountText,
+    startsAt: document.getElementById("coPr_startsAt")?.value || null,
+    endsAt: document.getElementById("coPr_endsAt")?.value || null,
+    description: document.getElementById("coPr_description")?.value.trim(),
+    photoUrl: document.getElementById("coPr_photoUrl")?.value.trim(),
+    active: document.getElementById("coPr_active")?.value === "true"
+  };
+  if (!payload.title) { errEl.textContent = "El tÃ­tulo es obligatorio."; errEl.classList.remove("hidden"); return; }
+  try {
+    const url = _coPromoEditId ? `/api/companies/me/promotions/${_coPromoEditId}` : "/api/companies/me/promotions";
+    const res = await fetch(url, { method: _coPromoEditId ? "PUT" : "POST", headers: coAuthHeader(), body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || "Error guardando."; errEl.classList.remove("hidden"); return; }
+    document.getElementById("coPromoModal").classList.add("hidden");
+    renderCoPromociones();
+    renderCoDashboard();
+  } catch { errEl.textContent = "Sin conexiÃ³n al servidor."; errEl.classList.remove("hidden"); }
+});
+
+["coPromoModalClose", "coPromoModalClose2"].forEach(id => {
+  document.getElementById(id)?.addEventListener("click", () => document.getElementById("coPromoModal").classList.add("hidden"));
+});
+document.getElementById("coPromoModal")?.addEventListener("click", e => {
+  if (e.target === document.getElementById("coPromoModal")) document.getElementById("coPromoModal").classList.add("hidden");
+});
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// PUBLICIDAD
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+async function renderCoPublicidad() {
+  const el = document.getElementById("coPublicidadContent");
+  if (!el) return;
+  const c = AUTH.companyData || {};
+  el.innerHTML = `
+    <div class="co-section-card">
+      <h3>Estado del plan publicitario</h3>
+      <p>Plan actual: <strong>${escapeHtml(c.plan || "empresa")}</strong></p>
+      <p>Destacado en directorio: <strong>${c.featured ? "SÃ­ (hasta " + (c.featuredUntil || "â€¦") + ")" : "No"}</strong></p>
+      <p style="color:var(--muted);font-size:.9rem;margin-top:12px">Para activar publicidad o campaÃ±a de destacado, contacta al administrador de la plataforma.</p>
+    </div>
+    <div class="co-stat-grid" style="margin-top:16px">
+      <div class="co-stat-card">
+        <div class="co-stat-value">${c.views || 0}</div>
+        <div class="co-stat-label">Visitas al perfil</div>
+      </div>
+      <div class="co-stat-card">
+        <div class="co-stat-value">${c.contactClicks || 0}</div>
+        <div class="co-stat-label">Clics en contacto</div>
+      </div>
+    </div>`;
+}
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// SOLICITUDES DE COTIZACIÃ“N (placeholder)
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+function renderCoSolicitudes() {
+  const el = document.getElementById("coSolicitudesContent");
+  if (el) el.innerHTML = `
+    <div class="co-coming-soon">
+      ðŸ“‹<br>Solicitudes de CotizaciÃ³n<br>
+      <small>Los clientes podrÃ¡n enviar solicitudes directamente a tu empresa. <br>Esta funciÃ³n estarÃ¡ disponible prÃ³ximamente.</small>
+    </div>`;
+}
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ESTADÃSTICAS
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+async function renderCoEstadisticas() {
+  const el = document.getElementById("coEstadisticasContent");
+  if (!el) return;
+  try {
+    const res = await fetch("/api/companies/me", { headers: coAuthHeader() });
+    const c = res.ok ? await res.json() : (AUTH.companyData || {});
+    el.innerHTML = `
+      <div class="co-stat-grid">
+        <div class="co-stat-card">
+          <div class="co-stat-value">${c.views || 0}</div>
+          <div class="co-stat-label">Visitas al perfil</div>
+        </div>
+        <div class="co-stat-card">
+          <div class="co-stat-value">${c.contactClicks || 0}</div>
+          <div class="co-stat-label">Clics en contacto</div>
+        </div>
+        <div class="co-stat-card">
+          <div class="co-stat-value">${c.products?.length || 0}</div>
+          <div class="co-stat-label">Productos publicados</div>
+        </div>
+        <div class="co-stat-card">
+          <div class="co-stat-value">${(c.promotions || []).filter(p => p.active).length}</div>
+          <div class="co-stat-label">Promociones activas</div>
+        </div>
+        <div class="co-stat-card">
+          <div class="co-stat-value">${c.branches?.length || 0}</div>
+          <div class="co-stat-label">Sucursales</div>
+        </div>
+      </div>
+      <p style="color:var(--muted);font-size:.85rem;margin-top:16px">AnalÃ­ticas detalladas (por perÃ­odo, conversiones, etc.) prÃ³ximamente.</p>`;
+  } catch { el.innerHTML = '<p class="login-hint">Error cargando estadÃ­sticas.</p>'; }
+}
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// PERFIL PÃšBLICO
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+function renderCoPerfil() {
+  const el = document.getElementById("coPerfilContent");
+  if (!el) return;
+  const c = AUTH.companyData || {};
+  const linkEl = document.getElementById("coPublicProfileLink");
+  if (linkEl) linkEl.href = `/api/companies/${c.id}`;
+  el.innerHTML = `
+    <div class="co-section-card">
+      ${c.coverUrl ? `<img src="${escapeHtml(c.coverUrl)}" alt="" style="width:100%;max-height:180px;object-fit:cover;border-radius:10px;margin-bottom:12px">` : ""}
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+        ${c.logoUrl ? `<img src="${escapeHtml(c.logoUrl)}" alt="" style="width:56px;height:56px;border-radius:10px;object-fit:cover">` : `<div style="width:56px;height:56px;border-radius:10px;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:1.5rem">ðŸ¢</div>`}
+        <div>
+          <h2 style="margin:0">${escapeHtml(c.name || "Mi Empresa")}</h2>
+          ${c.businessName ? `<span style="color:var(--muted);font-size:.9rem">${escapeHtml(c.businessName)}</span>` : ""}
+        </div>
+      </div>
+      ${c.description ? `<p>${escapeHtml(c.description)}</p>` : ""}
+      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:8px">
+        ${c.phone ? `<span>ðŸ“ž ${escapeHtml(c.phone)}</span>` : ""}
+        ${c.whatsapp ? `<span>ðŸ’¬ ${escapeHtml(c.whatsapp)}</span>` : ""}
+        ${c.email ? `<span>âœ‰ï¸ ${escapeHtml(c.email)}</span>` : ""}
+        ${c.location?.city ? `<span>ðŸ“ ${escapeHtml(c.location.city)}</span>` : ""}
+        ${c.schedule ? `<span>ðŸ• ${escapeHtml(c.schedule)}</span>` : ""}
+      </div>
+      ${(c.products || []).length ? `
+      <hr style="margin:16px 0">
+      <h4>Productos (${c.products.length})</h4>
+      <div class="co-product-grid" style="max-height:260px;overflow-y:auto">${(c.products || []).slice(0, 6).map(p => `
+        <div class="co-product-card">
+          ${p.photoUrl ? `<img src="${escapeHtml(p.photoUrl)}" class="co-product-thumb" alt="">` : `<div class="co-product-thumb" style="background:var(--line);display:flex;align-items:center;justify-content:center;font-size:2rem">ðŸ“¦</div>`}
+          <div class="co-product-info"><strong>${escapeHtml(p.name)}</strong>${p.price > 0 ? `<span class="co-price">$${Number(p.price).toFixed(2)}</span>` : ""}</div>
+        </div>`).join("")}</div>` : ""}
+    </div>`;
+}
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// CONFIGURACIÃ“N
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+function renderCoConfiguracion() {
+  const el = document.getElementById("coConfiguracionContent");
+  if (!el) return;
+  const c = AUTH.companyData || {};
+  el.innerHTML = `
+    <div class="co-section-card">
+      <h3>Cambiar contraseÃ±a</h3>
+      <div class="form-grid">
+        <label class="span-2">Nueva contraseÃ±a (mÃ­nimo 4 caracteres)
+          <input id="coConf_newPassword" type="password" placeholder="Nueva contraseÃ±a">
+        </label>
+        <label class="span-2">Confirmar contraseÃ±a
+          <input id="coConf_confirmPassword" type="password" placeholder="Repite la nueva contraseÃ±a">
+        </label>
+      </div>
+      <button id="coSavePasswordBtn" class="primary-btn" type="button" style="margin-top:12px">Cambiar contraseÃ±a</button>
+      <p id="coConfPasswordError" class="login-error hidden"></p>
+      <p id="coConfPasswordOk" class="hidden" style="color:var(--green,#38a169);margin-top:8px">ContraseÃ±a actualizada âœ“</p>
+    </div>
+    <div class="co-section-card" style="margin-top:16px">
+      <h3>InformaciÃ³n de cuenta</h3>
+      <p>CÃ³digo de acceso: <strong>${escapeHtml(c.accessCode || "â€”")}</strong></p>
+      <p style="color:var(--muted);font-size:.85rem">Para cambiar tu cÃ³digo de acceso, contacta al administrador de la plataforma.</p>
+    </div>`;
+
+  document.getElementById("coSavePasswordBtn")?.addEventListener("click", async () => {
+    const errEl = document.getElementById("coConfPasswordError");
+    const okEl = document.getElementById("coConfPasswordOk");
+    errEl.classList.add("hidden"); okEl.classList.add("hidden");
+    const pw = document.getElementById("coConf_newPassword")?.value;
+    const pw2 = document.getElementById("coConf_confirmPassword")?.value;
+    if (!pw || pw.length < 4) { errEl.textContent = "La contraseÃ±a debe tener al menos 4 caracteres."; errEl.classList.remove("hidden"); return; }
+    if (pw !== pw2) { errEl.textContent = "Las contraseÃ±as no coinciden."; errEl.classList.remove("hidden"); return; }
+    try {
+      const res = await fetch("/api/companies/me/password", { method: "PUT", headers: coAuthHeader(), body: JSON.stringify({ password: pw }) });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.error || "Error cambiando contraseÃ±a."; errEl.classList.remove("hidden"); return; }
+      okEl.classList.remove("hidden");
+      document.getElementById("coConf_newPassword").value = "";
+      document.getElementById("coConf_confirmPassword").value = "";
+    } catch { errEl.textContent = "Sin conexiÃ³n al servidor."; errEl.classList.remove("hidden"); }
+  });
 }
