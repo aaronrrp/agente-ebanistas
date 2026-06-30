@@ -733,6 +733,7 @@
                 <label>Categoría
                   <select id="adm_prod_category"><option value="">— Sin categoría —</option></select>
                 </label>
+                <label>Marca<input id="adm_prod_brand" type="text" placeholder="Ej: Madecentro, Arauco"></label>
                 <label>Espesor<input id="adm_prod_thickness" type="text" placeholder="Ej: 18mm"></label>
                 <label>Color<input id="adm_prod_color" type="text" placeholder="Ej: Blanco Cotton"></label>
                 <label>Presentación<input id="adm_prod_presentation" type="text" placeholder="Ej: 2440×1830mm"></label>
@@ -931,8 +932,17 @@
               <div class="span-2">
                 <div class="subsection">
                   <h4>Agregar material</h4>
+                  <div id="quoteCatalogCompanyRow" style="margin-bottom:10px">
+                    <label style="font-size:.85rem;font-weight:600;display:block;margin-bottom:4px">
+                      Empresa proveedora <span style="font-size:.76rem;font-weight:400;color:var(--muted)">(opcional — usa precios del mercado si no seleccionas)</span>
+                    </label>
+                    <select id="quoteCatalogCompanySelect" style="width:100%;padding:7px 10px;border:1px solid var(--line);border-radius:7px;font-size:.88rem;background:var(--surface)">
+                      <option value="">— Precios generales del mercado —</option>
+                    </select>
+                    <p id="quoteCatalogCompanyInfo" style="font-size:.78rem;color:var(--muted);margin:3px 0 0"></p>
+                  </div>
                   <div class="form-grid compact-grid">
-                    <label class="span-2">Material (de precios del mercado)
+                    <label class="span-2" id="materialComboLabel">Material
                       <div class="material-combo" id="materialCombo">
                         <input id="materialSearchInput" type="text" placeholder="Escribe para buscar, o haz clic para ver categorías…" autocomplete="off">
                         <div id="materialSearchResults" class="material-combo-results hidden"></div>

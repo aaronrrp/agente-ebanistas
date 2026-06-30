@@ -539,7 +539,7 @@ function showView(viewId) {
   if (viewId === "adminView" && AUTH.mode === "admin") loadAdminDashboard();
   if (viewId === "sellersView" && AUTH.mode === "admin") loadSellersFromServer();
   if (viewId === "quoteView" && AUTH.mode === "vendedor") loadSellerQuoteClientOptions();
-  if (viewId === "quoteView" && AUTH.mode === "ebanista") resetMaterialCombo();
+  if (viewId === "quoteView" && AUTH.mode === "ebanista") { populateQuoteCatalogCompanySelect(); resetMaterialCombo(); }
   if (viewId === "handoffsView") {
     const canSend = AUTH.mode === "ebanista" || AUTH.mode === "vendedor";
     document.getElementById("handoffSendActions")?.classList.toggle("hidden", !canSend);
@@ -7403,7 +7403,70 @@ function seedImecaPrices() {
   return added;
 }
 
+// ── Catálogo de empresa seleccionado para la cotización ───────────────────────
+let _quoteCatalogCompanyId = null;
+let _quoteCatalogCache = null; // { categories:[], products:[] }
+
+async function populateQuoteCatalogCompanySelect() {
+  const sel = document.getElementById("quoteCatalogCompanySelect");
+  if (!sel) return;
+  try {
+    const r = await fetch("/api/companies");
+    const companies = r.ok ? await r.json() : [];
+    const approved = companies.filter(c => c.status === "approved");
+    const current = sel.value;
+    sel.innerHTML = `<option value="">— Precios generales del mercado —</option>` +
+      approved.map(c => `<option value="${c.id}">${escapeHtml(c.name)}${c.category ? " · " + escapeHtml(c.category) : ""}</option>`).join("");
+    if (current && approved.find(c => c.id === current)) sel.value = current;
+  } catch {}
+}
+
+async function selectQuoteCatalogCompany(companyId) {
+  _quoteCatalogCompanyId = companyId || null;
+  _quoteCatalogCache = null;
+  const infoEl = document.getElementById("quoteCatalogCompanyInfo");
+  const labelEl = document.getElementById("materialComboLabel");
+  if (!companyId) {
+    if (infoEl) infoEl.textContent = "";
+    if (labelEl) labelEl.firstChild.textContent = "Material ";
+    resetMaterialCombo();
+    return;
+  }
+  if (infoEl) infoEl.textContent = "Cargando catálogo…";
+  try {
+    const r = await fetch(`/api/companies/${companyId}/catalog`);
+    if (!r.ok) throw new Error("no catalog");
+    _quoteCatalogCache = await r.json();
+    const count = _quoteCatalogCache.products?.length || 0;
+    if (infoEl) infoEl.textContent = `${count} producto${count !== 1 ? "s" : ""} disponible${count !== 1 ? "s" : ""}`;
+    if (labelEl) {
+      const sel = document.getElementById("quoteCatalogCompanySelect");
+      const compName = sel?.options[sel.selectedIndex]?.text?.split(" · ")[0] || "";
+      labelEl.firstChild.textContent = `Material de ${compName} `;
+    }
+  } catch {
+    if (infoEl) infoEl.textContent = "No se pudo cargar el catálogo de esta empresa.";
+    _quoteCatalogCache = null;
+  }
+  resetMaterialCombo();
+}
+
+document.getElementById("quoteCatalogCompanySelect")?.addEventListener("change", (e) => {
+  selectQuoteCatalogCompany(e.target.value);
+});
+
 function getMaterialCatalogEntries() {
+  // Si hay empresa seleccionada en cotización → usar su catálogo
+  if (_quoteCatalogCompanyId && _quoteCatalogCache) {
+    const { categories = [], products = [] } = _quoteCatalogCache;
+    return products.map(pr => ({
+      value: `catalog:${pr.id}`,
+      category: pr.categoryPath || pr.categoryId || "otros",
+      description: [pr.name, pr.brand, pr.thickness, pr.color, pr.presentation].filter(Boolean).join(" · "),
+      unitPrice: Number(pr.price) || 0
+    }));
+  }
+  // Fallback: precios generales del mercado (prices.json)
   const prices = tenantPrices();
   const names = prices._names || {};
   const standardKeys = Object.keys(defaultGlobalPrices).filter(k => !NON_MATERIAL_PRICE_KEYS.includes(k));
@@ -9874,8 +9937,9 @@ async function loadAdminCatalogTab() {
 }
 
 async function _loadCatalogCategories() {
+  if (!_selectedCatalogCompanyId) { _catalogCategories = []; return; }
   try {
-    const res = await fetch("/api/catalog/categories");
+    const res = await fetch(`/api/companies/${_selectedCatalogCompanyId}/catalog/categories`);
     _catalogCategories = res.ok ? await res.json() : [];
   } catch { _catalogCategories = []; }
 }
@@ -9924,11 +9988,12 @@ function _buildCatTreeHtml(parentId, depth) {
 document.getElementById("adm_addRootCatBtn")?.addEventListener("click", () => _addSubCategory(null, null));
 
 async function _addSubCategory(parentId, parentName) {
+  if (!_selectedCatalogCompanyId) { alert("Selecciona una empresa primero."); return; }
   const label = parentName ? `Nombre de subcategoría de "${parentName}":` : "Nombre de la categoría raíz:";
   const name = prompt(label);
   if (!name?.trim()) return;
   try {
-    const res = await fetch("/api/admin/catalog/categories", {
+    const res = await fetch(`/api/admin/companies/${_selectedCatalogCompanyId}/catalog/categories`, {
       method: "POST",
       headers: { ...adminAuthHeaderAdmin(), "Content-Type": "application/json" },
       body: JSON.stringify({ name: name.trim(), parentId: parentId || null })
@@ -9941,10 +10006,11 @@ async function _addSubCategory(parentId, parentName) {
 }
 
 async function _renameCategory(id, currentName) {
+  if (!_selectedCatalogCompanyId) return;
   const name = prompt("Nuevo nombre:", currentName);
   if (!name?.trim() || name.trim() === currentName) return;
   try {
-    const res = await fetch(`/api/admin/catalog/categories/${id}`, {
+    const res = await fetch(`/api/admin/companies/${_selectedCatalogCompanyId}/catalog/categories/${id}`, {
       method: "PUT",
       headers: { ...adminAuthHeaderAdmin(), "Content-Type": "application/json" },
       body: JSON.stringify({ name: name.trim() })
@@ -9957,9 +10023,10 @@ async function _renameCategory(id, currentName) {
 }
 
 async function _deleteCategory(id) {
+  if (!_selectedCatalogCompanyId) return;
   if (!confirm("¿Eliminar esta categoría? Solo se puede si no tiene subcategorías ni productos.")) return;
   try {
-    const res = await fetch(`/api/admin/catalog/categories/${id}`, {
+    const res = await fetch(`/api/admin/companies/${_selectedCatalogCompanyId}/catalog/categories/${id}`, {
       method: "DELETE", headers: adminAuthHeaderAdmin()
     });
     const data = await res.json();
@@ -9987,9 +10054,17 @@ function _catPath(id) {
 // ── Productos por empresa (admin) ─────────────────────────────────────────
 document.getElementById("adm_catalogCompanySelect")?.addEventListener("change", async (e) => {
   _selectedCatalogCompanyId = e.target.value;
-  if (_selectedCatalogCompanyId) await _loadCompanyProducts(_selectedCatalogCompanyId);
-  else document.getElementById("adm_productsList").innerHTML = "";
   document.getElementById("adm_productForm")?.classList.add("hidden");
+  if (_selectedCatalogCompanyId) {
+    await _loadCatalogCategories();
+    _renderCategoryTree();
+    _refreshProductCategorySelect();
+    await _loadCompanyProducts(_selectedCatalogCompanyId);
+  } else {
+    _catalogCategories = [];
+    _renderCategoryTree();
+    document.getElementById("adm_productsList").innerHTML = "";
+  }
 });
 
 document.getElementById("adm_addProductBtn")?.addEventListener("click", () => {
@@ -10011,6 +10086,7 @@ document.getElementById("adm_saveProductBtn")?.addEventListener("click", async (
   const payload = {
     name,
     categoryId: document.getElementById("adm_prod_category")?.value || null,
+    brand: document.getElementById("adm_prod_brand")?.value.trim() || "",
     thickness: document.getElementById("adm_prod_thickness")?.value.trim() || "",
     color: document.getElementById("adm_prod_color")?.value.trim() || "",
     presentation: document.getElementById("adm_prod_presentation")?.value.trim() || "",
@@ -10090,9 +10166,9 @@ async function _loadCompanyProducts(companyId) {
     el.innerHTML = list.map(pr => `
       <div class="admin-entity-row" id="prod-row-${pr.id}">
         <div class="admin-entity-info">
-          <strong>${escapeHtml(pr.name)}</strong>
+          <strong>${escapeHtml(pr.name)}${pr.brand ? ` <span style="font-size:.78rem;color:var(--muted);font-weight:400">· ${escapeHtml(pr.brand)}</span>` : ""}</strong>
           <span>${[pr.thickness, pr.color, pr.presentation].filter(Boolean).map(escapeHtml).join(" · ")}</span>
-          <span>$${Number(pr.price).toFixed(2)} / ${escapeHtml(pr.unit)} ${pr.discontinued ? "· <em>Descontinuado</em>" : ""} ${!pr.available ? "· <em>No disponible</em>" : ""}</span>
+          <span>$${Number(pr.price).toFixed(2)} / ${escapeHtml(pr.unit)} ${pr.discontinued ? "· <em style='color:var(--danger)'>Descontinuado</em>" : ""} ${!pr.available ? "· <em style='color:var(--warn)'>No disponible</em>" : ""}</span>
           ${pr.categoryId ? `<span style="font-size:.75rem;color:var(--muted)">${escapeHtml(_catPath(pr.categoryId))}</span>` : ""}
         </div>
         <div class="admin-entity-actions">
@@ -10110,7 +10186,7 @@ function _openProductForm(productId) {
   document.getElementById("adm_productFormTitle").textContent = productId ? "Editar producto" : "Nuevo producto";
   document.getElementById("adm_prod_editId").value = productId || "";
   if (!productId) {
-    ["adm_prod_name","adm_prod_thickness","adm_prod_color","adm_prod_presentation","adm_prod_unit","adm_prod_price"].forEach(id => {
+    ["adm_prod_name","adm_prod_brand","adm_prod_thickness","adm_prod_color","adm_prod_presentation","adm_prod_unit","adm_prod_price"].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.value = id === "adm_prod_unit" ? "plancha" : "";
     });
@@ -10126,6 +10202,7 @@ function _openProductForm(productId) {
         const pr = list.find(p => p.id === productId);
         if (!pr) return;
         document.getElementById("adm_prod_name").value = pr.name || "";
+        document.getElementById("adm_prod_brand").value = pr.brand || "";
         document.getElementById("adm_prod_category").value = pr.categoryId || "";
         document.getElementById("adm_prod_thickness").value = pr.thickness || "";
         document.getElementById("adm_prod_color").value = pr.color || "";
