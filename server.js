@@ -1482,18 +1482,29 @@ async function handleUpdateTenant(req, res, id) {
   delete data.passwordHash; delete data.passwordSalt; // hash siempre se deriva de data.password, nunca se acepta directo
   const idx = tenants.findIndex(t => t.id === id);
   if (idx === -1) {
-    // Upsert: this is the path the UI actually uses to create a tenant
-    // (it PUTs a client-generated id instead of calling POST /api/tenants).
+    // Upsert: the UI creates tenants via PUT with a client-generated id.
+    // _restoring: true means syncTenantsFromServer is restoring after a server restart —
+    // in that case we must NOT regenerate a random password (it would break the ebanista's
+    // existing password; the plain text was shown once at creation and never stored).
+    const isRestoring = Boolean(data._restoring);
     const tenant = { ...data, id };
+    delete tenant._restoring;
     if (!tenant.accessCode) tenant.accessCode = makeCode(tenant.companyName || "ebanista");
-    const passwordPlain = (data.password && String(data.password).trim()) || generatePassword();
-    const { salt, hash } = hashPassword(passwordPlain);
-    tenant.passwordSalt = salt;
-    tenant.passwordHash = hash;
+    let passwordPlain;
+    if (data.password && String(data.password).trim()) {
+      passwordPlain = String(data.password).trim();
+    } else if (!isRestoring) {
+      passwordPlain = generatePassword();
+    }
+    if (passwordPlain) {
+      const { salt, hash } = hashPassword(passwordPlain);
+      tenant.passwordSalt = salt;
+      tenant.passwordHash = hash;
+    }
     delete tenant.password;
     tenants.push(tenant);
     saveTenants(tenants);
-    sendJson(res, 200, { ...publicTenant(tenant), passwordPlain });
+    sendJson(res, 200, passwordPlain ? { ...publicTenant(tenant), passwordPlain } : publicTenant(tenant));
     return;
   }
   let passwordPlain;

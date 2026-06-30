@@ -1345,8 +1345,17 @@ function getTenantLink(tenant) {
     tenant.accessCode = `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
     save();
   }
-  // Short link — ebanista always fetches fresh data from server (theme, etc. always up to date)
-  return `${window.location.origin}/?code=${tenant.accessCode}`;
+  // Embed minimal tenant snapshot in ?d= so login works even when server has restarted
+  // and lost in-memory data (Render free plan ephemeral filesystem).
+  // Server is still checked first on login; ?d= is only used as fallback on server error.
+  const snap = JSON.stringify({
+    id: tenant.id, companyName: tenant.companyName, contactName: tenant.contactName,
+    phone: tenant.phone, email: tenant.email, accessCode: tenant.accessCode,
+    status: tenant.status, expiresAt: tenant.expiresAt,
+    margin: tenant.margin, installBase: tenant.installBase, transportBase: tenant.transportBase,
+    materials: tenant.materials, terms: tenant.terms, theme: tenant.theme
+  });
+  return `${window.location.origin}/?code=${tenant.accessCode}&d=${encodeURIComponent(snap)}`;
 }
 
 function getSellerLink(seller) {
@@ -9228,12 +9237,14 @@ async function syncTenantsFromServer() {
       if (changed) { save(); render(); }
     }
 
-    // 2. Push every local tenant to server (admin sigue siendo dueño del resto de los campos)
+    // 2. Push every local tenant to server (admin sigue siendo dueño del resto de los campos).
+    // _restoring: true tells the server this is a sync restore, not a fresh creation — so it
+    // won't regenerate a random password (which would break the ebanista's existing password).
     await Promise.all(state.tenants.map(async t => {
       const r = await fetch(`/api/tenants/${t.id}`, {
         method: "PUT",
         headers: adminApiHeader(),
-        body: JSON.stringify(t)
+        body: JSON.stringify({ ...t, _restoring: true })
       }).catch(() => ({ status: 500 }));
       // If PUT returned 404 (shouldn't happen after upsert fix, but just in case), try POST
       if (r.status === 404) {
@@ -9364,9 +9375,11 @@ async function tryAutoLogin() {
 
   // ── 1. URL has ?code= or ?d= (ebanista link) ──────────────────────────────
   if (urlCode || params.get("d")) {
-    // Path A: ?d= parameter — instant login, no server needed
     const urlData = params.get("d");
-    if (urlData) {
+
+    // Path A: ?d= present but NO ?code= → offline/legacy link, instant login without server.
+    // When ?code= IS present we always go to Path B (server-first) so status is checked live.
+    if (urlData && !urlCode) {
       try {
         let decoded;
         try { decoded = JSON.parse(urlData); }
@@ -9377,9 +9390,7 @@ async function tryAutoLogin() {
           const padded = mod4 ? b64 + "=".repeat(4 - mod4) : b64;
           decoded = JSON.parse(decodeURIComponent(escape(atob(padded))));
         }
-        // Accept if: code matches, OR code is absent, OR decoded has no accessCode (legacy URL)
-        const codeOk = !urlCode || !decoded?.accessCode || decoded.accessCode === urlCode;
-        if (decoded?.id && codeOk) {
+        if (decoded?.id) {
           const today = new Date().toISOString().slice(0, 10);
           if (decoded.status !== "active" || decoded.expiresAt < today) {
             showLogin();
@@ -9390,12 +9401,22 @@ async function tryAutoLogin() {
           return;
         }
       } catch {}
+      showLogin(); return;
     }
 
-    if (!urlCode) { showLogin(); return; } // ?d= was present but invalid, no code either
+    if (!urlCode) { showLogin(); return; }
 
-    // Path B: no ?d= → fetch from server. Show clean spinner — NOT the login form.
-    // The login form only appears if auth actually fails.
+    // Path B: ?code= is present — always check server first so suspension is respected.
+    // Falls back to local cache OR the ?d= snapshot embedded in the link if server is down
+    // (e.g. Render free plan restarted and lost in-memory tenant data).
+    const _urlFallback = () => {
+      if (!urlData) return null;
+      try {
+        const decoded = JSON.parse(urlData);
+        return (decoded?.accessCode === urlCode && decoded?.id) ? decoded : null;
+      } catch { return null; }
+    };
+
     showConnectingScreen();
     try {
       const res = await fetch(`/api/tenant-by-code?code=${encodeURIComponent(urlCode)}`);
@@ -9419,11 +9440,11 @@ async function tryAutoLogin() {
         _prefillCodeTab(urlCode);
         setLoginError("Tu acceso está suspendido o venció. Contacta al administrador.");
       } else {
-        // Server returned error — try local cache as last resort
-        const local = state.tenants.find(t => t.accessCode === urlCode);
-        if (local && isTenantActive(local)) {
+        // Server returned error (e.g. 404 after restart) — try local cache then ?d= snapshot
+        const fallback = state.tenants.find(t => t.accessCode === urlCode) || _urlFallback();
+        if (fallback && isTenantActive(fallback)) {
           hideConnectingScreen();
-          _loginAsEbanista(local);
+          _loginAsEbanista(fallback);
           return;
         }
         hideConnectingScreen();
@@ -9432,11 +9453,11 @@ async function tryAutoLogin() {
         setLoginError("Código no válido. Pide un link actualizado a tu administrador.");
       }
     } catch {
-      // Network error — try local cache
-      const local = state.tenants.find(t => t.accessCode === urlCode);
-      if (local && isTenantActive(local)) {
+      // Network error — try local cache then ?d= snapshot
+      const fallback = state.tenants.find(t => t.accessCode === urlCode) || _urlFallback();
+      if (fallback && isTenantActive(fallback)) {
         hideConnectingScreen();
-        _loginAsEbanista(local);
+        _loginAsEbanista(fallback);
         return;
       }
       hideConnectingScreen();
