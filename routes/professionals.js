@@ -213,6 +213,50 @@ async function handle(req, res, { method, p, parts }) {
   }
 
   // ── Moderación (admin) ──────────────────────────────────────────────────
+  // POST /api/admin/professionals — crea un profesional directamente como "approved"
+  if (method === "POST" && p === "/api/admin/professionals") {
+    if (!requireAdmin(req, res)) return true;
+    const body = await readBody(req);
+    const data = body ? JSON.parse(body) : {};
+    if (!data.name || !String(data.name).trim()) { sendJson(res, 400, { error: "Falta el nombre." }); return true; }
+    const passwordPlain = (data.password && String(data.password).trim()) || generatePassword();
+    const { salt, hash } = hashPassword(passwordPlain);
+    const professional = {
+      id: crypto.randomUUID(),
+      category: CATEGORIES.includes(data.category) ? data.category : "otra",
+      name: String(data.name).trim(),
+      company: data.company || "",
+      description: data.description || "",
+      specialty: data.specialty || "",
+      experienceYears: 0,
+      phone: data.phone || "",
+      whatsapp: data.whatsapp || "",
+      email: data.email || "",
+      location: { province: data.province || "", city: data.city || "", address: "" },
+      schedule: "",
+      photoUrl: "",
+      portfolioUrls: [],
+      socialLinks: {},
+      ratings: { avg: 0, count: 0 },
+      status: "approved",
+      featured: false,
+      featuredUntil: null,
+      plan: "gratuito",
+      accessCode: makeProfessionalCode(data.name),
+      passwordSalt: salt,
+      passwordHash: hash,
+      createdAt: new Date().toISOString(),
+      lastAccessAt: null,
+      views: 0,
+      contactClicks: 0
+    };
+    professionals.push(professional);
+    saveProfessionals(professionals);
+    logActivity({ actorType: "admin", actorId: "admin", actorLabel: "Admin", action: "professional.created_by_admin", meta: { name: professional.name } });
+    sendJson(res, 201, { ...publicProfessional(professional), passwordPlain });
+    return true;
+  }
+
   if (method === "GET" && p === "/api/admin/professionals") {
     if (!requireAdmin(req, res)) return true;
     sendJson(res, 200, professionals.map(publicProfessional)); // incluye pending/rejected/suspended, a diferencia del listado público

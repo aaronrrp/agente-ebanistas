@@ -434,7 +434,26 @@
           <section class="panel">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
               <h3 style="margin:0">Profesionales registrados</h3>
-              <button class="secondary-btn" id="adm_refreshProfessionalsBtn" type="button">🔄 Actualizar</button>
+              <div style="display:flex;gap:6px">
+                <button class="primary-btn" id="adm_addProfessionalBtn" type="button">+ Nuevo profesional</button>
+                <button class="secondary-btn" id="adm_refreshProfessionalsBtn" type="button">🔄 Actualizar</button>
+              </div>
+            </div>
+            <div id="adm_newProfessionalForm" class="hidden" style="background:#f9fafb;border:1px solid #E5E7EB;border-radius:8px;padding:1rem;margin-bottom:16px">
+              <h4 style="margin:0 0 10px">Nuevo profesional (se crea como aprobado)</h4>
+              <div class="form-grid">
+                <label>Nombre <span style="color:#ef4444">*</span><input id="adm_pf_name" type="text" placeholder="Ej: Luis Rivera"></label>
+                <label>Categoría <span style="color:#ef4444">*</span><select id="adm_pf_category"></select></label>
+                <label>Teléfono<input id="adm_pf_phone" type="text" placeholder="+507 6000-0000"></label>
+                <label>WhatsApp<input id="adm_pf_whatsapp" type="text" placeholder="+507 6000-0000"></label>
+                <label>Provincia<input id="adm_pf_province" type="text"></label>
+                <label>Ciudad<input id="adm_pf_city" type="text"></label>
+                <label class="span-2">Contraseña <span style="font-size:.75rem;color:#6B7280">(vacío = se genera automáticamente)</span>
+                  <input id="adm_pf_password" type="text" autocomplete="new-password"></label>
+              </div>
+              <button class="primary-btn" id="adm_saveProfessionalBtn" type="button" style="margin-top:10px">Crear profesional</button>
+              <p id="adm_pf_error" class="login-error hidden"></p>
+              <div id="adm_pf_result" class="hidden" style="margin-top:10px;background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:.75rem;font-size:.875rem"></div>
             </div>
             <div id="adm_professionalsList"></div>
           </section>

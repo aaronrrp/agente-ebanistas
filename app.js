@@ -655,7 +655,8 @@ const ADMIN_TAB_LOADERS = {
   moderacion: loadAdminModeration,
   configuracion: loadAdminPlansEditor,
   logs: () => loadAdminLogs(),
-  seguridad: loadAdminRolesView
+  seguridad: loadAdminRolesView,
+  ebanistas: renderAdmin
 };
 
 function showAdminTab(tabId) {
@@ -763,6 +764,54 @@ async function loadAdminProfessionalsTab() {
   } catch { el.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>'; }
 }
 document.getElementById("adm_refreshProfessionalsBtn")?.addEventListener("click", loadAdminProfessionalsTab);
+
+document.getElementById("adm_addProfessionalBtn")?.addEventListener("click", () => {
+  const form = document.getElementById("adm_newProfessionalForm");
+  if (!form) return;
+  form.classList.toggle("hidden");
+  const catSel = document.getElementById("adm_pf_category");
+  if (catSel && !catSel.options.length) {
+    catSel.innerHTML = PROFESSIONAL_CATEGORIES.map(c => `<option value="${c.value}">${c.label}</option>`).join("");
+  }
+});
+
+document.getElementById("adm_saveProfessionalBtn")?.addEventListener("click", async () => {
+  const name = document.getElementById("adm_pf_name")?.value.trim();
+  const errEl = document.getElementById("adm_pf_error");
+  const resultEl = document.getElementById("adm_pf_result");
+  errEl.classList.add("hidden");
+  resultEl.classList.add("hidden");
+  if (!name) { errEl.textContent = "El nombre es obligatorio."; errEl.classList.remove("hidden"); return; }
+  const btn = document.getElementById("adm_saveProfessionalBtn");
+  btn.disabled = true;
+  try {
+    const res = await fetch("/api/admin/professionals", {
+      method: "POST",
+      headers: adminAuthHeaderAdmin(),
+      body: JSON.stringify({
+        name,
+        category: document.getElementById("adm_pf_category")?.value || "otra",
+        phone: document.getElementById("adm_pf_phone")?.value.trim() || "",
+        whatsapp: document.getElementById("adm_pf_whatsapp")?.value.trim() || "",
+        province: document.getElementById("adm_pf_province")?.value.trim() || "",
+        city: document.getElementById("adm_pf_city")?.value.trim() || "",
+        password: document.getElementById("adm_pf_password")?.value.trim() || ""
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || "Error al crear."; errEl.classList.remove("hidden"); return; }
+    resultEl.innerHTML = `<strong>✅ Profesional creado</strong><br>Código: <code>${escapeHtml(data.accessCode)}</code> &nbsp; Contraseña: <code>${escapeHtml(data.passwordPlain)}</code><br><em style="color:#6B7280">Comparte estos datos para que el profesional ingrese a su panel.</em>`;
+    resultEl.classList.remove("hidden");
+    document.getElementById("adm_pf_name").value = "";
+    document.getElementById("adm_pf_phone").value = "";
+    document.getElementById("adm_pf_whatsapp").value = "";
+    document.getElementById("adm_pf_province").value = "";
+    document.getElementById("adm_pf_city").value = "";
+    document.getElementById("adm_pf_password").value = "";
+    loadAdminProfessionalsTab();
+  } catch { errEl.textContent = "Sin conexión al servidor."; errEl.classList.remove("hidden"); }
+  finally { btn.disabled = false; }
+});
 
 async function loadAdminCompaniesTab() {
   const el = document.getElementById("adm_companiesList");
@@ -4401,7 +4450,7 @@ function updateSendButtonLabels() {
   const cBtn = document.getElementById("sendCutsToSellerBtn");
   if (qBtn) qBtn.textContent = label;
   if (cBtn) cBtn.textContent = label;
-  document.getElementById("sendCutsToQuoteBtn")?.classList.toggle("hidden", AUTH.mode !== "ebanista");
+  document.getElementById("sendCutsToQuoteBtn")?.classList.toggle("hidden", AUTH.mode === "vendedor");
 }
 
 document.getElementById("sendHandoffBtn")?.addEventListener("click", async () => {
