@@ -765,22 +765,29 @@
 
         <!-- ── Catálogo global de categorías + productos por empresa ──────── -->
         <div class="admin-subpanel hidden" data-admin-panel="catalogo">
+          <!-- Selector de empresa — controla categorías Y productos -->
+          <section class="panel" style="margin-bottom:1rem;padding:.75rem 1rem">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <strong style="white-space:nowrap">Empresa:</strong>
+              <select id="adm_catalogCompanySelect" style="flex:1;min-width:180px;font-size:.88rem;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface)">
+                <option value="">— Selecciona empresa —</option>
+              </select>
+            </div>
+          </section>
+
           <!-- Árbol de categorías -->
           <section class="panel">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
               <h3 style="margin:0">Árbol de categorías</h3>
               <button class="primary-btn" id="adm_addRootCatBtn" type="button">+ Categoría raíz</button>
             </div>
-            <div id="adm_categoryTree"></div>
+            <div id="adm_categoryTree"><p class="login-hint">Selecciona una empresa para ver sus categorías.</p></div>
           </section>
 
           <!-- Productos por empresa -->
           <section class="panel" style="margin-top:1.5rem">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-              <h3 style="margin:0;flex:1">Productos por empresa</h3>
-              <select id="adm_catalogCompanySelect" style="font-size:.85rem;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface)">
-                <option value="">— Selecciona empresa —</option>
-              </select>
+              <h3 style="margin:0;flex:1">Productos</h3>
               <button class="primary-btn" id="adm_addProductBtn" type="button">+ Nuevo producto</button>
               <button class="secondary-btn" id="adm_importProductsBtn" type="button">📥 Importar JSON</button>
             </div>
