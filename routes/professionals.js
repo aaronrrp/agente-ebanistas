@@ -83,6 +83,10 @@ async function handle(req, res, { method, p, parts }) {
   if (method === "GET" && p === "/api/professionals") {
     const q = Object.fromEntries(new URL(req.url, "http://x").searchParams);
     const list = professionals.filter(prof => matchesFilters(prof, q)).map(publicProfessionalForListing);
+    const sort = q.sort || "recent";
+    if (sort === "rating") list.sort((a, b) => (b.ratings?.avg || 0) - (a.ratings?.avg || 0));
+    else if (sort === "reviews") list.sort((a, b) => (b.ratings?.count || 0) - (a.ratings?.count || 0));
+    else list.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
     sendJson(res, 200, list);
     return true;
   }

@@ -656,7 +656,9 @@ const ADMIN_TAB_LOADERS = {
   configuracion: loadAdminPlansEditor,
   logs: () => loadAdminLogs(),
   seguridad: loadAdminRolesView,
-  ebanistas: renderAdmin
+  ebanistas: renderAdmin,
+  valoraciones: loadAdminRatingsTab,
+  catalogo: loadAdminCatalogTab
 };
 
 function showAdminTab(tabId) {
@@ -8291,6 +8293,17 @@ function professionalCategoryLabel(value) {
   return PROFESSIONAL_CATEGORIES.find(c => c.value === value)?.label || value;
 }
 
+function starHtml(avg, count) {
+  const full = Math.round(avg || 0);
+  const stars = [1,2,3,4,5].map(i => `<span class="star${i <= full ? " star-filled" : ""}">${i <= full ? "★" : "☆"}</span>`).join("");
+  return `<span class="star-row">${stars}</span><span class="star-count">${count || 0} reseña${count !== 1 ? "s" : ""}</span>`;
+}
+
+function currentBestAuthToken() {
+  return AUTH.token || AUTH.ebToken || AUTH.sellerToken
+    || (typeof _publicPostAuth !== "undefined" && _publicPostAuth?.token) || null;
+}
+
 async function loadPublicDirectory() {
   const grid = document.getElementById("publicDirectoryGrid");
   if (!grid) return;
@@ -8300,10 +8313,12 @@ async function loadPublicDirectory() {
   const province = document.getElementById("pf_filterProvince")?.value.trim();
   const city = document.getElementById("pf_filterCity")?.value.trim();
   const specialty = document.getElementById("pf_filterSpecialty")?.value.trim();
+  const sort = document.getElementById("pf_sortSelect")?.value || "recent";
   if (category) params.set("category", category);
   if (province) params.set("province", province);
   if (city) params.set("city", city);
   if (specialty) params.set("specialty", specialty);
+  params.set("sort", sort);
   try {
     const res = await fetch(`/api/professionals?${params.toString()}`);
     const list = res.ok ? await res.json() : [];
@@ -8316,8 +8331,12 @@ async function loadPublicDirectory() {
           ${p.company ? `<span class="public-pro-company">${escapeHtml(p.company)}</span>` : ""}
           <span class="public-pro-category">${escapeHtml(professionalCategoryLabel(p.category))}${p.specialty ? " · " + escapeHtml(p.specialty) : ""}</span>
           ${p.location?.city ? `<span class="public-pro-location">📍 ${escapeHtml(p.location.city)}${p.location.province ? ", " + escapeHtml(p.location.province) : ""}</span>` : ""}
+          ${p.ratings?.count ? `<div class="star-display">${starHtml(p.ratings.avg, p.ratings.count)}</div>` : ""}
           ${p.description ? `<p class="public-pro-desc">${escapeHtml(p.description)}</p>` : ""}
-          <button class="primary-btn public-pro-contact" type="button" data-contact-id="${p.id}" data-contact-phone="${escapeHtml(p.whatsapp || p.phone || "")}">📞 Contactar</button>
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <button class="primary-btn public-pro-contact" type="button" data-contact-id="${p.id}" data-contact-phone="${escapeHtml(p.whatsapp || p.phone || "")}">📞 Contactar</button>
+            <button class="secondary-btn" type="button" data-view-profile="${p.id}">Ver perfil</button>
+          </div>
         </div>
       </div>`).join("");
   } catch {
@@ -8335,12 +8354,17 @@ document.getElementById("publicBackToDirectoryBtn")?.addEventListener("click", (
   document.getElementById("publicDirectoryView").classList.remove("hidden");
 });
 document.getElementById("pf_applyFiltersBtn")?.addEventListener("click", loadPublicDirectory);
+document.getElementById("pf_sortSelect")?.addEventListener("change", loadPublicDirectory);
 document.getElementById("publicDirectoryGrid")?.addEventListener("click", (e) => {
   const btn = e.target.closest("[data-contact-id]");
   if (!btn) return;
   fetch(`/api/professionals/${btn.dataset.contactId}/contact-click`, { method: "POST" }).catch(() => {});
   const phone = btn.dataset.contactPhone;
   if (phone) window.open(`https://wa.me/${phone.replace(/[^0-9]/g, "")}`, "_blank");
+});
+document.getElementById("publicDirectoryGrid")?.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-view-profile]");
+  if (btn) openProProfileModal(btn.dataset.viewProfile);
 });
 
 document.getElementById("pf_submitRegisterBtn")?.addEventListener("click", async () => {
@@ -9664,3 +9688,467 @@ renderPricesForm();
 // ── Bootstrap ──────────────────────────────────────────────────────────────
 seedImecaPrices();
 tryAutoLogin();
+
+// ══════════════════════════════════════════════════════════════════════════════
+// EXPANSIÓN: Valoraciones · Catálogo de empresa · Perfil profesional
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── Modal de perfil profesional ───────────────────────────────────────────
+document.getElementById("proProfileCloseBtn")?.addEventListener("click", () => {
+  document.getElementById("proProfileModal")?.classList.add("hidden");
+});
+document.getElementById("proProfileModal")?.addEventListener("click", (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.add("hidden");
+});
+
+async function openProProfileModal(professionalId) {
+  const modal = document.getElementById("proProfileModal");
+  const content = document.getElementById("proProfileContent");
+  if (!modal || !content) return;
+  content.innerHTML = '<p class="login-hint">Cargando perfil…</p>';
+  modal.classList.remove("hidden");
+  try {
+    const [profRes, ratingsRes] = await Promise.all([
+      fetch(`/api/professionals/${professionalId}`),
+      fetch(`/api/professionals/${professionalId}/ratings`)
+    ]);
+    const p = profRes.ok ? await profRes.json() : null;
+    const ratings = ratingsRes.ok ? await ratingsRes.json() : [];
+    if (!p) { content.innerHTML = '<p class="login-hint">No se pudo cargar el perfil.</p>'; return; }
+    const avgStars = p.ratings?.count ? starHtml(p.ratings.avg, p.ratings.count) : '<span class="star-count">Sin reseñas aún</span>';
+    content.innerHTML = `
+      <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:16px">
+        ${p.photoUrl
+          ? `<img src="${escapeHtml(p.photoUrl)}" alt="" style="width:80px;height:80px;border-radius:50%;object-fit:cover;flex-shrink:0">`
+          : `<div style="width:80px;height:80px;border-radius:50%;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:800;color:var(--accent);flex-shrink:0">${escapeHtml((p.name||"?")[0])}</div>`}
+        <div>
+          <h3 style="margin:0 0 4px">${escapeHtml(p.name)}</h3>
+          ${p.company ? `<p style="margin:0 0 2px;font-size:.88rem;color:var(--muted)">${escapeHtml(p.company)}</p>` : ""}
+          <p style="margin:0 0 6px;font-size:.85rem">${escapeHtml(professionalCategoryLabel(p.category))}${p.specialty ? " · " + escapeHtml(p.specialty) : ""}</p>
+          <div class="star-display">${avgStars}</div>
+        </div>
+      </div>
+      ${p.description ? `<p style="font-size:.88rem;line-height:1.5;margin:0 0 12px">${escapeHtml(p.description)}</p>` : ""}
+      <div class="form-grid" style="margin-bottom:12px">
+        ${p.experienceYears ? `<div><strong style="font-size:.8rem;color:var(--muted)">EXPERIENCIA</strong><p style="margin:2px 0;font-size:.9rem">${p.experienceYears} año${p.experienceYears !== 1 ? "s" : ""}</p></div>` : ""}
+        ${p.schedule ? `<div><strong style="font-size:.8rem;color:var(--muted)">HORARIO</strong><p style="margin:2px 0;font-size:.9rem">${escapeHtml(p.schedule)}</p></div>` : ""}
+        ${p.location?.city ? `<div><strong style="font-size:.8rem;color:var(--muted)">UBICACIÓN</strong><p style="margin:2px 0;font-size:.9rem">📍 ${escapeHtml(p.location.city)}${p.location.province ? ", " + escapeHtml(p.location.province) : ""}</p></div>` : ""}
+      </div>
+      ${(p.whatsapp || p.phone) ? `<a class="primary-btn" href="https://wa.me/${(p.whatsapp||p.phone).replace(/[^0-9]/g,'')}" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none;margin-bottom:16px">📞 Contactar por WhatsApp</a>` : ""}
+      <hr style="margin:12px 0;border:none;border-top:1px solid var(--line)">
+      <h4 style="margin:0 0 10px">Reseñas (${ratings.length})</h4>
+      <div id="proRatingsList">
+        ${ratings.length ? ratings.map(r => `
+          <div style="padding:10px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;background:var(--surface-soft)">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+              <strong style="font-size:.88rem">${escapeHtml(r.raterName || "Anónimo")}</strong>
+              <span class="star-row">${[1,2,3,4,5].map(i=>`<span class="star${i<=r.stars?" star-filled":""}">${i<=r.stars?"★":"☆"}</span>`).join("")}</span>
+            </div>
+            ${r.comment ? `<p style="font-size:.85rem;margin:0;color:var(--muted)">${escapeHtml(r.comment)}</p>` : ""}
+            <time style="font-size:.75rem;color:var(--muted)">${new Date(r.createdAt).toLocaleDateString()}</time>
+          </div>`).join("") : '<p class="login-hint">Nadie ha dejado reseñas aún. ¡Sé el primero!</p>'}
+      </div>
+      <div id="proRatingForm" style="margin-top:14px;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--surface-soft)">
+        <h5 style="margin:0 0 10px">Dejar una valoración</h5>
+        <div style="margin-bottom:8px">
+          <span style="font-size:.85rem;color:var(--muted)">Tu nombre (opcional)</span>
+          <input id="proRatingName" type="text" placeholder="Cómo quieres aparecer" style="width:100%;margin-top:4px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:.88rem;box-sizing:border-box">
+        </div>
+        <div style="margin-bottom:8px">
+          <span style="font-size:.85rem;color:var(--muted)">Valoración*</span>
+          <div class="star-input" id="proRatingStars" data-selected="0">
+            ${[1,2,3,4,5].map(i=>`<button type="button" class="star-btn" data-star="${i}" aria-label="${i} estrella${i>1?"s":""}">☆</button>`).join("")}
+          </div>
+        </div>
+        <div style="margin-bottom:10px">
+          <span style="font-size:.85rem;color:var(--muted)">Comentario (opcional)</span>
+          <textarea id="proRatingComment" rows="2" placeholder="Cuéntanos tu experiencia…" style="width:100%;margin-top:4px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:.88rem;box-sizing:border-box;resize:vertical"></textarea>
+        </div>
+        <button class="primary-btn" id="proRatingSubmitBtn" type="button" data-prof-id="${professionalId}">Enviar valoración</button>
+        <p id="proRatingError" class="login-error hidden"></p>
+        <p id="proRatingOk" class="login-hint hidden" style="color:var(--accent-dark)"></p>
+      </div>`;
+    _attachRatingFormListeners();
+  } catch {
+    content.innerHTML = '<p class="login-hint">Error al cargar el perfil.</p>';
+  }
+}
+
+function _attachRatingFormListeners() {
+  const starsEl = document.getElementById("proRatingStars");
+  if (starsEl) {
+    starsEl.querySelectorAll(".star-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const val = Number(btn.dataset.star);
+        starsEl.dataset.selected = val;
+        starsEl.querySelectorAll(".star-btn").forEach(b => {
+          b.textContent = Number(b.dataset.star) <= val ? "★" : "☆";
+          b.classList.toggle("star-btn-filled", Number(b.dataset.star) <= val);
+        });
+      });
+      btn.addEventListener("mouseover", () => {
+        const val = Number(btn.dataset.star);
+        starsEl.querySelectorAll(".star-btn").forEach(b => {
+          b.textContent = Number(b.dataset.star) <= val ? "★" : "☆";
+        });
+      });
+      btn.addEventListener("mouseout", () => {
+        const sel = Number(starsEl.dataset.selected || 0);
+        starsEl.querySelectorAll(".star-btn").forEach(b => {
+          b.textContent = Number(b.dataset.star) <= sel ? "★" : "☆";
+        });
+      });
+    });
+  }
+  document.getElementById("proRatingSubmitBtn")?.addEventListener("click", async () => {
+    const profId = document.getElementById("proRatingSubmitBtn").dataset.profId;
+    const stars = Number(document.getElementById("proRatingStars")?.dataset.selected || 0);
+    const errEl = document.getElementById("proRatingError");
+    const okEl = document.getElementById("proRatingOk");
+    errEl.classList.add("hidden");
+    okEl.classList.add("hidden");
+    if (!stars) { errEl.textContent = "Selecciona una valoración (1–5 estrellas)."; errEl.classList.remove("hidden"); return; }
+    const token = currentBestAuthToken();
+    if (!token) { errEl.textContent = "Debes iniciar sesión para dejar una reseña."; errEl.classList.remove("hidden"); return; }
+    try {
+      const res = await fetch(`/api/professionals/${profId}/ratings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          stars,
+          raterName: document.getElementById("proRatingName")?.value.trim() || "",
+          comment: document.getElementById("proRatingComment")?.value.trim() || ""
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.error || "No se pudo enviar."; errEl.classList.remove("hidden"); return; }
+      okEl.textContent = "¡Gracias por tu valoración!";
+      okEl.classList.remove("hidden");
+      document.getElementById("proRatingSubmitBtn").disabled = true;
+    } catch { errEl.textContent = "Sin conexión al servidor."; errEl.classList.remove("hidden"); }
+  });
+}
+
+// ── Admin: Valoraciones ───────────────────────────────────────────────────
+async function loadAdminRatingsTab() {
+  const el = document.getElementById("adm_ratingsList");
+  if (!el) return;
+  el.innerHTML = '<p class="login-hint">Cargando…</p>';
+  const hidden = document.getElementById("adm_ratingsFilter")?.value;
+  const params = new URLSearchParams();
+  if (hidden) params.set("hidden", hidden);
+  try {
+    const res = await fetch(`/api/admin/ratings?${params}`, { headers: adminAuthHeaderAdmin() });
+    const list = res.ok ? await res.json() : [];
+    if (!list.length) { el.innerHTML = '<p class="login-hint">No hay valoraciones.</p>'; return; }
+    el.innerHTML = list.map(r => `
+      <div class="admin-entity-row" id="rating-row-${r.id}">
+        <div class="admin-entity-info">
+          <strong>${[1,2,3,4,5].map(i=>i<=r.stars?"★":"☆").join("")} — ${escapeHtml(r.raterName || r.raterRole)}</strong>
+          <span>Profesional: ${r.professionalId}</span>
+          ${r.comment ? `<span>${escapeHtml(r.comment.slice(0,120))}${r.comment.length>120?"…":""}</span>` : ""}
+          <span>${new Date(r.createdAt).toLocaleDateString()} ${r.hidden ? "· <em>Oculta</em>" : ""}</span>
+        </div>
+        <div class="admin-entity-actions">
+          ${r.hidden
+            ? `<button class="secondary-btn" type="button" onclick="adminToggleRating('${r.id}','show')">Mostrar</button>`
+            : `<button class="secondary-btn" type="button" onclick="adminToggleRating('${r.id}','hide')">Ocultar</button>`}
+        </div>
+      </div>`).join("");
+  } catch { el.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>'; }
+}
+document.getElementById("adm_refreshRatingsBtn")?.addEventListener("click", loadAdminRatingsTab);
+document.getElementById("adm_ratingsFilter")?.addEventListener("change", loadAdminRatingsTab);
+async function adminToggleRating(id, action) {
+  await fetch(`/api/admin/ratings/${id}/${action}`, { method: "POST", headers: adminAuthHeaderAdmin() });
+  loadAdminRatingsTab();
+}
+
+// ── Admin: Catálogo global ────────────────────────────────────────────────
+let _catalogCategories = [];
+let _selectedCatalogCompanyId = "";
+
+async function loadAdminCatalogTab() {
+  await Promise.all([_loadCatalogCategories(), _loadCatalogCompaniesSelect()]);
+  _renderCategoryTree();
+}
+
+async function _loadCatalogCategories() {
+  try {
+    const res = await fetch("/api/catalog/categories");
+    _catalogCategories = res.ok ? await res.json() : [];
+  } catch { _catalogCategories = []; }
+}
+
+async function _loadCatalogCompaniesSelect() {
+  const sel = document.getElementById("adm_catalogCompanySelect");
+  if (!sel) return;
+  try {
+    const res = await fetch("/api/admin/companies", { headers: adminAuthHeaderAdmin() });
+    const companies = res.ok ? await res.json() : [];
+    sel.innerHTML = `<option value="">— Selecciona empresa —</option>` +
+      companies.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
+    if (_selectedCatalogCompanyId) sel.value = _selectedCatalogCompanyId;
+  } catch {}
+}
+
+function _renderCategoryTree() {
+  const el = document.getElementById("adm_categoryTree");
+  if (!el) return;
+  if (!_catalogCategories.length) {
+    el.innerHTML = '<p class="login-hint">Sin categorías aún. Agrega una raíz.</p>';
+    return;
+  }
+  el.innerHTML = _buildCatTreeHtml(null, 0);
+}
+
+function _buildCatTreeHtml(parentId, depth) {
+  const children = _catalogCategories.filter(c => (c.parentId || null) === (parentId || null))
+    .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name));
+  if (!children.length) return "";
+  const indent = depth * 18;
+  return children.map(c => `
+    <div class="catalog-tree-node" style="margin-left:${indent}px">
+      <div class="catalog-tree-row">
+        <span class="catalog-tree-name">${escapeHtml(c.name)}</span>
+        <div style="display:flex;gap:4px">
+          <button class="tiny-btn" type="button" onclick="_addSubCategory('${c.id}','${escapeHtml(c.name)}')">+ Sub</button>
+          <button class="tiny-btn" type="button" onclick="_renameCategory('${c.id}','${escapeHtml(c.name)}')">✏️</button>
+          <button class="tiny-btn danger-btn" type="button" onclick="_deleteCategory('${c.id}')">🗑</button>
+        </div>
+      </div>
+      ${_buildCatTreeHtml(c.id, depth + 1)}
+    </div>`).join("");
+}
+
+document.getElementById("adm_addRootCatBtn")?.addEventListener("click", () => _addSubCategory(null, null));
+
+async function _addSubCategory(parentId, parentName) {
+  const label = parentName ? `Nombre de subcategoría de "${parentName}":` : "Nombre de la categoría raíz:";
+  const name = prompt(label);
+  if (!name?.trim()) return;
+  try {
+    const res = await fetch("/api/admin/catalog/categories", {
+      method: "POST",
+      headers: { ...adminAuthHeaderAdmin(), "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name.trim(), parentId: parentId || null })
+    });
+    if (!res.ok) { alert((await res.json()).error || "Error al crear"); return; }
+    await _loadCatalogCategories();
+    _renderCategoryTree();
+    _refreshProductCategorySelect();
+  } catch { alert("Sin conexión."); }
+}
+
+async function _renameCategory(id, currentName) {
+  const name = prompt("Nuevo nombre:", currentName);
+  if (!name?.trim() || name.trim() === currentName) return;
+  try {
+    const res = await fetch(`/api/admin/catalog/categories/${id}`, {
+      method: "PUT",
+      headers: { ...adminAuthHeaderAdmin(), "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name.trim() })
+    });
+    if (!res.ok) { alert((await res.json()).error || "Error"); return; }
+    await _loadCatalogCategories();
+    _renderCategoryTree();
+    _refreshProductCategorySelect();
+  } catch { alert("Sin conexión."); }
+}
+
+async function _deleteCategory(id) {
+  if (!confirm("¿Eliminar esta categoría? Solo se puede si no tiene subcategorías ni productos.")) return;
+  try {
+    const res = await fetch(`/api/admin/catalog/categories/${id}`, {
+      method: "DELETE", headers: adminAuthHeaderAdmin()
+    });
+    const data = await res.json();
+    if (!res.ok) { alert(data.error || "No se pudo eliminar."); return; }
+    await _loadCatalogCategories();
+    _renderCategoryTree();
+    _refreshProductCategorySelect();
+  } catch { alert("Sin conexión."); }
+}
+
+function _refreshProductCategorySelect() {
+  const sel = document.getElementById("adm_prod_category");
+  if (!sel) return;
+  sel.innerHTML = `<option value="">— Sin categoría —</option>` +
+    _catalogCategories.map(c => `<option value="${c.id}">${escapeHtml(_catPath(c.id))}</option>`).join("");
+}
+
+function _catPath(id) {
+  const cat = _catalogCategories.find(c => c.id === id);
+  if (!cat) return id;
+  if (cat.parentId) return _catPath(cat.parentId) + " › " + cat.name;
+  return cat.name;
+}
+
+// ── Productos por empresa (admin) ─────────────────────────────────────────
+document.getElementById("adm_catalogCompanySelect")?.addEventListener("change", async (e) => {
+  _selectedCatalogCompanyId = e.target.value;
+  if (_selectedCatalogCompanyId) await _loadCompanyProducts(_selectedCatalogCompanyId);
+  else document.getElementById("adm_productsList").innerHTML = "";
+  document.getElementById("adm_productForm")?.classList.add("hidden");
+});
+
+document.getElementById("adm_addProductBtn")?.addEventListener("click", () => {
+  if (!_selectedCatalogCompanyId) { alert("Selecciona una empresa primero."); return; }
+  _openProductForm(null);
+});
+
+document.getElementById("adm_cancelProductBtn")?.addEventListener("click", () => {
+  document.getElementById("adm_productForm")?.classList.add("hidden");
+});
+
+document.getElementById("adm_saveProductBtn")?.addEventListener("click", async () => {
+  const editId = document.getElementById("adm_prod_editId")?.value;
+  const name = document.getElementById("adm_prod_name")?.value.trim();
+  const errEl = document.getElementById("adm_prod_error");
+  errEl.classList.add("hidden");
+  if (!name) { errEl.textContent = "El nombre es obligatorio."; errEl.classList.remove("hidden"); return; }
+  if (!_selectedCatalogCompanyId) { errEl.textContent = "Selecciona una empresa."; errEl.classList.remove("hidden"); return; }
+  const payload = {
+    name,
+    categoryId: document.getElementById("adm_prod_category")?.value || null,
+    thickness: document.getElementById("adm_prod_thickness")?.value.trim() || "",
+    color: document.getElementById("adm_prod_color")?.value.trim() || "",
+    presentation: document.getElementById("adm_prod_presentation")?.value.trim() || "",
+    unit: document.getElementById("adm_prod_unit")?.value.trim() || "unidad",
+    price: Number(document.getElementById("adm_prod_price")?.value) || 0,
+    available: document.getElementById("adm_prod_available")?.checked !== false,
+    featured: document.getElementById("adm_prod_featured")?.checked || false,
+    discontinued: document.getElementById("adm_prod_discontinued")?.checked || false
+  };
+  try {
+    const url = editId
+      ? `/api/admin/companies/${_selectedCatalogCompanyId}/products/${editId}`
+      : `/api/admin/companies/${_selectedCatalogCompanyId}/products`;
+    const res = await fetch(url, {
+      method: editId ? "PUT" : "POST",
+      headers: { ...adminAuthHeaderAdmin(), "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || "Error al guardar."; errEl.classList.remove("hidden"); return; }
+    document.getElementById("adm_productForm")?.classList.add("hidden");
+    await _loadCompanyProducts(_selectedCatalogCompanyId);
+  } catch { errEl.textContent = "Sin conexión al servidor."; errEl.classList.remove("hidden"); }
+});
+
+document.getElementById("adm_importProductsBtn")?.addEventListener("click", async () => {
+  if (!_selectedCatalogCompanyId) { alert("Selecciona una empresa primero."); return; }
+  const json = prompt("Pega aquí un array JSON de productos:\n[{\"name\":\"...\",\"price\":0,...}, ...]");
+  if (!json) return;
+  try {
+    const arr = JSON.parse(json);
+    const res = await fetch(`/api/admin/companies/${_selectedCatalogCompanyId}/products/import`, {
+      method: "POST",
+      headers: { ...adminAuthHeaderAdmin(), "Content-Type": "application/json" },
+      body: JSON.stringify(arr)
+    });
+    const data = await res.json();
+    if (!res.ok) { alert(data.error || "Error"); return; }
+    alert(`Importados: ${data.added} productos.`);
+    await _loadCompanyProducts(_selectedCatalogCompanyId);
+  } catch (e) { alert("JSON inválido o sin conexión."); }
+});
+
+document.getElementById("adm_loadPriceHistoryBtn")?.addEventListener("click", async () => {
+  const el = document.getElementById("adm_priceHistoryList");
+  if (!el) return;
+  el.innerHTML = '<p class="login-hint">Cargando…</p>';
+  try {
+    const res = await fetch("/api/admin/price-history", { headers: adminAuthHeaderAdmin() });
+    const list = res.ok ? await res.json() : [];
+    if (!list.length) { el.innerHTML = '<p class="login-hint">Sin historial aún.</p>'; return; }
+    el.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:.83rem">
+      <thead><tr style="text-align:left;border-bottom:2px solid var(--line)">
+        <th style="padding:6px 8px">Producto</th>
+        <th style="padding:6px 8px">Precio anterior</th>
+        <th style="padding:6px 8px">Precio nuevo</th>
+        <th style="padding:6px 8px">Fecha</th>
+      </tr></thead>
+      <tbody>${list.map(h => `<tr style="border-bottom:1px solid var(--line)">
+        <td style="padding:6px 8px">${escapeHtml(h.productName || h.productId)}</td>
+        <td style="padding:6px 8px">${h.oldPrice != null ? "$" + Number(h.oldPrice).toFixed(2) : "—"}</td>
+        <td style="padding:6px 8px">$${Number(h.newPrice).toFixed(2)}</td>
+        <td style="padding:6px 8px;color:var(--muted)">${new Date(h.changedAt).toLocaleString()}</td>
+      </tr>`).join("")}</tbody>
+    </table>`;
+  } catch { el.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>'; }
+});
+
+async function _loadCompanyProducts(companyId) {
+  const el = document.getElementById("adm_productsList");
+  if (!el) return;
+  el.innerHTML = '<p class="login-hint">Cargando productos…</p>';
+  try {
+    const res = await fetch(`/api/admin/companies/${companyId}/products`, { headers: adminAuthHeaderAdmin() });
+    const list = res.ok ? await res.json() : [];
+    if (!list.length) { el.innerHTML = '<p class="login-hint">Esta empresa no tiene productos aún.</p>'; return; }
+    el.innerHTML = list.map(pr => `
+      <div class="admin-entity-row" id="prod-row-${pr.id}">
+        <div class="admin-entity-info">
+          <strong>${escapeHtml(pr.name)}</strong>
+          <span>${[pr.thickness, pr.color, pr.presentation].filter(Boolean).map(escapeHtml).join(" · ")}</span>
+          <span>$${Number(pr.price).toFixed(2)} / ${escapeHtml(pr.unit)} ${pr.discontinued ? "· <em>Descontinuado</em>" : ""} ${!pr.available ? "· <em>No disponible</em>" : ""}</span>
+          ${pr.categoryId ? `<span style="font-size:.75rem;color:var(--muted)">${escapeHtml(_catPath(pr.categoryId))}</span>` : ""}
+        </div>
+        <div class="admin-entity-actions">
+          <button class="secondary-btn" type="button" onclick="_openProductForm('${pr.id}')">✏️ Editar</button>
+          <button class="secondary-btn danger-btn" type="button" onclick="_deleteProduct('${pr.id}')">🗑</button>
+        </div>
+      </div>`).join("");
+  } catch { el.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>'; }
+}
+
+function _openProductForm(productId) {
+  const form = document.getElementById("adm_productForm");
+  if (!form) return;
+  _refreshProductCategorySelect();
+  document.getElementById("adm_productFormTitle").textContent = productId ? "Editar producto" : "Nuevo producto";
+  document.getElementById("adm_prod_editId").value = productId || "";
+  if (!productId) {
+    ["adm_prod_name","adm_prod_thickness","adm_prod_color","adm_prod_presentation","adm_prod_unit","adm_prod_price"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = id === "adm_prod_unit" ? "plancha" : "";
+    });
+    document.getElementById("adm_prod_available").checked = true;
+    document.getElementById("adm_prod_featured").checked = false;
+    document.getElementById("adm_prod_discontinued").checked = false;
+    document.getElementById("adm_prod_category").value = "";
+  } else {
+    const allProds = document.querySelectorAll(`#prod-row-${productId} .admin-entity-info`);
+    // We need the actual product data — re-fetch to fill the form
+    fetch(`/api/admin/companies/${_selectedCatalogCompanyId}/products`, { headers: adminAuthHeaderAdmin() })
+      .then(r => r.json()).then(list => {
+        const pr = list.find(p => p.id === productId);
+        if (!pr) return;
+        document.getElementById("adm_prod_name").value = pr.name || "";
+        document.getElementById("adm_prod_category").value = pr.categoryId || "";
+        document.getElementById("adm_prod_thickness").value = pr.thickness || "";
+        document.getElementById("adm_prod_color").value = pr.color || "";
+        document.getElementById("adm_prod_presentation").value = pr.presentation || "";
+        document.getElementById("adm_prod_unit").value = pr.unit || "plancha";
+        document.getElementById("adm_prod_price").value = pr.price || 0;
+        document.getElementById("adm_prod_available").checked = pr.available !== false;
+        document.getElementById("adm_prod_featured").checked = Boolean(pr.featured);
+        document.getElementById("adm_prod_discontinued").checked = Boolean(pr.discontinued);
+      }).catch(() => {});
+  }
+  document.getElementById("adm_prod_error")?.classList.add("hidden");
+  form.classList.remove("hidden");
+  form.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function _deleteProduct(productId) {
+  if (!confirm("¿Eliminar este producto?")) return;
+  try {
+    const res = await fetch(`/api/admin/companies/${_selectedCatalogCompanyId}/products/${productId}`, {
+      method: "DELETE", headers: adminAuthHeaderAdmin()
+    });
+    if (!res.ok) { alert((await res.json()).error || "Error"); return; }
+    await _loadCompanyProducts(_selectedCatalogCompanyId);
+  } catch { alert("Sin conexión."); }
+}

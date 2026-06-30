@@ -110,10 +110,28 @@
               <input id="pf_filterSpecialty" type="text" placeholder="Ej: cocinas">
             </label>
           </div>
-          <button id="pf_applyFiltersBtn" class="secondary-btn" type="button">🔍 Buscar</button>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <button id="pf_applyFiltersBtn" class="secondary-btn" type="button">🔍 Buscar</button>
+            <label style="display:flex;align-items:center;gap:6px;font-size:.85rem;margin:0">
+              Ordenar:
+              <select id="pf_sortSelect" style="font-size:.85rem;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface)">
+                <option value="recent">Más recientes</option>
+                <option value="rating">Mejor valorados</option>
+                <option value="reviews">Más reseñas</option>
+              </select>
+            </label>
+          </div>
         </div>
 
         <div id="publicDirectoryGrid" class="public-directory-grid"></div>
+
+        <!-- Modal: perfil completo del profesional -->
+        <div id="proProfileModal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+          <div class="modal-box" style="max-width:560px">
+            <button class="modal-close-btn" id="proProfileCloseBtn" type="button" aria-label="Cerrar">✕</button>
+            <div id="proProfileContent"><p class="login-hint">Cargando…</p></div>
+          </div>
+        </div>
       </section>
 
       <!-- Vista: registro de profesional -->
@@ -418,6 +436,8 @@
           <button class="admin-subtab" data-admin-tab="logs" type="button">Logs</button>
           <button class="admin-subtab" data-admin-tab="seguridad" type="button">Seguridad</button>
           <button class="admin-subtab" data-admin-tab="ebanistas" type="button">Ebanistas</button>
+          <button class="admin-subtab" data-admin-tab="valoraciones" type="button">Valoraciones</button>
+          <button class="admin-subtab" data-admin-tab="catalogo" type="button">Catálogo</button>
         </div>
 
         <!-- ── Dashboard ─────────────────────────────────────────────────── -->
@@ -662,6 +682,90 @@
             <textarea id="catalogSlideOptions" style="display:none"></textarea>
             <textarea id="catalogHandleOptions" style="display:none"></textarea>
           </form>
+        </div>
+
+        <!-- ── Valoraciones (moderación de reseñas de profesionales) ─────── -->
+        <div class="admin-subpanel hidden" data-admin-panel="valoraciones">
+          <section class="panel">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+              <h3 style="margin:0">Valoraciones de profesionales</h3>
+              <button class="secondary-btn" id="adm_refreshRatingsBtn" type="button">🔄 Actualizar</button>
+            </div>
+            <div class="form-grid" style="margin-bottom:12px">
+              <label>Estado
+                <select id="adm_ratingsFilter">
+                  <option value="">Todas</option>
+                  <option value="false">Visibles</option>
+                  <option value="true">Ocultas</option>
+                </select>
+              </label>
+            </div>
+            <div id="adm_ratingsList"></div>
+          </section>
+        </div>
+
+        <!-- ── Catálogo global de categorías + productos por empresa ──────── -->
+        <div class="admin-subpanel hidden" data-admin-panel="catalogo">
+          <!-- Árbol de categorías -->
+          <section class="panel">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+              <h3 style="margin:0">Árbol de categorías</h3>
+              <button class="primary-btn" id="adm_addRootCatBtn" type="button">+ Categoría raíz</button>
+            </div>
+            <div id="adm_categoryTree"></div>
+          </section>
+
+          <!-- Productos por empresa -->
+          <section class="panel" style="margin-top:1.5rem">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+              <h3 style="margin:0;flex:1">Productos por empresa</h3>
+              <select id="adm_catalogCompanySelect" style="font-size:.85rem;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface)">
+                <option value="">— Selecciona empresa —</option>
+              </select>
+              <button class="primary-btn" id="adm_addProductBtn" type="button">+ Nuevo producto</button>
+              <button class="secondary-btn" id="adm_importProductsBtn" type="button">📥 Importar JSON</button>
+            </div>
+            <!-- Formulario nuevo/editar producto (oculto por defecto) -->
+            <div id="adm_productForm" class="hidden" style="background:var(--surface-soft);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:14px">
+              <h4 style="margin:0 0 10px" id="adm_productFormTitle">Nuevo producto</h4>
+              <div class="form-grid">
+                <label>Nombre*<input id="adm_prod_name" type="text" placeholder="Ej: Melamina Blanco Cotton"></label>
+                <label>Categoría
+                  <select id="adm_prod_category"><option value="">— Sin categoría —</option></select>
+                </label>
+                <label>Espesor<input id="adm_prod_thickness" type="text" placeholder="Ej: 18mm"></label>
+                <label>Color<input id="adm_prod_color" type="text" placeholder="Ej: Blanco Cotton"></label>
+                <label>Presentación<input id="adm_prod_presentation" type="text" placeholder="Ej: 2440×1830mm"></label>
+                <label>Unidad<input id="adm_prod_unit" type="text" placeholder="plancha, metro, kg…"></label>
+                <label>Precio USD<input id="adm_prod_price" type="number" min="0" step="0.01" placeholder="0.00"></label>
+                <label style="display:flex;gap:.4rem;align-items:center;padding-top:20px">
+                  <input id="adm_prod_available" type="checkbox" checked> Disponible
+                </label>
+                <label style="display:flex;gap:.4rem;align-items:center;padding-top:4px">
+                  <input id="adm_prod_featured" type="checkbox"> Destacado
+                </label>
+                <label style="display:flex;gap:.4rem;align-items:center;padding-top:4px">
+                  <input id="adm_prod_discontinued" type="checkbox"> Descontinuado
+                </label>
+              </div>
+              <input type="hidden" id="adm_prod_editId">
+              <div style="display:flex;gap:8px;margin-top:10px">
+                <button class="primary-btn" id="adm_saveProductBtn" type="button">Guardar</button>
+                <button class="secondary-btn" id="adm_cancelProductBtn" type="button">Cancelar</button>
+              </div>
+              <p id="adm_prod_error" class="login-error hidden"></p>
+            </div>
+            <div id="adm_productsList"></div>
+          </section>
+
+          <!-- Historial de precios -->
+          <section class="panel" style="margin-top:1.5rem">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+              <h3 style="margin:0">Historial de precios</h3>
+              <button class="secondary-btn" id="adm_loadPriceHistoryBtn" type="button">🔄 Cargar</button>
+            </div>
+            <div id="adm_priceHistoryList"></div>
+          </section>
         </div>
       </section>
 
