@@ -215,42 +215,47 @@
       <section id="publicCompanyRegisterView" class="hidden">
         <button id="publicBackToCompaniesBtn" class="secondary-btn" type="button">← Volver a empresas</button>
         <div class="subsection" style="max-width:560px;margin:1rem auto">
-          <h3>Registra tu empresa</h3>
-          <p class="login-hint">Gratis. Tu empresa queda pendiente de aprobación antes de aparecer en el listado.</p>
-          <div class="form-grid">
-            <label>Nombre de la empresa*
-              <input id="co_regName" type="text" required>
-            </label>
-            <label>Categoría*
-              <select id="co_regCategory"></select>
-            </label>
-            <label>Teléfono
-              <input id="co_regPhone" type="text">
-            </label>
-            <label>WhatsApp
-              <input id="co_regWhatsapp" type="text">
-            </label>
-            <label>Correo
-              <input id="co_regEmail" type="email">
-            </label>
-            <label>Provincia
-              <input id="co_regProvince" type="text">
-            </label>
-            <label>Ciudad
-              <input id="co_regCity" type="text">
-            </label>
-            <label class="span-2">Descripción
-              <textarea id="co_regDescription" rows="3"></textarea>
-            </label>
-            <label class="span-2">Horario
-              <input id="co_regSchedule" type="text" placeholder="Ej: Lun-Vie 8am-6pm">
-            </label>
-            <label class="span-2">Contraseña (para entrar luego a tu panel)*
-              <input id="co_regPassword" type="password" required>
-            </label>
+          <div id="co_registerSuccess" class="hidden" style="text-align:center;padding:2rem 1rem">
+            <div style="font-size:3rem;margin-bottom:1rem">✅</div>
+            <h3 style="margin:0 0 .75rem">¡Solicitud enviada!</h3>
+            <p style="color:#374151;margin:0 0 1.5rem">Te contactaremos por correo o WhatsApp para activar tu cuenta.</p>
+            <button id="co_registerSuccessBackBtn" class="secondary-btn" type="button">← Ver empresas</button>
           </div>
-          <button id="co_submitRegisterBtn" class="primary-btn" type="button">Registrar empresa</button>
-          <p id="co_registerError" class="login-error hidden"></p>
+          <div id="co_registerForm">
+            <h3>Registra tu empresa</h3>
+            <p class="login-hint">Gratis. Recibirás tus credenciales de acceso una vez que revisemos tu solicitud.</p>
+            <div class="form-grid">
+              <label>Nombre de la empresa*
+                <input id="co_regName" type="text" required>
+              </label>
+              <label>Categoría*
+                <select id="co_regCategory"></select>
+              </label>
+              <label>Teléfono
+                <input id="co_regPhone" type="text">
+              </label>
+              <label>WhatsApp
+                <input id="co_regWhatsapp" type="text">
+              </label>
+              <label>Correo
+                <input id="co_regEmail" type="email">
+              </label>
+              <label>Provincia
+                <input id="co_regProvince" type="text">
+              </label>
+              <label>Ciudad
+                <input id="co_regCity" type="text">
+              </label>
+              <label class="span-2">Descripción
+                <textarea id="co_regDescription" rows="3"></textarea>
+              </label>
+              <label class="span-2">Horario
+                <input id="co_regSchedule" type="text" placeholder="Ej: Lun-Vie 8am-6pm">
+              </label>
+            </div>
+            <button id="co_submitRegisterBtn" class="primary-btn" type="button">Registrar empresa</button>
+            <p id="co_registerError" class="login-error hidden"></p>
+          </div>
         </div>
       </section>
 
@@ -484,7 +489,44 @@
           <section class="panel">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
               <h3 style="margin:0">Empresas registradas</h3>
-              <button class="secondary-btn" id="adm_refreshCompaniesBtn" type="button">🔄 Actualizar</button>
+              <div style="display:flex;gap:6px">
+                <button class="primary-btn" id="adm_addCompanyBtn" type="button">+ Nueva empresa</button>
+                <button class="secondary-btn" id="adm_refreshCompaniesBtn" type="button">🔄 Actualizar</button>
+              </div>
+            </div>
+            <div id="adm_newCompanyForm" class="hidden" style="background:#f9fafb;border:1px solid #E5E7EB;border-radius:8px;padding:1rem;margin-bottom:16px">
+              <h4 style="margin:0 0 10px">Nueva empresa (se crea como aprobada)</h4>
+              <div class="form-grid">
+                <label>Nombre <span style="color:#ef4444">*</span><input id="adm_co_name" type="text" placeholder="Ej: Ferretería Central"></label>
+                <label>Categoría <span style="color:#ef4444">*</span>
+                  <select id="adm_co_category">
+                    <option value="ferreteria">Ferretería</option>
+                    <option value="melamina">Melamina</option>
+                    <option value="herrajes">Herrajes</option>
+                    <option value="mdf">MDF</option>
+                    <option value="madera">Madera</option>
+                    <option value="pinturas">Pinturas</option>
+                    <option value="adhesivos">Adhesivos</option>
+                    <option value="maquinaria">Maquinaria</option>
+                    <option value="cnc">CNC</option>
+                    <option value="herramientas">Herramientas</option>
+                    <option value="transporte">Transporte</option>
+                    <option value="marmol">Mármol</option>
+                    <option value="vidrio">Vidrio</option>
+                    <option value="otra">Otra</option>
+                  </select>
+                </label>
+                <label>Teléfono<input id="adm_co_phone" type="text" placeholder="+507 6000-0000"></label>
+                <label>WhatsApp<input id="adm_co_whatsapp" type="text" placeholder="+507 6000-0000"></label>
+                <label>Correo<input id="adm_co_email" type="email" placeholder="empresa@ejemplo.com"></label>
+                <label>Provincia<input id="adm_co_province" type="text"></label>
+                <label>Ciudad<input id="adm_co_city" type="text"></label>
+                <label class="span-2">Contraseña <span style="font-size:.75rem;color:#6B7280">(vacío = se genera automáticamente)</span>
+                  <input id="adm_co_password" type="text" autocomplete="new-password"></label>
+              </div>
+              <button class="primary-btn" id="adm_saveCompanyBtn" type="button" style="margin-top:10px">Crear empresa</button>
+              <p id="adm_co_error" class="login-error hidden"></p>
+              <div id="adm_co_result" class="hidden" style="margin-top:10px;background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:.75rem;font-size:.875rem"></div>
             </div>
             <div id="adm_companiesList"></div>
           </section>

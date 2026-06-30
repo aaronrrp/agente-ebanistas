@@ -737,7 +737,12 @@ async function runAdminEntityAction(kind, id, action) {
   try {
     const res = await fetch(`/api/admin/${endpoint}/${id}/${action}`, { method: "POST", headers: adminAuthHeaderAdmin(), body: JSON.stringify(body) });
     if (!res.ok) { toast("No se pudo completar la acción.", "error"); return; }
-    toast("Listo ✓");
+    const data = await res.json();
+    if (kind === "company" && action === "approve" && data.passwordPlain) {
+      alert(`✅ Empresa aprobada y credenciales generadas\n\nCódigo de acceso: ${data.accessCode}\nContraseña: ${data.passwordPlain}\n\nGuarda o comparte estos datos — no se volverán a mostrar.`);
+    } else {
+      toast("Listo ✓");
+    }
     if (kind === "professional") loadAdminProfessionalsTab(); else loadAdminCompaniesTab();
   } catch {
     toast("Sin conexión al servidor.", "error");
@@ -826,6 +831,51 @@ async function loadAdminCompaniesTab() {
   } catch { el.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>'; }
 }
 document.getElementById("adm_refreshCompaniesBtn")?.addEventListener("click", loadAdminCompaniesTab);
+
+document.getElementById("adm_addCompanyBtn")?.addEventListener("click", () => {
+  const form = document.getElementById("adm_newCompanyForm");
+  if (form) form.classList.toggle("hidden");
+});
+
+document.getElementById("adm_saveCompanyBtn")?.addEventListener("click", async () => {
+  const name = document.getElementById("adm_co_name")?.value.trim();
+  const errEl = document.getElementById("adm_co_error");
+  const resultEl = document.getElementById("adm_co_result");
+  errEl.classList.add("hidden");
+  resultEl.classList.add("hidden");
+  if (!name) { errEl.textContent = "El nombre es obligatorio."; errEl.classList.remove("hidden"); return; }
+  const btn = document.getElementById("adm_saveCompanyBtn");
+  btn.disabled = true;
+  try {
+    const res = await fetch("/api/admin/companies", {
+      method: "POST",
+      headers: adminAuthHeaderAdmin(),
+      body: JSON.stringify({
+        name,
+        category: document.getElementById("adm_co_category")?.value || "otra",
+        phone: document.getElementById("adm_co_phone")?.value.trim() || "",
+        whatsapp: document.getElementById("adm_co_whatsapp")?.value.trim() || "",
+        email: document.getElementById("adm_co_email")?.value.trim() || "",
+        province: document.getElementById("adm_co_province")?.value.trim() || "",
+        city: document.getElementById("adm_co_city")?.value.trim() || "",
+        password: document.getElementById("adm_co_password")?.value.trim() || ""
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || "Error al crear."; errEl.classList.remove("hidden"); return; }
+    resultEl.innerHTML = `<strong>✅ Empresa creada</strong><br>Código: <code>${escapeHtml(data.accessCode)}</code> &nbsp; Contraseña: <code>${escapeHtml(data.passwordPlain)}</code><br><em style="color:#6B7280">Comparte estos datos para que la empresa ingrese a su panel.</em>`;
+    resultEl.classList.remove("hidden");
+    document.getElementById("adm_co_name").value = "";
+    document.getElementById("adm_co_phone").value = "";
+    document.getElementById("adm_co_whatsapp").value = "";
+    document.getElementById("adm_co_email").value = "";
+    document.getElementById("adm_co_province").value = "";
+    document.getElementById("adm_co_city").value = "";
+    document.getElementById("adm_co_password").value = "";
+    loadAdminCompaniesTab();
+  } catch { errEl.textContent = "Sin conexión al servidor."; errEl.classList.remove("hidden"); }
+  finally { btn.disabled = false; }
+});
 
 async function loadAdminRetazosTab() {
   const el = document.getElementById("adm_retazosList");
@@ -8624,11 +8674,9 @@ document.getElementById("co_submitRegisterBtn")?.addEventListener("click", async
   const errEl = document.getElementById("co_registerError");
   errEl.classList.add("hidden");
   const name = document.getElementById("co_regName").value.trim();
-  const password = document.getElementById("co_regPassword").value;
   if (!name) { errEl.textContent = "Falta el nombre de la empresa."; errEl.classList.remove("hidden"); return; }
-  if (!password || password.length < 4) { errEl.textContent = "La contraseña necesita al menos 4 caracteres."; errEl.classList.remove("hidden"); return; }
   const payload = {
-    name, password,
+    name,
     category: document.getElementById("co_regCategory").value,
     phone: document.getElementById("co_regPhone").value.trim(),
     whatsapp: document.getElementById("co_regWhatsapp").value.trim(),
@@ -8641,13 +8689,27 @@ document.getElementById("co_submitRegisterBtn")?.addEventListener("click", async
     const res = await fetch("/api/companies/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     const data = await res.json();
     if (!res.ok) { errEl.textContent = data.error || "No se pudo registrar."; errEl.classList.remove("hidden"); return; }
-    toast(`¡Listo! Tu código de acceso es ${data.accessCode} — guárdalo para entrar a tu panel.`);
-    document.getElementById("publicCompanyRegisterView").classList.add("hidden");
-    document.getElementById("publicCompaniesView").classList.remove("hidden");
+    document.getElementById("co_registerForm").classList.add("hidden");
+    document.getElementById("co_registerSuccess").classList.remove("hidden");
   } catch {
     errEl.textContent = "Sin conexión al servidor.";
     errEl.classList.remove("hidden");
   }
+});
+
+document.getElementById("co_registerSuccessBackBtn")?.addEventListener("click", () => {
+  document.getElementById("publicCompanyRegisterView").classList.add("hidden");
+  document.getElementById("publicCompaniesView").classList.remove("hidden");
+  document.getElementById("co_registerForm").classList.remove("hidden");
+  document.getElementById("co_registerSuccess").classList.add("hidden");
+  document.getElementById("co_regName").value = "";
+  document.getElementById("co_regPhone").value = "";
+  document.getElementById("co_regWhatsapp").value = "";
+  document.getElementById("co_regEmail").value = "";
+  document.getElementById("co_regProvince").value = "";
+  document.getElementById("co_regCity").value = "";
+  document.getElementById("co_regDescription").value = "";
+  document.getElementById("co_regSchedule").value = "";
 });
 
 // ── Centro Sostenible de Retazos ─────────────────────────────────────────────

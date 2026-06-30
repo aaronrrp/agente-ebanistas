@@ -86,8 +86,6 @@ async function handle(req, res, { method, p, parts }) {
     const body = await readBody(req);
     const data = body ? JSON.parse(body) : {};
     if (!data.name || !String(data.name).trim()) { sendJson(res, 400, { error: "Falta el nombre de la empresa." }); return true; }
-    const passwordPlain = (data.password && String(data.password).trim()) || generatePassword();
-    const { salt, hash } = hashPassword(passwordPlain);
     const company = {
       id: crypto.randomUUID(),
       name: String(data.name).trim(),
@@ -106,9 +104,6 @@ async function handle(req, res, { method, p, parts }) {
       featuredUntil: null,
       plan: "empresa",
       paymentNote: "",
-      accessCode: makeCompanyCode(data.name),
-      passwordSalt: salt,
-      passwordHash: hash,
       createdAt: new Date().toISOString(),
       lastAccessAt: null,
       views: 0,
@@ -117,7 +112,7 @@ async function handle(req, res, { method, p, parts }) {
     companies.push(company);
     saveCompanies(companies);
     logActivity({ actorType: "company", actorId: company.id, actorLabel: company.name, action: "company.registered", meta: { category: company.category } });
-    sendJson(res, 201, { ...publicCompany(company), passwordPlain });
+    sendJson(res, 201, { ok: true, message: "Solicitud recibida. Te contactaremos por correo o WhatsApp para activar tu cuenta." });
     return true;
   }
 
@@ -274,12 +269,65 @@ async function handle(req, res, { method, p, parts }) {
     sendJson(res, 200, companies.map(adminCompanyView));
     return true;
   }
+  if (method === "POST" && p === "/api/admin/companies") {
+    if (!requireAdmin(req, res)) return true;
+    const body = await readBody(req);
+    const data = body ? JSON.parse(body) : {};
+    if (!data.name || !String(data.name).trim()) { sendJson(res, 400, { error: "Falta el nombre de la empresa." }); return true; }
+    const passwordPlain = (data.password && String(data.password).trim()) || generatePassword();
+    const { salt, hash } = hashPassword(passwordPlain);
+    const company = {
+      id: crypto.randomUUID(),
+      name: String(data.name).trim(),
+      category: CATEGORIES.includes(data.category) ? data.category : "otra",
+      logoUrl: "",
+      description: "",
+      phone: data.phone || "", whatsapp: data.whatsapp || "", email: data.email || "",
+      location: { province: data.province || "", city: data.city || "", address: "" },
+      schedule: "",
+      socialLinks: { facebook: "", instagram: "", website: "" },
+      products: [],
+      promotions: [],
+      photos: [],
+      status: "approved",
+      featured: false,
+      featuredUntil: null,
+      plan: "empresa",
+      paymentNote: "",
+      accessCode: makeCompanyCode(data.name),
+      passwordSalt: salt,
+      passwordHash: hash,
+      createdAt: new Date().toISOString(),
+      lastAccessAt: null,
+      views: 0,
+      contactClicks: 0
+    };
+    companies.push(company);
+    saveCompanies(companies);
+    logActivity({ actorType: "admin", action: "company.created", meta: { id: company.id, name: company.name } });
+    sendJson(res, 201, { ...adminCompanyView(company), passwordPlain });
+    return true;
+  }
   if (parts[0] === "api" && parts[1] === "admin" && parts[2] === "companies" && parts[3] && parts[4] && method === "POST") {
     if (!requireAdmin(req, res)) return true;
     const company = findCompanyById(parts[3]);
     if (!company) { sendJson(res, 404, { error: "No encontrado." }); return true; }
     const action = parts[4];
-    if (action === "approve") { company.status = "approved"; logActivity({ actorType: "admin", action: "company.approved", meta: { id: company.id, name: company.name } }); }
+    if (action === "approve") {
+      company.status = "approved";
+      if (!company.accessCode) {
+        const passwordPlain = generatePassword();
+        const { salt, hash } = hashPassword(passwordPlain);
+        company.accessCode = makeCompanyCode(company.name);
+        company.passwordSalt = salt;
+        company.passwordHash = hash;
+        saveCompanies(companies);
+        logActivity({ actorType: "admin", action: "company.approved", meta: { id: company.id, name: company.name } });
+        sendJson(res, 200, { ...adminCompanyView(company), passwordPlain });
+        return true;
+      }
+      logActivity({ actorType: "admin", action: "company.approved", meta: { id: company.id, name: company.name } });
+    }
     else if (action === "reject") { company.status = "rejected"; logActivity({ actorType: "admin", action: "company.rejected", meta: { id: company.id, name: company.name } }); }
     else if (action === "suspend") { company.status = "suspended"; logActivity({ actorType: "admin", action: "company.suspended", meta: { id: company.id, name: company.name } }); }
     else if (action === "feature") {
