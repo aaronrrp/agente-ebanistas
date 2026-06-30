@@ -308,7 +308,8 @@ async function handle(req, res, { method, p, parts }) {
     sendJson(res, 201, { ...adminCompanyView(company), passwordPlain });
     return true;
   }
-  if (parts[0] === "api" && parts[1] === "admin" && parts[2] === "companies" && parts[3] && parts[4] && method === "POST") {
+  const COMPANY_ACTIONS = new Set(["approve", "reject", "suspend", "feature", "unfeature", "set-payment-note"]);
+  if (parts[0] === "api" && parts[1] === "admin" && parts[2] === "companies" && parts[3] && COMPANY_ACTIONS.has(parts[4]) && !parts[5] && method === "POST") {
     if (!requireAdmin(req, res)) return true;
     const company = findCompanyById(parts[3]);
     if (!company) { sendJson(res, 404, { error: "No encontrado." }); return true; }
