@@ -4,7 +4,7 @@
 // original es justo esto, ningún límite/precio/permiso queda fijo en el código.
 const fs = require("node:fs");
 const path = require("node:path");
-const { sendJson, readBody, requireAdmin } = require("../lib/shared.js");
+const { sendJson, readBody, requireAdmin, atomicWrite } = require("../lib/shared.js");
 
 const PLANS_FILE = path.join(__dirname, "..", "plans.json");
 const ROLES_FILE = path.join(__dirname, "..", "roles.json");
@@ -32,7 +32,7 @@ function loadPlans() {
   catch { return defaultPlans(); }
 }
 function savePlans(p) {
-  try { fs.writeFileSync(PLANS_FILE, JSON.stringify(p, null, 2)); } catch {}
+  try { atomicWrite(PLANS_FILE, p); } catch (e) { console.error("[savePlans]", e.message); }
 }
 let plans = loadPlans();
 
@@ -41,7 +41,7 @@ function loadRoles() {
   catch { return defaultRoles(); }
 }
 function saveRoles(r) {
-  try { fs.writeFileSync(ROLES_FILE, JSON.stringify(r, null, 2)); } catch {}
+  try { atomicWrite(ROLES_FILE, r); } catch (e) { console.error("[saveRoles]", e.message); }
 }
 let roles = loadRoles();
 
@@ -94,4 +94,7 @@ async function handle(req, res, { method, p }) {
   return false;
 }
 
-module.exports = { handle, hasPermission, loadPlans, loadRoles };
+module.exports = {
+  handle, hasPermission, loadPlans, loadRoles,
+  reload: () => { plans = loadPlans(); roles = loadRoles(); }
+};

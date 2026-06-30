@@ -8,7 +8,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { sendJson, readBody, getToken, hashPassword, verifyPassword, generatePassword, todayIso, requireAdmin } = require("../lib/shared.js");
+const { sendJson, readBody, getToken, hashPassword, verifyPassword, generatePassword, todayIso, requireAdmin, atomicWrite, checkRateLimit, getClientIp } = require("../lib/shared.js");
 const { logActivity } = require("../lib/activity-log.js");
 
 const PROFESSIONALS_FILE = path.join(__dirname, "..", "professionals.json");
@@ -24,7 +24,7 @@ function loadProfessionals() {
   catch { saveProfessionals([]); return []; }
 }
 function saveProfessionals(list) {
-  try { fs.writeFileSync(PROFESSIONALS_FILE, JSON.stringify(list, null, 2)); } catch {}
+  try { atomicWrite(PROFESSIONALS_FILE, list); } catch (e) { console.error("[saveProfessionals]", e.message); }
 }
 let professionals = loadProfessionals();
 
@@ -136,15 +136,22 @@ async function handle(req, res, { method, p, parts }) {
 
   // POST /api/auth/professional — login con código + contraseña
   if (method === "POST" && p === "/api/auth/professional") {
+    const ip = getClientIp(req);
+    if (!checkRateLimit(`auth:professional:${ip}`, 15, 60000)) {
+      sendJson(res, 429, { error: "Demasiados intentos. Espera 1 minuto." }); return true;
+    }
     const body = await readBody(req);
     const { code, password } = body ? JSON.parse(body) : {};
     const prof = professionals.find(x => x.accessCode === code);
     if (!prof) { sendJson(res, 401, { error: "Código no válido." }); return true; }
-    if (!verifyPassword(password, prof.passwordSalt, prof.passwordHash)) { sendJson(res, 401, { error: "Contraseña incorrecta." }); return true; }
+    if (!verifyPassword(password, prof.passwordSalt, prof.passwordHash)) {
+      logActivity({ actorType: "professional", actorId: prof.id, actorLabel: prof.name, action: "auth.login.failed", meta: { ip } });
+      sendJson(res, 401, { error: "Contraseña incorrecta." }); return true;
+    }
     prof.lastAccessAt = new Date().toISOString();
     saveProfessionals(professionals);
     const token = createProfessionalSession(prof.id);
-    logActivity({ actorType: "professional", actorId: prof.id, actorLabel: prof.name, action: "auth.login" });
+    logActivity({ actorType: "professional", actorId: prof.id, actorLabel: prof.name, action: "auth.login", meta: { ip } });
     sendJson(res, 200, { token, professional: publicProfessional(prof) });
     return true;
   }
@@ -294,5 +301,6 @@ async function handle(req, res, { method, p, parts }) {
 module.exports = {
   handle, CATEGORIES, getProfessionalSession,
   findProfessionalById: id => professionals.find(x => x.id === id),
-  getAllProfessionals: () => professionals // referencia de solo lectura -- para conteos del dashboard (Fase 5)
+  getAllProfessionals: () => professionals,
+  reload: () => { professionals = loadProfessionals(); }
 };

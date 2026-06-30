@@ -6,7 +6,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { sendJson, readBody, getToken, hashPassword, verifyPassword, generatePassword, requireAdmin } = require("../lib/shared.js");
+const { sendJson, readBody, getToken, hashPassword, verifyPassword, generatePassword, requireAdmin, atomicWrite, checkRateLimit, getClientIp } = require("../lib/shared.js");
 const { logActivity } = require("../lib/activity-log.js");
 
 const COMPANIES_FILE = path.join(__dirname, "..", "companies.json");
@@ -21,7 +21,7 @@ function loadCompanies() {
   catch { saveCompanies([]); return []; }
 }
 function saveCompanies(list) {
-  try { fs.writeFileSync(COMPANIES_FILE, JSON.stringify(list, null, 2)); } catch {}
+  try { atomicWrite(COMPANIES_FILE, list); } catch (e) { console.error("[saveCompanies]", e.message); }
 }
 let companies = loadCompanies();
 
@@ -304,4 +304,8 @@ async function handle(req, res, { method, p, parts }) {
   return false;
 }
 
-module.exports = { handle, CATEGORIES, getCompanySession, findCompanyById, getAllCompanies: () => companies };
+module.exports = {
+  handle, CATEGORIES, getCompanySession, findCompanyById,
+  getAllCompanies: () => companies,
+  reload: () => { companies = loadCompanies(); }
+};

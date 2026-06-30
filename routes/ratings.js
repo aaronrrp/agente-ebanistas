@@ -7,7 +7,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { sendJson, readBody, getToken, requireAdmin, adminSessions, SESSION_TTL, isValidSession } = require("../lib/shared.js");
+const { sendJson, readBody, getToken, requireAdmin, adminSessions, SESSION_TTL, isValidSession, atomicWrite } = require("../lib/shared.js");
 const { logActivity } = require("../lib/activity-log.js");
 const { getProfessionalSession } = require("./professionals.js");
 const { getCompanySession } = require("./companies.js");
@@ -21,13 +21,13 @@ function loadRatings() {
   catch { saveRatings([]); return []; }
 }
 function saveRatings(list) {
-  try { fs.writeFileSync(RATINGS_FILE, JSON.stringify(list, null, 2)); } catch {}
+  try { atomicWrite(RATINGS_FILE, list); } catch (e) { console.error("[saveRatings]", e.message); }
 }
 function loadProfessionals() {
   try { return JSON.parse(fs.readFileSync(PROFESSIONALS_FILE, "utf-8")); } catch { return []; }
 }
 function saveProfessionals(list) {
-  try { fs.writeFileSync(PROFESSIONALS_FILE, JSON.stringify(list, null, 2)); } catch {}
+  try { atomicWrite(PROFESSIONALS_FILE, list); } catch (e) { console.error("[saveProfessionals@ratings]", e.message); }
 }
 
 function recalcProfessionalRatings(professionalId) {
@@ -180,4 +180,4 @@ async function handle(req, res, { method, p, parts }) {
   return false;
 }
 
-module.exports = { handle };
+module.exports = { handle, reload: () => {} }; // los ratings se leen fresh cada request, no hay estado en memoria

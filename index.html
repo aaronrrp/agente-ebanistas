@@ -606,6 +606,23 @@
               </div>
             </details>
           </section>
+
+          <!-- ── Backup / Restore ──────────────────────────────────────────── -->
+          <section class="panel" style="margin-top:1.5rem;border:2px solid #FCA5A5">
+            <h3 style="margin:0 0 8px;color:#B91C1C">🔒 Backup y Restauración de Datos</h3>
+            <p style="margin:0 0 12px;color:var(--muted);font-size:.875rem">
+              <strong>IMPORTANTE:</strong> El plan Free de Render pierde los datos al reiniciar el servidor.
+              Descarga un backup ANTES de hacer deploy. Restaura el backup inmediatamente después.
+            </p>
+            <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:center">
+              <button class="primary-btn" id="adm_downloadBackupBtn" type="button">⬇️ Descargar Backup Completo</button>
+              <label class="secondary-btn" style="cursor:pointer;margin:0">
+                ⬆️ Restaurar Backup
+                <input id="adm_restoreFileInput" type="file" accept=".json" style="display:none">
+              </label>
+            </div>
+            <div id="adm_backupStatus" style="margin-top:10px;font-size:.875rem"></div>
+          </section>
         </div>
 
         <!-- ── Logs / Auditoría ──────────────────────────────────────────── -->

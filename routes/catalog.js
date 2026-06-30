@@ -28,7 +28,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { sendJson, readBody, requireAdmin } = require("../lib/shared.js");
+const { sendJson, readBody, requireAdmin, atomicWrite } = require("../lib/shared.js");
 const { logActivity } = require("../lib/activity-log.js");
 
 const CATEGORIES_FILE = path.join(__dirname, "..", "catalog_categories.json");
@@ -41,14 +41,14 @@ function loadCategories() {
   catch { saveCategories([]); return []; }
 }
 function saveCategories(list) {
-  try { fs.writeFileSync(CATEGORIES_FILE, JSON.stringify(list, null, 2)); } catch {}
+  try { atomicWrite(CATEGORIES_FILE, list); } catch (e) { console.error("[saveCategories]", e.message); }
 }
 function loadProducts() {
   try { return JSON.parse(fs.readFileSync(PRODUCTS_FILE, "utf-8")); }
   catch { saveProducts([]); return []; }
 }
 function saveProducts(list) {
-  try { fs.writeFileSync(PRODUCTS_FILE, JSON.stringify(list, null, 2)); } catch {}
+  try { atomicWrite(PRODUCTS_FILE, list); } catch (e) { console.error("[saveProducts]", e.message); }
 }
 function appendPriceHistory(entry) {
   try { fs.appendFileSync(HISTORY_FILE, JSON.stringify(entry) + "\n"); } catch {}
@@ -325,4 +325,4 @@ async function handle(req, res, { method, p, parts }) {
   return false;
 }
 
-module.exports = { handle, loadCategories, loadProducts };
+module.exports = { handle, loadCategories, loadProducts, reload: () => {} }; // catalog lee fresh cada request, sin estado

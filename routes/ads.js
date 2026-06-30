@@ -8,7 +8,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { sendJson, readBody, requireAdmin } = require("../lib/shared.js");
+const { sendJson, readBody, requireAdmin, atomicWrite } = require("../lib/shared.js");
 const { logActivity } = require("../lib/activity-log.js");
 
 const ADS_FILE = path.join(__dirname, "..", "ads.json");
@@ -19,7 +19,7 @@ function loadAds() {
   catch { saveAds([]); return []; }
 }
 function saveAds(list) {
-  try { fs.writeFileSync(ADS_FILE, JSON.stringify(list, null, 2)); } catch {}
+  try { atomicWrite(ADS_FILE, list); } catch (e) { console.error("[saveAds]", e.message); }
 }
 let ads = loadAds();
 
@@ -122,4 +122,7 @@ async function handle(req, res, { method, p, parts }) {
   return false;
 }
 
-module.exports = { handle, TYPES };
+module.exports = {
+  handle, TYPES,
+  reload: () => { ads = loadAds(); }
+};

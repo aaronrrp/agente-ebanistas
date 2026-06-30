@@ -948,6 +948,58 @@ document.getElementById("adm_savePlansBtn")?.addEventListener("click", async () 
   } catch { toast("Sin conexión al servidor.", "error"); }
 });
 
+// ── Backup / Restore ─────────────────────────────────────────────────────────
+document.getElementById("adm_downloadBackupBtn")?.addEventListener("click", async () => {
+  const btn = document.getElementById("adm_downloadBackupBtn");
+  const statusEl = document.getElementById("adm_backupStatus");
+  btn.disabled = true;
+  btn.textContent = "Generando backup…";
+  statusEl.textContent = "";
+  try {
+    const res = await fetch("/api/admin/backup", { headers: adminAuthHeaderAdmin() });
+    if (!res.ok) { statusEl.innerHTML = '<span style="color:#B91C1C">Error al generar backup.</span>'; return; }
+    const blob = await res.blob();
+    const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `ebanistas-backup-${ts}.json`; a.click();
+    URL.revokeObjectURL(url);
+    statusEl.innerHTML = '<span style="color:#15803D">✅ Backup descargado. Guárdalo en un lugar seguro.</span>';
+    toast("Backup descargado ✓");
+  } catch (e) {
+    statusEl.innerHTML = `<span style="color:#B91C1C">Error: ${escapeHtml(e.message)}</span>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "⬇️ Descargar Backup Completo";
+  }
+});
+
+document.getElementById("adm_restoreFileInput")?.addEventListener("change", async (e) => {
+  const file = e.target.files?.[0];
+  const statusEl = document.getElementById("adm_backupStatus");
+  if (!file) return;
+  e.target.value = "";
+  if (!confirm(`¿Restaurar el backup "${file.name}"?\n\nEsto REEMPLAZARÁ TODOS los datos actuales del servidor con los del backup. Esta acción no se puede deshacer.`)) return;
+  statusEl.innerHTML = '<span style="color:#92400E">Restaurando…</span>';
+  try {
+    const text = await file.text();
+    const res = await fetch("/api/admin/restore", {
+      method: "POST",
+      headers: { ...adminAuthHeaderAdmin(), "Content-Type": "application/json" },
+      body: text
+    });
+    const data = await res.json();
+    if (res.ok) {
+      statusEl.innerHTML = `<span style="color:#15803D">✅ ${data.message} (${data.restored?.join(", ")})</span>`;
+      toast("Backup restaurado ✓");
+    } else {
+      statusEl.innerHTML = `<span style="color:#B91C1C">Error: ${escapeHtml(data.error || "desconocido")}</span>`;
+    }
+  } catch (err) {
+    statusEl.innerHTML = `<span style="color:#B91C1C">Error al restaurar: ${escapeHtml(err.message)}</span>`;
+  }
+});
+
 async function loadAdminRolesView() {
   const el = document.getElementById("adm_rolesList");
   if (!el) return;

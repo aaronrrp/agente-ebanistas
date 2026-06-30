@@ -9,7 +9,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { sendJson, readBody, getToken, hashPassword, verifyPassword, generatePassword, requireAdmin } = require("../lib/shared.js");
+const { sendJson, readBody, getToken, hashPassword, verifyPassword, generatePassword, requireAdmin, atomicWrite, checkRateLimit, getClientIp } = require("../lib/shared.js");
 const { logActivity } = require("../lib/activity-log.js");
 
 const RETAZOS_FILE = path.join(__dirname, "..", "retazos.json");
@@ -22,7 +22,7 @@ function loadRetazos() {
   catch { saveRetazos([]); return []; }
 }
 function saveRetazos(list) {
-  try { fs.writeFileSync(RETAZOS_FILE, JSON.stringify(list, null, 2)); } catch {}
+  try { atomicWrite(RETAZOS_FILE, list); } catch (e) { console.error("[saveRetazos]", e.message); }
 }
 let retazos = loadRetazos();
 
@@ -31,7 +31,7 @@ function loadFreeUsers() {
   catch { saveFreeUsers([]); return []; }
 }
 function saveFreeUsers(list) {
-  try { fs.writeFileSync(FREE_USERS_FILE, JSON.stringify(list, null, 2)); } catch {}
+  try { atomicWrite(FREE_USERS_FILE, list); } catch (e) { console.error("[saveFreeUsers]", e.message); }
 }
 let freeUsers = loadFreeUsers();
 
@@ -247,4 +247,8 @@ async function handle(req, res, { method, p, parts, getCallerIdentity }) {
   return false;
 }
 
-module.exports = { handle, MATERIALS, getFreeUserSession, getAllRetazos: () => retazos };
+module.exports = {
+  handle, MATERIALS, getFreeUserSession,
+  getAllRetazos: () => retazos,
+  reload: () => { retazos = loadRetazos(); freeUsers = loadFreeUsers(); }
+};

@@ -6,9 +6,11 @@ const { readFile } = require("node:fs/promises");
 const { buildQuotePdf } = require("./pdf.js");
 const {
   sendJson, readBody, getToken,
+  safeJson, atomicWrite, checkRateLimit, getClientIp, safeCompare, SECURITY_HEADERS,
   generatePassword, hashPassword, verifyPassword, makeStableId, todayIso, dataUrlToBlob,
   adminSessions, SESSION_TTL, createSession, isValidSession, requireAdmin
 } = require("./lib/shared.js");
+const { logActivity } = require("./lib/activity-log.js");
 // require() está cacheado por Node -- estas referencias apuntan a los MISMOS módulos
 // (y las mismas Map() de sesión) que usa el dispatcher de routeModules más abajo.
 // getCallerIdentity() los necesita para reconocer a los 3 tipos de cuenta nuevos.
@@ -70,7 +72,7 @@ function loadTenants() {
 }
 
 function saveTenants(list) {
-  try { fs.writeFileSync(TENANTS_FILE, JSON.stringify(list, null, 2)); } catch {}
+  try { atomicWrite(TENANTS_FILE, list); } catch (e) { console.error("[saveTenants]", e.message); }
 }
 
 let tenants = loadTenants();
@@ -94,7 +96,7 @@ function loadSellers() {
 }
 
 function saveSellers(list) {
-  try { fs.writeFileSync(SELLERS_FILE, JSON.stringify(list, null, 2)); } catch {}
+  try { atomicWrite(SELLERS_FILE, list); } catch (e) { console.error("[saveSellers]", e.message); }
 }
 
 function publicSeller(s) {
@@ -115,7 +117,7 @@ function loadHandoffs() {
 }
 
 function saveHandoffs(list) {
-  try { fs.writeFileSync(HANDOFFS_FILE, JSON.stringify(list, null, 2)); } catch {}
+  try { atomicWrite(HANDOFFS_FILE, list); } catch (e) { console.error("[saveHandoffs]", e.message); }
 }
 
 let handoffs = loadHandoffs();
@@ -177,7 +179,7 @@ function loadPrices() {
 }
 
 function savePrices(p) {
-  try { fs.writeFileSync(PRICES_FILE, JSON.stringify(p, null, 2)); } catch {}
+  try { atomicWrite(PRICES_FILE, p); } catch (e) { console.error("[savePrices]", e.message); }
 }
 
 let prices = loadPrices();
@@ -1319,13 +1321,21 @@ async function handleGenerateImage(req, res) {
 }
 
 async function handleAuthAdmin(req, res) {
+  const ip = getClientIp(req);
+  if (!checkRateLimit(`auth:admin:${ip}`, 8, 60000)) {
+    logActivity({ actorType: "admin", actorId: "admin", actorLabel: "Admin", action: "auth.rate_limited", meta: { ip } });
+    sendJson(res, 429, { error: "Demasiados intentos. Espera 1 minuto." });
+    return;
+  }
   const body = await readBody(req);
-  const { password } = body ? JSON.parse(body) : {};
-  if (password !== ADMIN_PASSWORD) {
+  const { password } = safeJson(body, {});
+  if (!safeCompare(password, ADMIN_PASSWORD)) {
+    logActivity({ actorType: "admin", actorId: "admin", actorLabel: "Admin", action: "auth.login.failed", meta: { ip } });
     sendJson(res, 401, { error: "Contraseña incorrecta." });
     return;
   }
   const token = createSession();
+  logActivity({ actorType: "admin", actorId: "admin", actorLabel: "Admin", action: "auth.login", meta: { ip } });
   sendJson(res, 200, { token, message: "Sesión iniciada." });
 }
 
@@ -1340,15 +1350,22 @@ async function handleAuthLogout(req, res) {
 }
 
 async function handleAuthEbanista(req, res) {
+  const ip = getClientIp(req);
+  if (!checkRateLimit(`auth:ebanista:${ip}`, 15, 60000)) {
+    sendJson(res, 429, { error: "Demasiados intentos. Espera 1 minuto." });
+    return;
+  }
   const body = await readBody(req);
-  const { code, password } = body ? JSON.parse(body) : {};
+  const { code, password } = safeJson(body, {});
   const tenant = tenants.find(t => t.accessCode === code);
   if (!tenant) { sendJson(res, 401, { error: "Código no válido." }); return; }
   if (tenant.passwordHash && !verifyPassword(password, tenant.passwordSalt, tenant.passwordHash)) {
+    logActivity({ actorType: "ebanista", actorId: tenant.id, actorLabel: tenant.companyName, action: "auth.login.failed", meta: { ip } });
     sendJson(res, 401, { error: "Contraseña incorrecta." });
     return;
   }
   const token = createEbanistaSession(tenant.id);
+  logActivity({ actorType: "ebanista", actorId: tenant.id, actorLabel: tenant.companyName, action: "auth.login", meta: { ip } });
   sendJson(res, 200, { token, tenant: { ...publicTenant(tenant), active: isTenantActive(tenant) } });
 }
 
@@ -1363,16 +1380,23 @@ async function handleAuthEbanistaLogout(req, res) {
 }
 
 async function handleAuthSeller(req, res) {
+  const ip = getClientIp(req);
+  if (!checkRateLimit(`auth:seller:${ip}`, 15, 60000)) {
+    sendJson(res, 429, { error: "Demasiados intentos. Espera 1 minuto." });
+    return;
+  }
   const body = await readBody(req);
-  const { code, password } = body ? JSON.parse(body) : {};
+  const { code, password } = safeJson(body, {});
   const s = sellers.find(s => s.accessCode === code);
   if (!s) { sendJson(res, 401, { error: "Código no válido." }); return; }
   if (s.status !== "active") { sendJson(res, 403, { error: "Cuenta de vendedor suspendida." }); return; }
   if (s.passwordHash && !verifyPassword(password, s.passwordSalt, s.passwordHash)) {
+    logActivity({ actorType: "vendedor", actorId: s.id, actorLabel: s.name, action: "auth.login.failed", meta: { ip } });
     sendJson(res, 401, { error: "Contraseña incorrecta." });
     return;
   }
   const token = createSellerSession(s.id);
+  logActivity({ actorType: "vendedor", actorId: s.id, actorLabel: s.name, action: "auth.login", meta: { ip } });
   sendJson(res, 200, { token, seller: publicSeller(s) });
 }
 
@@ -1775,11 +1799,100 @@ async function serveStatic(req, res) {
   try {
     const file = await readFile(filePath);
     const ext = path.extname(filePath);
-    res.writeHead(200, { "Content-Type": mimeTypes[ext] || "application/octet-stream" });
+    // HTML pages get full security headers; assets get minimal ones (cache is fine for them)
+    const isHtml = ext === ".html";
+    res.writeHead(200, {
+      "Content-Type": mimeTypes[ext] || "application/octet-stream",
+      "X-Content-Type-Options": "nosniff",
+      ...(isHtml ? { "X-Frame-Options": "DENY", "Referrer-Policy": "strict-origin-when-cross-origin" } : {})
+    });
     res.end(file);
   } catch {
     res.writeHead(404); res.end("Not found");
   }
+}
+
+// ── Backup / Restore ─────────────────────────────────────────────────────────
+// Lee TODOS los archivos JSON de la app en un solo objeto para descarga.
+// Permite restaurar los datos después de que Render (free plan) pierde el
+// filesystem al reiniciar el contenedor — el único mecanismo viable sin pagar
+// por un Render Disk o base de datos externa.
+const BACKUP_DATA_FILES = {
+  tenants:               TENANTS_FILE,
+  sellers:               SELLERS_FILE,
+  handoffs:              HANDOFFS_FILE,
+  prices:                PRICES_FILE,
+  professionals:         path.join(__dirname, "professionals.json"),
+  professional_ratings:  path.join(__dirname, "professional_ratings.json"),
+  companies:             path.join(__dirname, "companies.json"),
+  retazos:               path.join(__dirname, "retazos.json"),
+  usuarios_gratuitos:    path.join(__dirname, "usuarios_gratuitos.json"),
+  ads:                   path.join(__dirname, "ads.json"),
+  catalog_categories:    path.join(__dirname, "catalog_categories.json"),
+  company_products:      path.join(__dirname, "company_products.json"),
+  plans:                 path.join(__dirname, "plans.json"),
+  roles:                 path.join(__dirname, "roles.json"),
+};
+
+function createBackup() {
+  const backup = { _version: 2, _created: new Date().toISOString(), _build: "v42" };
+  for (const [key, file] of Object.entries(BACKUP_DATA_FILES)) {
+    try { backup[key] = JSON.parse(fs.readFileSync(file, "utf-8")); }
+    catch { backup[key] = null; }
+  }
+  return backup;
+}
+
+function restoreBackup(backup) {
+  if (!backup || backup._version < 1) throw new Error("Formato de backup inválido.");
+  const restored = [];
+  for (const [key, file] of Object.entries(BACKUP_DATA_FILES)) {
+    const data = backup[key];
+    if (data === undefined || data === null) continue;
+    try { atomicWrite(file, data); restored.push(key); }
+    catch (e) { console.error(`[restore] ${key}: ${e.message}`); }
+  }
+  // Recargar arrays en memoria de server.js
+  tenants  = loadTenants();
+  sellers  = loadSellers();
+  handoffs = loadHandoffs();
+  prices   = loadPrices();
+  // Recargar los módulos de rutas (cada uno expone reload() si tiene estado propio)
+  for (const mod of routeModules) { if (typeof mod.reload === "function") mod.reload(); }
+  return restored;
+}
+
+// ── Schema migrations ─────────────────────────────────────────────────────────
+// Se ejecuta DESPUÉS de cargar cada archivo. Agrega campos con valores por
+// defecto a registros antiguos que no los tienen, sin alterar los existentes.
+// Nunca borra ni renombra campos — solo adiciones. Seguro de ejecutar varias veces.
+function migrateTenants() {
+  let dirty = false;
+  tenants = tenants.map(t => {
+    const patched = {
+      plan: "Básico", status: "active", margin: 30, installBase: 75, transportBase: 30,
+      materials: "", terms: "", prices: {}, theme: {},
+      catalog: { furnitureTypes: [], edgeOptions: [], hingeOptions: [], slideOptions: [], handleOptions: [] },
+      ...t
+    };
+    if (JSON.stringify(patched) !== JSON.stringify(t)) dirty = true;
+    return patched;
+  });
+  if (dirty) saveTenants(tenants);
+}
+function migrateSellers() {
+  let dirty = false;
+  sellers = sellers.map(s => {
+    const patched = { status: "active", notes: "", theme: {}, businessProfile: {}, ...s };
+    if (JSON.stringify(patched) !== JSON.stringify(s)) dirty = true;
+    return patched;
+  });
+  if (dirty) saveSellers(sellers);
+}
+function runMigrations() {
+  try { migrateTenants(); } catch (e) { console.error("[migration] tenants:", e.message); }
+  try { migrateSellers(); } catch (e) { console.error("[migration] sellers:", e.message); }
+  console.log("[migrations] completadas");
 }
 
 // ── Módulos de rutas nuevos (uno por dominio: profesionales, empresas, retazos...) ──
@@ -1805,7 +1918,7 @@ const server = http.createServer(async (req, res) => {
     const method = req.method;
 
     // CORS preflight
-    if (method === "OPTIONS") { res.writeHead(204, { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type,Authorization", "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS" }); res.end(); return; }
+    if (method === "OPTIONS") { res.writeHead(204, { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type,Authorization", "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS", ...SECURITY_HEADERS }); res.end(); return; }
 
     // Health
     if (method === "GET" && p === "/api/health") {
@@ -1840,6 +1953,34 @@ const server = http.createServer(async (req, res) => {
     if (method === "POST" && p === "/api/auth/seller")        { await handleAuthSeller(req, res); return; }
     if (method === "GET"  && p === "/api/auth/seller/check")  { handleAuthSellerCheck(req, res); return; }
     if (method === "POST" && p === "/api/auth/seller/logout") { await handleAuthSellerLogout(req, res); return; }
+
+    // Backup / Restore (admin only)
+    if (method === "GET" && p === "/api/admin/backup") {
+      if (!requireAdmin(req, res)) return;
+      const backup = createBackup();
+      const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
+      res.writeHead(200, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Content-Disposition": `attachment; filename="ebanistas-backup-${ts}.json"`,
+        ...SECURITY_HEADERS
+      });
+      res.end(JSON.stringify(backup, null, 2));
+      logActivity({ actorType: "admin", actorId: "admin", actorLabel: "Admin", action: "system.backup.download", meta: {} });
+      return;
+    }
+    if (method === "POST" && p === "/api/admin/restore") {
+      if (!requireAdmin(req, res)) return;
+      const body = await readBody(req);
+      const backup = safeJson(body);
+      try {
+        const restored = restoreBackup(backup);
+        logActivity({ actorType: "admin", actorId: "admin", actorLabel: "Admin", action: "system.backup.restore", meta: { restored } });
+        sendJson(res, 200, { ok: true, restored, message: `${restored.length} colecciones restauradas correctamente.` });
+      } catch (e) {
+        sendJson(res, 400, { error: e.message });
+      }
+      return;
+    }
 
     // Prices (GET public, PUT admin)
     if (method === "GET" && p === "/api/prices") { sendJson(res, 200, prices); return; }
@@ -1934,6 +2075,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(port, () => {
+  runMigrations();
   console.log(`\n🪚  Agente Ebanistas SaaS — http://localhost:${port}`);
   console.log(`   Admin password  : ${ADMIN_PASSWORD === "admin1234" ? "admin1234 (⚠ cambia con ADMIN_PASSWORD=xxx)" : "configurada ✓"}`);
   console.log(`   OpenAI          : ${process.env.OPENAI_API_KEY ? "activo ✓" : "no configurado (modo local)"}`);
