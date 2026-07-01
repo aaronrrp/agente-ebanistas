@@ -8564,11 +8564,13 @@ async function loadPublicDirectory() {
   if (!grid) return;
   grid.innerHTML = '<p class="login-hint">Cargando…</p>';
   const params = new URLSearchParams();
+  const name = document.getElementById("pf_filterName")?.value.trim();
   const category = document.getElementById("pf_filterCategory")?.value;
   const province = document.getElementById("pf_filterProvince")?.value.trim();
   const city = document.getElementById("pf_filterCity")?.value.trim();
   const specialty = document.getElementById("pf_filterSpecialty")?.value.trim();
   const sort = document.getElementById("pf_sortSelect")?.value || "recent";
+  if (name) params.set("name", name);
   if (category) params.set("category", category);
   if (province) params.set("province", province);
   if (city) params.set("city", city);
@@ -8578,22 +8580,35 @@ async function loadPublicDirectory() {
     const res = await fetch(`/api/professionals?${params.toString()}`);
     const list = res.ok ? await res.json() : [];
     if (!list.length) { grid.innerHTML = '<p class="login-hint">No hay profesionales que coincidan todavía — sé el primero en registrarte.</p>'; return; }
-    grid.innerHTML = list.map(p => `
-      <div class="public-pro-card">
-        ${p.photoUrl ? `<img src="${escapeHtml(p.photoUrl)}" alt="" class="public-pro-photo">` : `<div class="public-pro-photo public-pro-photo-placeholder">${escapeHtml((p.name||"?")[0])}</div>`}
-        <div class="public-pro-body">
-          <strong>${escapeHtml(p.name)}</strong>
-          ${p.company ? `<span class="public-pro-company">${escapeHtml(p.company)}</span>` : ""}
-          <span class="public-pro-category">${escapeHtml(professionalCategoryLabel(p.category))}${p.specialty ? " · " + escapeHtml(p.specialty) : ""}</span>
-          ${p.location?.city ? `<span class="public-pro-location">📍 ${escapeHtml(p.location.city)}${p.location.province ? ", " + escapeHtml(p.location.province) : ""}</span>` : ""}
-          ${p.ratings?.count ? `<div class="star-display">${starHtml(p.ratings.avg, p.ratings.count)}</div>` : ""}
-          ${p.description ? `<p class="public-pro-desc">${escapeHtml(p.description)}</p>` : ""}
-          <div style="display:flex;gap:6px;margin-top:8px">
-            <button class="primary-btn public-pro-contact" type="button" data-contact-id="${p.id}" data-contact-phone="${escapeHtml(p.whatsapp || p.phone || "")}">📞 Contactar</button>
-            <button class="secondary-btn" type="button" data-view-profile="${p.id}">Ver perfil</button>
-          </div>
+    grid.innerHTML = list.map(p => {
+      const waPhone = (p.whatsapp || p.phone || "").replace(/[^0-9]/g, "");
+      const photo = p.photoUrl
+        ? `<img src="${escapeHtml(p.photoUrl)}" alt="" class="pro-card-photo">`
+        : `<div class="pro-card-photo pro-card-photo--placeholder">${escapeHtml((p.name||"?")[0].toUpperCase())}</div>`;
+      const badges = [
+        p.featured ? `<span class="pro-badge pro-badge--gold">★ Destacado</span>` : "",
+        p.plan === "premium" ? `<span class="pro-badge pro-badge--purple">PRO</span>` : ""
+      ].filter(Boolean).join("");
+      return `<div class="pro-card${p.featured ? " pro-card--featured" : ""}">
+        <div class="pro-card-header">
+          ${photo}
+          ${badges ? `<div class="pro-card-badges">${badges}</div>` : ""}
         </div>
-      </div>`).join("");
+        <div class="pro-card-body">
+          <h3 class="pro-card-name">${escapeHtml(p.name)}</h3>
+          <div class="pro-card-meta">${escapeHtml(professionalCategoryLabel(p.category))}${p.experienceYears ? ` · ${p.experienceYears} año${p.experienceYears !== 1 ? "s" : ""} exp.` : ""}</div>
+          ${p.company ? `<div class="pro-card-company">${escapeHtml(p.company)}</div>` : ""}
+          ${p.location?.city ? `<div class="pro-card-location">📍 ${escapeHtml(p.location.city)}${p.location.province ? ", " + escapeHtml(p.location.province) : ""}</div>` : ""}
+          ${p.ratings?.count ? `<div class="pro-card-rating">${starHtml(p.ratings.avg, p.ratings.count)}</div>` : ""}
+          ${p.specialty ? `<div class="pro-card-specialty">${escapeHtml(p.specialty)}</div>` : ""}
+        </div>
+        <div class="pro-card-actions">
+          ${waPhone ? `<button class="pca-btn pca-wa" type="button" data-contact-id="${p.id}" data-contact-phone="${escapeHtml(p.whatsapp || p.phone || "")}">WhatsApp</button>` : ""}
+          ${p.phone ? `<a class="pca-btn pca-call" href="tel:${escapeHtml(p.phone.replace(/[^0-9+]/g,""))}">Llamar</a>` : ""}
+          <button class="pca-btn pca-view" type="button" data-view-profile="${p.id}">Ver perfil</button>
+        </div>
+      </div>`;
+    }).join("");
   } catch {
     grid.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>';
   }
@@ -8714,9 +8729,11 @@ async function loadPublicCompanies() {
   if (!grid) return;
   grid.innerHTML = '<p class="login-hint">Cargando…</p>';
   const params = new URLSearchParams();
+  const name = document.getElementById("co_filterName")?.value.trim();
   const category = document.getElementById("co_filterCategory")?.value;
   const province = document.getElementById("co_filterProvince")?.value.trim();
   const city = document.getElementById("co_filterCity")?.value.trim();
+  if (name) params.set("name", name);
   if (category) params.set("category", category);
   if (province) params.set("province", province);
   if (city) params.set("city", city);
@@ -8724,18 +8741,31 @@ async function loadPublicCompanies() {
     const res = await fetch(`/api/companies?${params.toString()}`);
     const list = res.ok ? await res.json() : [];
     if (!list.length) { grid.innerHTML = '<p class="login-hint">No hay empresas que coincidan todavía — sé la primera en registrarte.</p>'; return; }
-    grid.innerHTML = list.map(c => `
-      <div class="public-pro-card">
-        ${c.logoUrl ? `<img src="${escapeHtml(c.logoUrl)}" alt="" class="public-pro-photo">` : `<div class="public-pro-photo public-pro-photo-placeholder">${escapeHtml((c.name||"?")[0])}</div>`}
-        <div class="public-pro-body">
-          <strong>${escapeHtml(c.name)}</strong>
-          <span class="public-pro-category">${escapeHtml(companyCategoryLabel(c.category))}</span>
-          ${c.location?.city ? `<span class="public-pro-location">📍 ${escapeHtml(c.location.city)}${c.location.province ? ", " + escapeHtml(c.location.province) : ""}</span>` : ""}
-          ${c.description ? `<p class="public-pro-desc">${escapeHtml(c.description)}</p>` : ""}
-          ${c.products?.length ? `<p class="public-pro-desc"><strong>${c.products.length}</strong> producto(s) publicado(s)</p>` : ""}
-          <button class="primary-btn public-pro-contact" type="button" data-company-contact-id="${c.id}" data-contact-phone="${escapeHtml(c.whatsapp || c.phone || "")}">📞 Contactar</button>
+    grid.innerHTML = list.map(c => {
+      const waPhone = (c.whatsapp || c.phone || "").replace(/[^0-9]/g, "");
+      const logo = c.logoUrl
+        ? `<img src="${escapeHtml(c.logoUrl)}" alt="" class="pro-card-photo">`
+        : `<div class="pro-card-photo pro-card-photo--placeholder co-placeholder">${escapeHtml((c.name||"?")[0].toUpperCase())}</div>`;
+      const badges = c.featured ? `<div class="pro-card-badges"><span class="pro-badge pro-badge--gold">★ Destacado</span></div>` : "";
+      return `<div class="pro-card${c.featured ? " pro-card--featured" : ""}">
+        <div class="pro-card-header">
+          ${logo}
+          ${badges}
         </div>
-      </div>`).join("");
+        <div class="pro-card-body">
+          <h3 class="pro-card-name">${escapeHtml(c.name)}</h3>
+          <div class="pro-card-meta">${escapeHtml(companyCategoryLabel(c.category))}</div>
+          ${c.location?.city ? `<div class="pro-card-location">📍 ${escapeHtml(c.location.city)}${c.location.province ? ", " + escapeHtml(c.location.province) : ""}</div>` : ""}
+          ${c.ratings?.count ? `<div class="pro-card-rating">${starHtml(c.ratings.avg, c.ratings.count)}</div>` : ""}
+          ${c.products?.length ? `<div class="pro-card-specialty">${c.products.length} producto${c.products.length !== 1 ? "s" : ""} publicado${c.products.length !== 1 ? "s" : ""}</div>` : ""}
+          ${c.description ? `<p class="pro-card-desc">${escapeHtml(c.description)}</p>` : ""}
+        </div>
+        <div class="pro-card-actions">
+          ${waPhone ? `<button class="pca-btn pca-wa" type="button" data-company-contact-id="${c.id}" data-contact-phone="${escapeHtml(c.whatsapp || c.phone || "")}">WhatsApp</button>` : ""}
+          ${c.phone ? `<a class="pca-btn pca-call" href="tel:${escapeHtml(c.phone.replace(/[^0-9+]/g,""))}">Llamar</a>` : ""}
+        </div>
+      </div>`;
+    }).join("");
   } catch {
     grid.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>';
   }

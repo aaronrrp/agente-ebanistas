@@ -67,6 +67,7 @@ function makeCompanyCode(name) {
 
 function matchesFilters(c, q) {
   if (c.status !== "approved") return false;
+  if (q.name && !String(c.name || "").toLowerCase().includes(String(q.name).toLowerCase())) return false;
   if (q.category && c.category !== q.category) return false;
   if (q.province && c.location?.province !== q.province) return false;
   if (q.city && c.location?.city !== q.city) return false;

@@ -70,6 +70,7 @@ function makeProfessionalCode(name) {
 
 function matchesFilters(p, q) {
   if (p.status !== "approved") return false;
+  if (q.name && !String(p.name || "").toLowerCase().includes(String(q.name).toLowerCase())) return false;
   if (q.category && p.category !== q.category) return false;
   if (q.province && p.location?.province !== q.province) return false;
   if (q.city && p.location?.city !== q.city) return false;
