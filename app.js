@@ -8606,6 +8606,7 @@ async function loadPublicDirectory() {
           ${waPhone ? `<button class="pca-btn pca-wa" type="button" data-contact-id="${p.id}" data-contact-phone="${escapeHtml(p.whatsapp || p.phone || "")}">WhatsApp</button>` : ""}
           ${p.phone ? `<a class="pca-btn pca-call" href="tel:${escapeHtml(p.phone.replace(/[^0-9+]/g,""))}">Llamar</a>` : ""}
           <button class="pca-btn pca-view" type="button" data-view-profile="${p.id}">Ver perfil</button>
+          <button class="pca-btn pca-share" type="button" data-share-type="p" data-share-slug="${escapeHtml(p.slug || p.id)}" data-share-name="${escapeHtml(p.name)}">Compartir</button>
         </div>
       </div>`;
     }).join("");
@@ -8763,6 +8764,7 @@ async function loadPublicCompanies() {
         <div class="pro-card-actions">
           ${waPhone ? `<button class="pca-btn pca-wa" type="button" data-company-contact-id="${c.id}" data-contact-phone="${escapeHtml(c.whatsapp || c.phone || "")}">WhatsApp</button>` : ""}
           ${c.phone ? `<a class="pca-btn pca-call" href="tel:${escapeHtml(c.phone.replace(/[^0-9+]/g,""))}">Llamar</a>` : ""}
+          <button class="pca-btn pca-share" type="button" data-share-type="c" data-share-slug="${escapeHtml(c.slug || c.id)}" data-share-name="${escapeHtml(c.name)}">Compartir</button>
         </div>
       </div>`;
     }).join("");
@@ -8830,6 +8832,40 @@ document.getElementById("co_registerSuccessBackBtn")?.addEventListener("click", 
   document.getElementById("co_regCity").value = "";
   document.getElementById("co_regDescription").value = "";
   document.getElementById("co_regSchedule").value = "";
+});
+
+// ── Compartir perfil — URL amigable + QR ─────────────────────────────────────
+function openShareModal(type, slug, name) {
+  const url = `${window.location.origin}/${type}/${slug}`;
+  const modal = document.getElementById("shareModal");
+  document.getElementById("shareModalTitle").textContent = `Compartir — ${name}`;
+  document.getElementById("shareUrl").value = url;
+  document.getElementById("shareQr").src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`;
+  modal.classList.remove("hidden");
+}
+document.getElementById("shareCloseBtn")?.addEventListener("click", () => document.getElementById("shareModal").classList.add("hidden"));
+document.getElementById("shareModal")?.addEventListener("click", (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.add("hidden");
+});
+document.getElementById("shareCopyBtn")?.addEventListener("click", async () => {
+  const url = document.getElementById("shareUrl").value;
+  try { await navigator.clipboard.writeText(url); toast("Enlace copiado"); }
+  catch { document.getElementById("shareUrl").select(); document.execCommand("copy"); toast("Enlace copiado"); }
+});
+document.getElementById("shareNativeBtn")?.addEventListener("click", async () => {
+  const url = document.getElementById("shareUrl").value;
+  const title = document.getElementById("shareModalTitle").textContent.replace("Compartir — ", "");
+  if (navigator.share) { try { await navigator.share({ title, url }); } catch {} }
+  else { try { await navigator.clipboard.writeText(url); toast("Enlace copiado"); } catch {} }
+});
+
+document.getElementById("publicDirectoryGrid")?.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-share-type]");
+  if (btn) openShareModal(btn.dataset.shareType, btn.dataset.shareSlug, btn.dataset.shareName);
+});
+document.getElementById("publicCompaniesGrid")?.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-share-type]");
+  if (btn) openShareModal(btn.dataset.shareType, btn.dataset.shareSlug, btn.dataset.shareName);
 });
 
 // ── Centro Sostenible de Retazos ─────────────────────────────────────────────
@@ -9694,10 +9730,28 @@ async function tryAutoLogin() {
     sessionStorage.removeItem("ebAuthMode");
   }
 
-  // ── 3. Sin sesión válida ni link directo → directorio público por defecto
-  // (antes caía directo a showLogin(); el login sigue a un clic de distancia desde
-  // el botón "Iniciar sesión" del directorio, ver showPublicDirectorio()).
-  showPublicDirectorio();
+  // ── 3. Sin sesión válida → directorio público por defecto
+  // Detectar URLs amigables /p/:slug o /c/:slug para abrir el perfil directo
+  const _ppParts = window.location.pathname.split("/").filter(Boolean);
+  if (_ppParts.length === 2 && (_ppParts[0] === "p" || _ppParts[0] === "c")) {
+    const _ppType = _ppParts[0];
+    const _ppSlug = _ppParts[1];
+    showPublicDirectorio();
+    if (_ppType === "p") {
+      try {
+        const _ppRes = await fetch(`/api/professionals/slug/${_ppSlug}`);
+        if (_ppRes.ok) openProProfileModal((await _ppRes.json()).id);
+      } catch {}
+    } else {
+      document.querySelectorAll("[data-public-tab]").forEach(b => b.classList.remove("active"));
+      document.querySelector('[data-public-tab="empresas"]')?.classList.add("active");
+      hideAllPublicSubviews();
+      document.getElementById("publicCompaniesView")?.classList.remove("hidden");
+      loadPublicCompanies();
+    }
+  } else {
+    showPublicDirectorio();
+  }
 }
 
 // ── Margin percent live update (quote form) ────────────────────────────────

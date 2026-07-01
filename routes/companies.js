@@ -65,6 +65,13 @@ function makeCompanyCode(name) {
   return `${prefix}-${hash}`;
 }
 
+function makeSlug(name, id) {
+  const base = String(name || "empresa")
+    .toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "empresa";
+  return `${base}-${String(id).slice(0, 6)}`;
+}
+
 function matchesFilters(c, q) {
   if (c.status !== "approved") return false;
   if (q.name && !String(c.name || "").toLowerCase().includes(String(q.name).toLowerCase())) return false;
@@ -77,6 +84,14 @@ function matchesFilters(c, q) {
 function findCompanyById(id) { return companies.find(x => x.id === id); }
 
 async function handle(req, res, { method, p, parts }) {
+  // GET /api/companies/slug/:slug — empresa por URL amigable
+  if (method === "GET" && parts[0] === "api" && parts[1] === "companies" && parts[2] === "slug" && parts[3]) {
+    const co = companies.find(x => x.slug === parts[3] && x.status === "approved");
+    if (!co) { sendJson(res, 404, { error: "Empresa no encontrada." }); return true; }
+    sendJson(res, 200, publicCompany(co));
+    return true;
+  }
+
   if (method === "GET" && p === "/api/companies") {
     const q = Object.fromEntries(new URL(req.url, "http://x").searchParams);
     sendJson(res, 200, companies.filter(c => matchesFilters(c, q)).map(publicCompany));
@@ -87,8 +102,10 @@ async function handle(req, res, { method, p, parts }) {
     const body = await readBody(req);
     const data = body ? JSON.parse(body) : {};
     if (!data.name || !String(data.name).trim()) { sendJson(res, 400, { error: "Falta el nombre de la empresa." }); return true; }
+    const id = crypto.randomUUID();
     const company = {
-      id: crypto.randomUUID(),
+      id,
+      slug: makeSlug(String(data.name).trim(), id),
       name: String(data.name).trim(),
       category: CATEGORIES.includes(data.category) ? data.category : "otra",
       logoUrl: data.logoUrl || "",

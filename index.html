@@ -145,6 +145,20 @@
         <div id="publicDirectoryGrid" class="public-directory-grid"></div>
 
         <!-- Modal: perfil completo del profesional -->
+        <!-- Modal: compartir perfil / empresa -->
+        <div id="shareModal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+          <div class="modal-box" style="max-width:360px">
+            <button class="modal-close-btn" id="shareCloseBtn" type="button" aria-label="Cerrar">✕</button>
+            <h3 id="shareModalTitle" style="margin:0 0 16px;font-size:1.1rem">Compartir</h3>
+            <img id="shareQr" src="" alt="QR Code" style="width:160px;height:160px;display:block;margin:0 auto 16px;border-radius:8px;border:1px solid var(--line)">
+            <div style="display:flex;gap:8px;margin-bottom:10px">
+              <input id="shareUrl" type="text" readonly style="flex:1;font-size:.82rem;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface-soft)">
+              <button id="shareCopyBtn" class="secondary-btn" type="button" style="white-space:nowrap">Copiar</button>
+            </div>
+            <button id="shareNativeBtn" class="primary-btn" type="button" style="width:100%">↑ Compartir</button>
+          </div>
+        </div>
+
         <div id="proProfileModal" class="modal-overlay hidden" role="dialog" aria-modal="true">
           <div class="modal-box" style="max-width:560px">
             <button class="modal-close-btn" id="proProfileCloseBtn" type="button" aria-label="Cerrar">✕</button>

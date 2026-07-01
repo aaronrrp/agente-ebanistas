@@ -68,6 +68,13 @@ function makeProfessionalCode(name) {
   return `${prefix}-${hash}`;
 }
 
+function makeSlug(name, id) {
+  const base = String(name || "profesional")
+    .toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "profesional";
+  return `${base}-${String(id).slice(0, 6)}`;
+}
+
 function matchesFilters(p, q) {
   if (p.status !== "approved") return false;
   if (q.name && !String(p.name || "").toLowerCase().includes(String(q.name).toLowerCase())) return false;
@@ -80,6 +87,14 @@ function matchesFilters(p, q) {
 }
 
 async function handle(req, res, { method, p, parts }) {
+  // GET /api/professionals/slug/:slug — perfil por URL amigable
+  if (method === "GET" && parts[0] === "api" && parts[1] === "professionals" && parts[2] === "slug" && parts[3]) {
+    const prof = professionals.find(x => x.slug === parts[3] && x.status === "approved");
+    if (!prof) { sendJson(res, 404, { error: "Perfil no encontrado." }); return true; }
+    sendJson(res, 200, publicProfessional(prof));
+    return true;
+  }
+
   // GET /api/professionals — listado público filtrable
   if (method === "GET" && p === "/api/professionals") {
     const q = Object.fromEntries(new URL(req.url, "http://x").searchParams);
@@ -99,8 +114,10 @@ async function handle(req, res, { method, p, parts }) {
     if (!data.name || !String(data.name).trim()) { sendJson(res, 400, { error: "Falta el nombre." }); return true; }
     const passwordPlain = (data.password && String(data.password).trim()) || generatePassword();
     const { salt, hash } = hashPassword(passwordPlain);
+    const id = crypto.randomUUID();
     const professional = {
-      id: crypto.randomUUID(),
+      id,
+      slug: makeSlug(String(data.name).trim(), id),
       category: CATEGORIES.includes(data.category) ? data.category : "otra",
       name: String(data.name).trim(),
       company: data.company || "",
