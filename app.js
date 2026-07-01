@@ -10516,21 +10516,17 @@ document.querySelectorAll("[data-public-nav]").forEach(btn => {
     document.querySelectorAll("[data-public-nav]").forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
     const nav = btn.dataset.publicNav;
-    // Map nav slugs to the publicShell sub-views
     hideAllPublicSubviews();
-    if (nav === "inicio") {
-      document.getElementById("publicDirectorioView")?.classList.remove("hidden");
-    } else if (nav === "directorio") {
-      document.getElementById("publicDirectorioView")?.classList.remove("hidden");
+    if (nav === "inicio" || nav === "directorio" || nav === "profesionales") {
+      document.getElementById("publicDirectoryView")?.classList.remove("hidden");
+      loadPublicDirectory();
     } else if (nav === "empresas") {
       document.getElementById("publicCompaniesView")?.classList.remove("hidden");
       loadPublicCompanies?.();
-    } else if (nav === "profesionales") {
-      document.getElementById("publicDirectorioView")?.classList.remove("hidden");
-      document.getElementById("pf_filterCategory")?.focus();
     } else if (nav === "retazos") {
       document.getElementById("publicRetazosView")?.classList.remove("hidden");
       loadPublicRetazos?.();
+      loadPublicInspiration?.();
     }
   });
 });

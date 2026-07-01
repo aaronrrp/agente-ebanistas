@@ -81,7 +81,27 @@
   <div id="publicShell" style="display:none">
     <header class="public-topbar">
       <div class="brand-lockup">
-        <div class="brand-mark" style="font-size:1rem;font-weight:900;letter-spacing:-0.5px;background:#3B2D8F;color:#fff;width:44px;height:44px">Pi<span style="color:#F5B400">L</span></div>
+        <div class="brand-mark" style="background:#3B2D8F;padding:0;width:48px;height:48px;border-radius:10px;overflow:hidden;flex-shrink:0">
+          <svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" width="48" height="48">
+            <!-- Roof / arco superior de la P -->
+            <polygon points="5,26 24,7 43,26" fill="white" opacity=".95"/>
+            <!-- Chimenea/pilar amarillo -->
+            <rect x="30" y="9" width="6" height="12" rx="1" fill="#F5B400"/>
+            <!-- Ventana amarilla (4 cuadros) -->
+            <rect x="29" y="8" width="3" height="3" rx=".5" fill="#F5B400"/>
+            <rect x="33" y="8" width="3" height="3" rx=".5" fill="#F5B400"/>
+            <rect x="29" y="12" width="3" height="3" rx=".5" fill="#F5B400"/>
+            <rect x="33" y="12" width="3" height="3" rx=".5" fill="#F5B400"/>
+            <!-- Pared izquierda (trazo vertical de la P) -->
+            <rect x="8" y="24" width="8" height="18" fill="white" opacity=".95"/>
+            <!-- Bowl de la P (parte curva) -->
+            <rect x="16" y="24" width="18" height="9" rx="9" fill="white" opacity=".95"/>
+            <!-- Herramientas (silueta simplificada) -->
+            <line x1="17" y1="36" x2="17" y2="42" stroke="white" stroke-width="2.5" stroke-linecap="round" opacity=".7"/>
+            <line x1="22" y1="34" x2="22" y2="42" stroke="white" stroke-width="2.5" stroke-linecap="round" opacity=".7"/>
+            <line x1="27" y1="35" x2="27" y2="42" stroke="white" stroke-width="2.5" stroke-linecap="round" opacity=".7"/>
+          </svg>
+        </div>
         <div>
           <strong style="font-weight:900;letter-spacing:-0.5px">PiLLA</strong>
           <span class="public-topbar-tagline">Profesionales que construyen soluciones</span>
@@ -100,12 +120,6 @@
     <div id="publicBannerSlot"></div>
 
     <main class="public-main">
-      <div class="login-tabs" role="tablist" style="max-width:480px;margin:0 auto 18px">
-        <button class="login-tab active" data-public-tab="profesionales" type="button" role="tab">Profesionales</button>
-        <button class="login-tab" data-public-tab="empresas" type="button" role="tab">Empresas</button>
-        <button class="login-tab" data-public-tab="retazos" type="button" role="tab">♻️ Retazos</button>
-      </div>
-
       <!-- Vista: listado + filtros (profesionales) -->
       <section id="publicDirectoryView">
         <div class="public-hero">
