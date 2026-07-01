@@ -1917,7 +1917,8 @@ const routeModules = [
   require("./routes/admin-dashboard.js"),
   require("./routes/ads.js"),
   require("./routes/ratings.js"),
-  require("./routes/catalog.js")
+  require("./routes/catalog.js"),
+  require("./routes/locations.js")
 ];
 
 // ── Main router ─────────────────────────────────────────────────────────────

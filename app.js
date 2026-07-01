@@ -8424,6 +8424,83 @@ const PROFESSIONAL_CATEGORIES = [
   { value: "otra", label: "Otra especialidad" }
 ];
 
+// ── Ubicaciones — carga lazy y selects en cascada ───────────────────────────
+let _locData = null;
+let _locSelectsReady = false;
+
+async function ensureLocations() {
+  if (!_locData) {
+    try {
+      const r = await fetch("/api/locations");
+      if (r.ok) _locData = await r.json();
+    } catch {}
+    if (!_locData) _locData = { countries: [] };
+  }
+  return _locData;
+}
+
+async function fillProvinceSelect(sel, isFilter, selected) {
+  const data = await ensureLocations();
+  const provs = data.countries[0]?.provinces || [];
+  sel.innerHTML = isFilter ? '<option value="">Todas</option>' : '<option value="">Seleccionar…</option>';
+  provs.forEach(p => {
+    const o = document.createElement("option");
+    o.value = p.name;
+    o.dataset.id = p.id;
+    o.textContent = p.name;
+    if (p.name === selected) o.selected = true;
+    sel.appendChild(o);
+  });
+}
+
+async function fillCitySelect(sel, provinceId, isFilter, selected) {
+  const data = await ensureLocations();
+  let cities = [];
+  if (provinceId) {
+    for (const co of data.countries) {
+      const prov = co.provinces?.find(p => p.id === provinceId);
+      if (prov) { cities = prov.cities || []; break; }
+    }
+  }
+  const ph = isFilter ? "Todas" : "Seleccionar…";
+  sel.innerHTML = `<option value="">${ph}</option>`;
+  cities.forEach(ci => {
+    const o = document.createElement("option");
+    o.value = ci.name;
+    o.textContent = ci.name;
+    if (ci.name === selected) o.selected = true;
+    sel.appendChild(o);
+  });
+  if (!isFilter) sel.disabled = !provinceId;
+}
+
+function selectedProvinceId(provSel) {
+  return provSel.selectedOptions[0]?.dataset?.id || null;
+}
+
+async function initLocationSelects() {
+  if (_locSelectsReady) return;
+  _locSelectsReady = true;
+  await ensureLocations();
+  const pairs = [
+    ["pf_filterProvince", "pf_filterCity",  true],
+    ["pf_regProvince",    "pf_regCity",      false],
+    ["co_filterProvince", "co_filterCity",   true],
+    ["co_regProvince",    "co_regCity",      false],
+    ["adm_pf_province",  "adm_pf_city",     false],
+    ["adm_co_province",  "adm_co_city",     false],
+  ];
+  for (const [provId, cityId, isFilter] of pairs) {
+    const provSel = document.getElementById(provId);
+    const citySel = document.getElementById(cityId);
+    if (!provSel || !citySel) continue;
+    await fillProvinceSelect(provSel, isFilter);
+    await fillCitySelect(citySel, null, isFilter);
+    provSel.addEventListener("change", () =>
+      fillCitySelect(citySel, selectedProvinceId(provSel), isFilter));
+  }
+}
+
 function showPublicDirectorio() {
   document.getElementById("appLoading")?.remove();
   document.getElementById("loginScreen").style.display = "none";
@@ -8438,6 +8515,7 @@ function showPublicDirectorio() {
   if (regCatSel && !regCatSel.options.length) {
     regCatSel.innerHTML = PROFESSIONAL_CATEGORIES.map(c => `<option value="${c.value}">${c.label}</option>`).join("");
   }
+  initLocationSelects();
   loadPublicDirectory();
   loadPublicBanner();
 }

@@ -117,10 +117,10 @@
               <select id="pf_filterCategory"><option value="">Todas</option></select>
             </label>
             <label>Provincia
-              <input id="pf_filterProvince" type="text" placeholder="Ej: Panamá">
+              <select id="pf_filterProvince"><option value="">Todas</option></select>
             </label>
             <label>Ciudad
-              <input id="pf_filterCity" type="text" placeholder="Ej: Panamá">
+              <select id="pf_filterCity"><option value="">Todas</option></select>
             </label>
             <label>Especialidad
               <input id="pf_filterSpecialty" type="text" placeholder="Ej: cocinas">
@@ -182,10 +182,10 @@
               <input id="pf_regEmail" type="email">
             </label>
             <label>Provincia
-              <input id="pf_regProvince" type="text">
+              <select id="pf_regProvince"><option value="">Seleccionar…</option></select>
             </label>
             <label>Ciudad
-              <input id="pf_regCity" type="text">
+              <select id="pf_regCity"><option value="">Seleccionar…</option></select>
             </label>
             <label class="span-2">Descripción
               <textarea id="pf_regDescription" rows="3"></textarea>
@@ -216,10 +216,10 @@
               <select id="co_filterCategory"><option value="">Todas</option></select>
             </label>
             <label>Provincia
-              <input id="co_filterProvince" type="text" placeholder="Ej: Panamá">
+              <select id="co_filterProvince"><option value="">Todas</option></select>
             </label>
             <label>Ciudad
-              <input id="co_filterCity" type="text" placeholder="Ej: Panamá">
+              <select id="co_filterCity"><option value="">Todas</option></select>
             </label>
           </div>
           <button id="co_applyFiltersBtn" class="secondary-btn" type="button">🔍 Buscar</button>
@@ -257,10 +257,10 @@
                 <input id="co_regEmail" type="email">
               </label>
               <label>Provincia
-                <input id="co_regProvince" type="text">
+                <select id="co_regProvince"><option value="">Seleccionar…</option></select>
               </label>
               <label>Ciudad
-                <input id="co_regCity" type="text">
+                <select id="co_regCity"><option value="">Seleccionar…</option></select>
               </label>
               <label class="span-2">Descripción
                 <textarea id="co_regDescription" rows="3"></textarea>
@@ -849,8 +849,8 @@
                 <label>Categoría <span style="color:#ef4444">*</span><select id="adm_pf_category"></select></label>
                 <label>Teléfono<input id="adm_pf_phone" type="text" placeholder="+507 6000-0000"></label>
                 <label>WhatsApp<input id="adm_pf_whatsapp" type="text" placeholder="+507 6000-0000"></label>
-                <label>Provincia<input id="adm_pf_province" type="text"></label>
-                <label>Ciudad<input id="adm_pf_city" type="text"></label>
+                <label>Provincia<select id="adm_pf_province"><option value="">Seleccionar…</option></select></label>
+                <label>Ciudad<select id="adm_pf_city"><option value="">Seleccionar…</option></select></label>
                 <label class="span-2">Contraseña <span style="font-size:.75rem;color:#6B7280">(vacío = se genera automáticamente)</span>
                   <input id="adm_pf_password" type="text" autocomplete="new-password"></label>
               </div>
@@ -897,8 +897,8 @@
                 <label>Teléfono<input id="adm_co_phone" type="text" placeholder="+507 6000-0000"></label>
                 <label>WhatsApp<input id="adm_co_whatsapp" type="text" placeholder="+507 6000-0000"></label>
                 <label>Correo<input id="adm_co_email" type="email" placeholder="empresa@ejemplo.com"></label>
-                <label>Provincia<input id="adm_co_province" type="text"></label>
-                <label>Ciudad<input id="adm_co_city" type="text"></label>
+                <label>Provincia<select id="adm_co_province"><option value="">Seleccionar…</option></select></label>
+                <label>Ciudad<select id="adm_co_city"><option value="">Seleccionar…</option></select></label>
                 <label class="span-2">Contraseña <span style="font-size:.75rem;color:#6B7280">(vacío = se genera automáticamente)</span>
                   <input id="adm_co_password" type="text" autocomplete="new-password"></label>
               </div>

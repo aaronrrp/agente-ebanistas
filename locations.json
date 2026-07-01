@@ -1,0 +1,176 @@
+{
+  "countries": [
+    {
+      "id": "PA",
+      "name": "Panamá",
+      "provinces": [
+        {
+          "id": "PA-1",
+          "name": "Bocas del Toro",
+          "cities": [
+            { "id": "PA-1-1", "name": "Almirante" },
+            { "id": "PA-1-2", "name": "Bocas del Toro" },
+            { "id": "PA-1-3", "name": "Changuinola" },
+            { "id": "PA-1-4", "name": "Chiriquí Grande" }
+          ]
+        },
+        {
+          "id": "PA-2",
+          "name": "Coclé",
+          "cities": [
+            { "id": "PA-2-1", "name": "Aguadulce" },
+            { "id": "PA-2-2", "name": "La Pintada" },
+            { "id": "PA-2-3", "name": "Natá" },
+            { "id": "PA-2-4", "name": "Olá" },
+            { "id": "PA-2-5", "name": "Penonomé" }
+          ]
+        },
+        {
+          "id": "PA-3",
+          "name": "Colón",
+          "cities": [
+            { "id": "PA-3-1", "name": "Chagres" },
+            { "id": "PA-3-2", "name": "Colón" },
+            { "id": "PA-3-3", "name": "Donoso" },
+            { "id": "PA-3-4", "name": "Portobelo" },
+            { "id": "PA-3-5", "name": "Sabanitas" },
+            { "id": "PA-3-6", "name": "Santa Isabel" }
+          ]
+        },
+        {
+          "id": "PA-4",
+          "name": "Chiriquí",
+          "cities": [
+            { "id": "PA-4-1", "name": "Alanje" },
+            { "id": "PA-4-2", "name": "Barú" },
+            { "id": "PA-4-3", "name": "Boquete" },
+            { "id": "PA-4-4", "name": "Bugaba" },
+            { "id": "PA-4-5", "name": "David" },
+            { "id": "PA-4-6", "name": "Dolega" },
+            { "id": "PA-4-7", "name": "Gualaca" },
+            { "id": "PA-4-8", "name": "La Concepción" },
+            { "id": "PA-4-9", "name": "Remedios" },
+            { "id": "PA-4-10", "name": "Renacimiento" },
+            { "id": "PA-4-11", "name": "San Félix" },
+            { "id": "PA-4-12", "name": "San Lorenzo" },
+            { "id": "PA-4-13", "name": "Tierras Altas" },
+            { "id": "PA-4-14", "name": "Tolé" },
+            { "id": "PA-4-15", "name": "Volcán" }
+          ]
+        },
+        {
+          "id": "PA-5",
+          "name": "Darién",
+          "cities": [
+            { "id": "PA-5-1", "name": "Chepigana" },
+            { "id": "PA-5-2", "name": "La Palma" },
+            { "id": "PA-5-3", "name": "Metetí" },
+            { "id": "PA-5-4", "name": "Pinogana" }
+          ]
+        },
+        {
+          "id": "PA-6",
+          "name": "Herrera",
+          "cities": [
+            { "id": "PA-6-1", "name": "Chitré" },
+            { "id": "PA-6-2", "name": "Las Minas" },
+            { "id": "PA-6-3", "name": "Los Pozos" },
+            { "id": "PA-6-4", "name": "Ocú" },
+            { "id": "PA-6-5", "name": "Parita" },
+            { "id": "PA-6-6", "name": "Pesé" },
+            { "id": "PA-6-7", "name": "Santa María" }
+          ]
+        },
+        {
+          "id": "PA-7",
+          "name": "Los Santos",
+          "cities": [
+            { "id": "PA-7-1", "name": "Guararé" },
+            { "id": "PA-7-2", "name": "Las Tablas" },
+            { "id": "PA-7-3", "name": "Los Santos" },
+            { "id": "PA-7-4", "name": "Macaracas" },
+            { "id": "PA-7-5", "name": "Pedasí" },
+            { "id": "PA-7-6", "name": "Pocrí" },
+            { "id": "PA-7-7", "name": "Tonosí" }
+          ]
+        },
+        {
+          "id": "PA-8",
+          "name": "Panamá",
+          "cities": [
+            { "id": "PA-8-1", "name": "Ciudad de Panamá" },
+            { "id": "PA-8-2", "name": "San Miguelito" },
+            { "id": "PA-8-3", "name": "Alcalde Díaz" },
+            { "id": "PA-8-4", "name": "Ancón" },
+            { "id": "PA-8-5", "name": "Chepo" },
+            { "id": "PA-8-6", "name": "Chimán" },
+            { "id": "PA-8-7", "name": "Las Cumbres" },
+            { "id": "PA-8-8", "name": "Pacora" },
+            { "id": "PA-8-9", "name": "Taboga" },
+            { "id": "PA-8-10", "name": "Tocumen" }
+          ]
+        },
+        {
+          "id": "PA-9",
+          "name": "Panamá Oeste",
+          "cities": [
+            { "id": "PA-9-1", "name": "Arraiján" },
+            { "id": "PA-9-2", "name": "Capira" },
+            { "id": "PA-9-3", "name": "Chame" },
+            { "id": "PA-9-4", "name": "La Chorrera" },
+            { "id": "PA-9-5", "name": "San Carlos" }
+          ]
+        },
+        {
+          "id": "PA-10",
+          "name": "Veraguas",
+          "cities": [
+            { "id": "PA-10-1", "name": "Atalaya" },
+            { "id": "PA-10-2", "name": "Calobre" },
+            { "id": "PA-10-3", "name": "Cañazas" },
+            { "id": "PA-10-4", "name": "La Mesa" },
+            { "id": "PA-10-5", "name": "Las Palmas" },
+            { "id": "PA-10-6", "name": "Mariato" },
+            { "id": "PA-10-7", "name": "Montijo" },
+            { "id": "PA-10-8", "name": "Río de Jesús" },
+            { "id": "PA-10-9", "name": "Santa Fe" },
+            { "id": "PA-10-10", "name": "Santiago" },
+            { "id": "PA-10-11", "name": "Soná" }
+          ]
+        },
+        {
+          "id": "PA-11",
+          "name": "Emberá-Wounaan",
+          "cities": [
+            { "id": "PA-11-1", "name": "Cémaco" },
+            { "id": "PA-11-2", "name": "Sambú" }
+          ]
+        },
+        {
+          "id": "PA-12",
+          "name": "Guna Yala",
+          "cities": [
+            { "id": "PA-12-1", "name": "Ailigandí" },
+            { "id": "PA-12-2", "name": "El Porvenir" },
+            { "id": "PA-12-3", "name": "Narganá" },
+            { "id": "PA-12-4", "name": "Tubualá" }
+          ]
+        },
+        {
+          "id": "PA-13",
+          "name": "Ngäbe-Buglé",
+          "cities": [
+            { "id": "PA-13-1", "name": "Besikó" },
+            { "id": "PA-13-2", "name": "Kankintú" },
+            { "id": "PA-13-3", "name": "Kusapín" },
+            { "id": "PA-13-4", "name": "Mironó" },
+            { "id": "PA-13-5", "name": "Müna" },
+            { "id": "PA-13-6", "name": "Nole Duima" },
+            { "id": "PA-13-7", "name": "Ñürüm" },
+            { "id": "PA-13-8", "name": "Santa Catalina" }
+          ]
+        }
+      ]
+    }
+  ]
+}
