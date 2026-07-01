@@ -461,7 +461,7 @@ async function handle(req, res, { method, p, parts }) {
     sendJson(res, 201, { ...adminCompanyView(company), passwordPlain });
     return true;
   }
-  const COMPANY_ACTIONS = new Set(["approve", "reject", "suspend", "feature", "unfeature", "set-payment-note"]);
+  const COMPANY_ACTIONS = new Set(["approve", "reject", "suspend", "feature", "unfeature", "set-payment-note", "request-changes"]);
   if (parts[0] === "api" && parts[1] === "admin" && parts[2] === "companies" && parts[3] && COMPANY_ACTIONS.has(parts[4]) && !parts[5] && method === "POST") {
     if (!requireAdmin(req, res)) return true;
     const company = findCompanyById(parts[3]);
@@ -497,9 +497,51 @@ async function handle(req, res, { method, p, parts }) {
       const data = body ? JSON.parse(body) : {};
       company.paymentNote = data.paymentNote || "";
     }
+    else if (action === "request-changes") {
+      const body = await readBody(req);
+      const data = body ? JSON.parse(body) : {};
+      company.status = "changes_requested";
+      company.adminNote = String(data.note || "").trim().slice(0, 1000);
+      logActivity({ actorType: "admin", action: "company.changes_requested", meta: { id: company.id, name: company.name } });
+    }
     else { sendJson(res, 400, { error: "Acción no reconocida." }); return true; }
     saveCompanies(companies);
     sendJson(res, 200, adminCompanyView(company));
+    return true;
+  }
+
+  // PUT /api/admin/companies/:id — editar cualquier campo
+  if (method === "PUT" && parts[0] === "api" && parts[1] === "admin" && parts[2] === "companies" && parts[3] && !parts[4]) {
+    if (!requireAdmin(req, res)) return true;
+    const company = findCompanyById(parts[3]);
+    if (!company) { sendJson(res, 404, { error: "No encontrado." }); return true; }
+    const body = await readBody(req);
+    const data = body ? JSON.parse(body) : {};
+    const editableFields = ["name", "description", "phone", "whatsapp", "email", "schedule", "logoUrl", "coverPhotoUrl", "location", "socialLinks", "category", "plan", "status", "adminNote", "paymentNote"];
+    for (const field of editableFields) {
+      if (data[field] !== undefined) company[field] = data[field];
+    }
+    if (data.category && !CATEGORIES.includes(data.category)) company.category = "otra";
+    saveCompanies(companies);
+    logActivity({ actorType: "admin", action: "company.edited", meta: { id: company.id, name: company.name } });
+    sendJson(res, 200, adminCompanyView(company));
+    return true;
+  }
+
+  // PUT /api/admin/companies/:id/password
+  if (method === "PUT" && parts[0] === "api" && parts[1] === "admin" && parts[2] === "companies" && parts[3] && parts[4] === "password") {
+    if (!requireAdmin(req, res)) return true;
+    const company = findCompanyById(parts[3]);
+    if (!company) { sendJson(res, 404, { error: "No encontrado." }); return true; }
+    const body = await readBody(req);
+    const data = body ? JSON.parse(body) : {};
+    if (!data.password || String(data.password).length < 4) { sendJson(res, 400, { error: "La contraseña necesita al menos 4 caracteres." }); return true; }
+    const { salt, hash } = hashPassword(String(data.password));
+    company.passwordSalt = salt;
+    company.passwordHash = hash;
+    saveCompanies(companies);
+    logActivity({ actorType: "admin", action: "company.password_changed", meta: { id: company.id, name: company.name } });
+    sendJson(res, 200, { ok: true });
     return true;
   }
 

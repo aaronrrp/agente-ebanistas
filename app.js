@@ -671,7 +671,7 @@ document.querySelectorAll("[data-admin-tab]").forEach(btn => {
 });
 
 function statusBadgeHtml(status) {
-  const labels = { pending: "Pendiente", approved: "Aprobado", rejected: "Rechazado", suspended: "Suspendido", active: "Activo", removed: "Eliminado" };
+  const labels = { pending: "Pendiente", approved: "Aprobado", rejected: "Rechazado", suspended: "Suspendido", changes_requested: "Cambios solicitados", active: "Activo", removed: "Eliminado" };
   return `<span class="admin-status-badge ${status}">${labels[status] || status}</span>`;
 }
 
@@ -717,6 +717,9 @@ function adminEntityRowHtml(entity, kind) {
         ${entity.status !== "approved" ? `<button class="tiny-btn" type="button" data-admin-action="approve" data-kind="${kind}" data-id="${entity.id}">✓ Aprobar</button>` : ""}
         ${entity.status !== "rejected" ? `<button class="tiny-btn danger" type="button" data-admin-action="reject" data-kind="${kind}" data-id="${entity.id}">✕ Rechazar</button>` : ""}
         ${entity.status !== "suspended" ? `<button class="tiny-btn" type="button" data-admin-action="suspend" data-kind="${kind}" data-id="${entity.id}">⏸ Suspender</button>` : ""}
+        <button class="tiny-btn" type="button" data-admin-action="request-changes" data-kind="${kind}" data-id="${entity.id}">📝 Solicitar cambios</button>
+        <button class="tiny-btn" type="button" data-admin-edit="${entity.id}" data-kind="${kind}">✏️ Editar</button>
+        <button class="tiny-btn" type="button" data-admin-pwd="${entity.id}" data-kind="${kind}">🔑 Contraseña</button>
         ${entity.featured
           ? `<button class="tiny-btn" type="button" data-admin-action="unfeature" data-kind="${kind}" data-id="${entity.id}">☆ Quitar destacado</button>`
           : `<button class="tiny-btn highlight-btn" type="button" data-admin-action="feature" data-kind="${kind}" data-id="${entity.id}">★ Destacar</button>`}
@@ -734,6 +737,11 @@ async function runAdminEntityAction(kind, id, action) {
       body = { featuredUntil: d.toISOString().slice(0, 10) };
     }
   }
+  if (action === "request-changes") {
+    const note = prompt("Nota para el profesional/empresa (explica qué debe corregir):");
+    if (note === null) return;
+    body = { note };
+  }
   try {
     const res = await fetch(`/api/admin/${endpoint}/${id}/${action}`, { method: "POST", headers: adminAuthHeaderAdmin(), body: JSON.stringify(body) });
     if (!res.ok) { toast("No se pudo completar la acción.", "error"); return; }
@@ -748,6 +756,48 @@ async function runAdminEntityAction(kind, id, action) {
     toast("Sin conexión al servidor.", "error");
   }
 }
+
+async function runAdminEditEntity(kind, id) {
+  const endpoint = kind === "professional" ? "professionals" : "companies";
+  const res = await fetch(`/api/admin/${endpoint}`, { headers: adminAuthHeaderAdmin() });
+  if (!res.ok) return;
+  const list = await res.json();
+  const entity = list.find(x => x.id === id);
+  if (!entity) return;
+  const fields = kind === "professional"
+    ? ["name", "phone", "whatsapp", "email", "description", "specialty", "schedule"]
+    : ["name", "phone", "whatsapp", "email", "description", "schedule"];
+  const updates = {};
+  for (const f of fields) {
+    const val = prompt(`${f}:`, entity[f] || "");
+    if (val === null) return;
+    updates[f] = val;
+  }
+  const putRes = await fetch(`/api/admin/${endpoint}/${id}`, { method: "PUT", headers: adminAuthHeaderAdmin(), body: JSON.stringify(updates) });
+  if (putRes.ok) { toast("Guardado ✓"); if (kind === "professional") loadAdminProfessionalsTab(); else loadAdminCompaniesTab(); }
+  else toast("Error al guardar.", "error");
+}
+
+async function runAdminChangePassword(kind, id) {
+  const endpoint = kind === "professional" ? "professionals" : "companies";
+  const pwd = prompt("Nueva contraseña (mín. 4 caracteres):");
+  if (!pwd || pwd.length < 4) return;
+  const res = await fetch(`/api/admin/${endpoint}/${id}/password`, { method: "PUT", headers: adminAuthHeaderAdmin(), body: JSON.stringify({ password: pwd }) });
+  if (res.ok) toast("Contraseña actualizada ✓"); else toast("Error al cambiar contraseña.", "error");
+}
+
+document.getElementById("adm_professionalsList")?.addEventListener("click", (e) => {
+  const editBtn = e.target.closest("[data-admin-edit]");
+  if (editBtn) { runAdminEditEntity(editBtn.dataset.kind, editBtn.dataset.adminEdit); return; }
+  const pwdBtn = e.target.closest("[data-admin-pwd]");
+  if (pwdBtn) { runAdminChangePassword(pwdBtn.dataset.kind, pwdBtn.dataset.adminPwd); return; }
+});
+document.getElementById("adm_companiesList")?.addEventListener("click", (e) => {
+  const editBtn = e.target.closest("[data-admin-edit]");
+  if (editBtn) { runAdminEditEntity(editBtn.dataset.kind, editBtn.dataset.adminEdit); return; }
+  const pwdBtn = e.target.closest("[data-admin-pwd]");
+  if (pwdBtn) { runAdminChangePassword(pwdBtn.dataset.kind, pwdBtn.dataset.adminPwd); return; }
+});
 
 document.getElementById("adm_professionalsList")?.addEventListener("click", (e) => {
   const btn = e.target.closest("[data-admin-action]");

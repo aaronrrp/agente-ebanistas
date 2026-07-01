@@ -2017,6 +2017,7 @@ textarea {
 .admin-status-badge.pending { background: var(--warn-soft); color: var(--warn); }
 .admin-status-badge.approved, .admin-status-badge.active { background: var(--accent-soft); color: var(--accent-dark); }
 .admin-status-badge.rejected, .admin-status-badge.suspended, .admin-status-badge.removed { background: var(--danger-soft); color: var(--danger); }
+.admin-status-badge.changes_requested { background: #fef3c7; color: #b45309; }
 .admin-entity-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .admin-log-row { display: flex; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--line); font-size: .82rem; }
 .admin-log-row time { color: var(--muted); flex-shrink: 0; white-space: nowrap; }

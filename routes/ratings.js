@@ -15,6 +15,7 @@ const { getFreeUserSession } = require("./retazos.js");
 
 const RATINGS_FILE = path.join(__dirname, "..", "professional_ratings.json");
 const PROFESSIONALS_FILE = path.join(__dirname, "..", "professionals.json");
+const COMPANIES_FILE = path.join(__dirname, "..", "companies.json");
 
 function loadRatings() {
   try { return JSON.parse(fs.readFileSync(RATINGS_FILE, "utf-8")); }
@@ -38,6 +39,20 @@ function recalcProfessionalRatings(professionalId) {
   if (idx >= 0) {
     pros[idx].ratings = { avg: Math.round(avg * 10) / 10, count: visible.length };
     saveProfessionals(pros);
+  }
+}
+
+function loadCompanies() { try { return JSON.parse(fs.readFileSync(COMPANIES_FILE, "utf-8")); } catch { return []; } }
+function saveCompanies(list) { try { atomicWrite(COMPANIES_FILE, list); } catch (e) { console.error("[saveCompanies@ratings]", e.message); } }
+
+function recalcCompanyRatings(companyId) {
+  const visible = loadRatings().filter(r => r.companyId === companyId && !r.hidden);
+  const avg = visible.length ? visible.reduce((s, r) => s + r.stars, 0) / visible.length : 0;
+  const cos = loadCompanies();
+  const idx = cos.findIndex(c => c.id === companyId);
+  if (idx >= 0) {
+    cos[idx].ratings = { avg: Math.round(avg * 10) / 10, count: visible.length };
+    saveCompanies(cos);
   }
 }
 
@@ -149,6 +164,56 @@ async function handle(req, res, { method, p, parts }) {
     return true;
   }
 
+  // GET /api/companies/:id/ratings
+  if (method === "GET" && parts[0] === "api" && parts[1] === "companies" && parts[2] && parts[3] === "ratings" && !parts[4]) {
+    const list = loadRatings().filter(r => r.companyId === parts[2] && !r.hidden);
+    sendJson(res, 200, list.map(publicRating));
+    return true;
+  }
+
+  // POST /api/companies/:id/ratings
+  if (method === "POST" && parts[0] === "api" && parts[1] === "companies" && parts[2] && parts[3] === "ratings" && !parts[4]) {
+    const caller = getRatingCaller(req);
+    if (!caller) { sendJson(res, 401, { error: "Debes iniciar sesión para dejar una valoración." }); return true; }
+    const body = await readBody(req);
+    const data = body ? JSON.parse(body) : {};
+    const stars = Number(data.stars);
+    if (!stars || stars < 1 || stars > 5) { sendJson(res, 400, { error: "Valoración inválida (1–5 estrellas)." }); return true; }
+    const companyId = parts[2];
+    const ratings = loadRatings();
+    const key = callerKey(caller);
+    const existing = ratings.find(r => r.companyId === companyId && callerKey({ role: r.raterRole, id: r.raterId }) === key);
+    if (existing) {
+      existing.stars = stars;
+      existing.comment = String(data.comment || "").trim().slice(0, 1000);
+      if (Array.isArray(data.photoUrls)) existing.photoUrls = data.photoUrls.slice(0, 5);
+      existing.updatedAt = new Date().toISOString();
+      saveRatings(ratings);
+      recalcCompanyRatings(companyId);
+      sendJson(res, 200, publicRating(existing));
+    } else {
+      const rating = {
+        id: crypto.randomUUID(),
+        companyId,
+        raterRole: caller.role,
+        raterId: caller.id,
+        raterName: String(data.raterName || "").trim().slice(0, 80) || caller.role,
+        stars,
+        comment: String(data.comment || "").trim().slice(0, 1000),
+        photoUrls: Array.isArray(data.photoUrls) ? data.photoUrls.slice(0, 5) : [],
+        hidden: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      ratings.push(rating);
+      saveRatings(ratings);
+      recalcCompanyRatings(companyId);
+      logActivity({ actorType: caller.role, actorId: caller.id, actorLabel: caller.role, action: "company_rating.created", meta: { companyId, stars } });
+      sendJson(res, 201, publicRating(rating));
+    }
+    return true;
+  }
+
   // POST /api/admin/ratings/:id/hide
   if (method === "POST" && parts[0] === "api" && parts[1] === "admin" && parts[2] === "ratings" && parts[3] && parts[4] === "hide") {
     if (!requireAdmin(req, res)) return true;
@@ -157,7 +222,8 @@ async function handle(req, res, { method, p, parts }) {
     if (!r) { sendJson(res, 404, { error: "No encontrado." }); return true; }
     r.hidden = true;
     saveRatings(ratings);
-    recalcProfessionalRatings(r.professionalId);
+    if (r.professionalId) recalcProfessionalRatings(r.professionalId);
+    if (r.companyId) recalcCompanyRatings(r.companyId);
     logActivity({ actorType: "admin", actorId: "admin", actorLabel: "Admin", action: "rating.hidden", meta: { ratingId: r.id } });
     sendJson(res, 200, { ok: true });
     return true;
@@ -171,7 +237,8 @@ async function handle(req, res, { method, p, parts }) {
     if (!r) { sendJson(res, 404, { error: "No encontrado." }); return true; }
     r.hidden = false;
     saveRatings(ratings);
-    recalcProfessionalRatings(r.professionalId);
+    if (r.professionalId) recalcProfessionalRatings(r.professionalId);
+    if (r.companyId) recalcCompanyRatings(r.companyId);
     logActivity({ actorType: "admin", actorId: "admin", actorLabel: "Admin", action: "rating.shown", meta: { ratingId: r.id } });
     sendJson(res, 200, { ok: true });
     return true;

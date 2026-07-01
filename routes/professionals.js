@@ -132,6 +132,12 @@ async function handle(req, res, { method, p, parts }) {
       photoUrl: data.photoUrl || "",
       portfolioUrls: Array.isArray(data.portfolioUrls) ? data.portfolioUrls.slice(0, 20) : [],
       socialLinks: { facebook: data.socialLinks?.facebook || "", instagram: data.socialLinks?.instagram || "", tiktok: data.socialLinks?.tiktok || "", website: data.socialLinks?.website || "" },
+      coverPhotoUrl: data.coverPhotoUrl || "",
+      services: Array.isArray(data.services) ? data.services.slice(0, 20) : [],
+      certifications: Array.isArray(data.certifications) ? data.certifications.slice(0, 20) : [],
+      availability: ["available", "busy", "projects_only"].includes(data.availability) ? data.availability : "available",
+      videos: Array.isArray(data.videos) ? data.videos.slice(0, 5) : [],
+      adminNote: "",
       ratings: { avg: 0, count: 0 },
       status: "pending",
       featured: false,
@@ -296,20 +302,60 @@ async function handle(req, res, { method, p, parts }) {
     const prof = professionals.find(x => x.id === parts[3]);
     if (!prof) { sendJson(res, 404, { error: "No encontrado." }); return true; }
     const action = parts[4];
+    const body2 = ["feature", "request-changes"].includes(action) ? (await readBody(req)) : null;
+    const d2 = body2 ? JSON.parse(body2) : {};
     if (action === "approve") { prof.status = "approved"; logActivity({ actorType: "admin", action: "professional.approved", meta: { id: prof.id, name: prof.name } }); }
     else if (action === "reject") { prof.status = "rejected"; logActivity({ actorType: "admin", action: "professional.rejected", meta: { id: prof.id, name: prof.name } }); }
     else if (action === "suspend") { prof.status = "suspended"; logActivity({ actorType: "admin", action: "professional.suspended", meta: { id: prof.id, name: prof.name } }); }
+    else if (action === "request-changes") {
+      prof.status = "changes_requested";
+      prof.adminNote = String(d2.note || "").trim().slice(0, 1000);
+      logActivity({ actorType: "admin", action: "professional.changes_requested", meta: { id: prof.id, name: prof.name } });
+    }
     else if (action === "feature") {
-      const body = await readBody(req);
-      const data = body ? JSON.parse(body) : {};
       prof.featured = true;
-      prof.featuredUntil = data.featuredUntil || null;
+      prof.featuredUntil = d2.featuredUntil || null;
       logActivity({ actorType: "admin", action: "professional.featured", meta: { id: prof.id, name: prof.name } });
     }
     else if (action === "unfeature") { prof.featured = false; prof.featuredUntil = null; }
     else { sendJson(res, 400, { error: "Acción no reconocida." }); return true; }
     saveProfessionals(professionals);
     sendJson(res, 200, publicProfessional(prof));
+    return true;
+  }
+
+  // PUT /api/admin/professionals/:id — editar cualquier campo
+  if (method === "PUT" && parts[0] === "api" && parts[1] === "admin" && parts[2] === "professionals" && parts[3] && !parts[4]) {
+    if (!requireAdmin(req, res)) return true;
+    const prof = professionals.find(x => x.id === parts[3]);
+    if (!prof) { sendJson(res, 404, { error: "No encontrado." }); return true; }
+    const body = await readBody(req);
+    const data = body ? JSON.parse(body) : {};
+    const editableFields = ["name", "company", "description", "specialty", "experienceYears", "phone", "whatsapp", "email", "schedule", "photoUrl", "coverPhotoUrl", "services", "certifications", "availability", "videos", "location", "socialLinks", "category", "plan", "status", "adminNote"];
+    for (const field of editableFields) {
+      if (data[field] !== undefined) prof[field] = data[field];
+    }
+    if (data.category && !CATEGORIES.includes(data.category)) prof.category = "otra";
+    saveProfessionals(professionals);
+    logActivity({ actorType: "admin", action: "professional.edited", meta: { id: prof.id, name: prof.name } });
+    sendJson(res, 200, publicProfessional(prof));
+    return true;
+  }
+
+  // PUT /api/admin/professionals/:id/password — cambiar contraseña
+  if (method === "PUT" && parts[0] === "api" && parts[1] === "admin" && parts[2] === "professionals" && parts[3] && parts[4] === "password") {
+    if (!requireAdmin(req, res)) return true;
+    const prof = professionals.find(x => x.id === parts[3]);
+    if (!prof) { sendJson(res, 404, { error: "No encontrado." }); return true; }
+    const body = await readBody(req);
+    const data = body ? JSON.parse(body) : {};
+    if (!data.password || String(data.password).length < 4) { sendJson(res, 400, { error: "La contraseña necesita al menos 4 caracteres." }); return true; }
+    const { salt, hash } = hashPassword(String(data.password));
+    prof.passwordSalt = salt;
+    prof.passwordHash = hash;
+    saveProfessionals(professionals);
+    logActivity({ actorType: "admin", action: "professional.password_changed", meta: { id: prof.id, name: prof.name } });
+    sendJson(res, 200, { ok: true });
     return true;
   }
 
