@@ -947,6 +947,7 @@
           <button class="admin-subtab" data-admin-tab="ebanistas" type="button">Ebanistas</button>
           <button class="admin-subtab" data-admin-tab="valoraciones" type="button">Valoraciones</button>
           <button class="admin-subtab" data-admin-tab="catalogo" type="button">Catálogo</button>
+          <button class="admin-subtab" data-admin-tab="ubicaciones" type="button">Ubicaciones</button>
         </div>
 
         <!-- ── Dashboard ─────────────────────────────────────────────────── -->
@@ -1248,6 +1249,22 @@
         </div>
 
         <!-- ── Valoraciones (moderación de reseñas de profesionales) ─────── -->
+        <!-- ── Ubicaciones: País → Provincia → Ciudad administrables ──────── -->
+        <div class="admin-subpanel hidden" data-admin-panel="ubicaciones">
+          <section class="panel">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:8px">
+              <h3 style="margin:0">Ubicaciones del directorio</h3>
+              <button class="secondary-btn" id="adm_refreshLocationsBtn" type="button">🔄 Actualizar</button>
+            </div>
+            <p class="login-hint" style="margin-bottom:14px">Las provincias y ciudades que agregues aquí aparecen al instante en los filtros y formularios de registro — sin tocar código.</p>
+            <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+              <input id="adm_newProvinceName" type="text" placeholder="Nueva provincia…" style="flex:1;min-width:200px;padding:8px 12px;border:1px solid var(--line);border-radius:8px">
+              <button class="primary-btn" id="adm_addProvinceBtn" type="button">+ Agregar provincia</button>
+            </div>
+            <div id="adm_locationsTree"><p class="login-hint">Cargando…</p></div>
+          </section>
+        </div>
+
         <div class="admin-subpanel hidden" data-admin-panel="valoraciones">
           <section class="panel">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">

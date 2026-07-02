@@ -658,7 +658,8 @@ const ADMIN_TAB_LOADERS = {
   seguridad: loadAdminRolesView,
   ebanistas: renderAdmin,
   valoraciones: loadAdminRatingsTab,
-  catalogo: loadAdminCatalogTab
+  catalogo: loadAdminCatalogTab,
+  ubicaciones: loadAdminLocationsTab
 };
 
 function showAdminTab(tabId) {
@@ -8658,6 +8659,7 @@ async function loadPublicDirectory() {
         <div class="pro-card-actions">
           ${waPhone ? `<button class="pca-btn pca-wa" type="button" data-contact-id="${p.id}" data-contact-phone="${escapeHtml(p.whatsapp || p.phone || "")}">WhatsApp</button>` : ""}
           ${p.phone ? `<a class="pca-btn pca-call" href="tel:${escapeHtml(p.phone.replace(/[^0-9+]/g,""))}">Llamar</a>` : ""}
+          ${waPhone ? `<button class="pca-btn pca-quote" type="button" data-quote-id="${p.id}" data-contact-phone="${escapeHtml(p.whatsapp || p.phone || "")}" data-quote-name="${escapeHtml(p.name)}">Cotizar</button>` : ""}
           <button class="pca-btn pca-view" type="button" data-view-profile="${p.id}">Ver perfil</button>
           <button class="pca-btn pca-share" type="button" data-share-type="p" data-share-slug="${escapeHtml(p.slug || p.id)}" data-share-name="${escapeHtml(p.name)}">Compartir</button>
         </div>
@@ -8685,6 +8687,15 @@ document.getElementById("publicDirectoryGrid")?.addEventListener("click", (e) =>
   fetch(`/api/professionals/${btn.dataset.contactId}/contact-click`, { method: "POST" }).catch(() => {});
   const phone = btn.dataset.contactPhone;
   if (phone) window.open(`https://wa.me/${phone.replace(/[^0-9]/g, "")}`, "_blank");
+});
+document.getElementById("publicDirectoryGrid")?.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-quote-id]");
+  if (!btn) return;
+  fetch(`/api/professionals/${btn.dataset.quoteId}/contact-click`, { method: "POST" }).catch(() => {});
+  const phone = btn.dataset.contactPhone;
+  if (!phone) return;
+  const msg = `Hola ${btn.dataset.quoteName}, vi tu perfil en PiLLA y me gustaría solicitar una cotización.`;
+  window.open(`https://wa.me/${phone.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(msg)}`, "_blank");
 });
 document.getElementById("publicDirectoryGrid")?.addEventListener("click", (e) => {
   const btn = e.target.closest("[data-view-profile]");
@@ -11979,4 +11990,124 @@ document.getElementById("proChangePasswordBtn")?.addEventListener("click", async
     document.getElementById("proNewPassword2").value = "";
     toast("Contraseña actualizada ✓");
   } catch { if (errEl) { errEl.textContent = "Sin conexión al servidor."; errEl.classList.remove("hidden"); } }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ADMIN — Ubicaciones (v50 — País → Provincia → Ciudad sin tocar código)
+// ═════════════════════════════════════════════════════════════════════════════
+
+// Tras cualquier cambio, los selects del directorio público deben refrescarse:
+// se invalida la caché y el próximo initLocationSelects()/fill* refetchea.
+function _invalidateLocationsCache() {
+  _locData = null;
+  _locSelectsReady = false;
+}
+
+async function loadAdminLocationsTab() {
+  const el = document.getElementById("adm_locationsTree");
+  if (!el) return;
+  el.innerHTML = '<p class="login-hint">Cargando…</p>';
+  try {
+    const res = await fetch("/api/locations");
+    const data = res.ok ? await res.json() : { countries: [] };
+    const country = data.countries[0];
+    if (!country) { el.innerHTML = '<p class="login-hint">No hay países configurados.</p>'; return; }
+    el.dataset.countryId = country.id;
+    if (!country.provinces?.length) {
+      el.innerHTML = '<p class="login-hint">No hay provincias todavía — agrega la primera arriba.</p>';
+      return;
+    }
+    el.innerHTML = country.provinces.map(prov => `
+      <div class="admin-entity-row" style="flex-direction:column;align-items:stretch" data-province-id="${prov.id}">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <strong style="flex:1">📍 ${escapeHtml(prov.name)} <span class="login-hint" style="font-weight:400">(${(prov.cities || []).length} ciudad${(prov.cities || []).length !== 1 ? "es" : ""})</span></strong>
+          <button class="tiny-btn" type="button" data-loc-action="rename-province" data-id="${prov.id}" data-name="${escapeHtml(prov.name)}">✏️ Renombrar</button>
+          <button class="tiny-btn danger" type="button" data-loc-action="delete-province" data-id="${prov.id}" data-count="${(prov.cities || []).length}">🗑️</button>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
+          ${(prov.cities || []).map(city => `
+            <span style="display:inline-flex;align-items:center;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:3px 6px 3px 12px;font-size:.82rem">
+              ${escapeHtml(city.name)}
+              <button type="button" data-loc-action="rename-city" data-id="${city.id}" data-name="${escapeHtml(city.name)}" style="border:none;background:none;cursor:pointer;padding:2px" title="Renombrar">✏️</button>
+              <button type="button" data-loc-action="delete-city" data-id="${city.id}" data-name="${escapeHtml(city.name)}" style="border:none;background:none;cursor:pointer;padding:2px;color:var(--danger)" title="Eliminar">✕</button>
+            </span>`).join("")}
+          <span style="display:inline-flex;gap:4px">
+            <input type="text" placeholder="Nueva ciudad…" data-new-city-input="${prov.id}" style="width:140px;padding:3px 10px;border:1px dashed var(--line);border-radius:999px;font-size:.82rem">
+            <button class="tiny-btn" type="button" data-loc-action="add-city" data-id="${prov.id}">+</button>
+          </span>
+        </div>
+      </div>`).join("");
+  } catch {
+    el.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>';
+  }
+}
+
+async function _locAdminRequest(method, path, body) {
+  try {
+    const res = await fetch(path, { method, headers: adminAuthHeaderAdmin(), body: body ? JSON.stringify(body) : undefined });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { toast(data.error || "No se pudo completar la acción.", "error"); return false; }
+    _invalidateLocationsCache();
+    loadAdminLocationsTab();
+    return true;
+  } catch { toast("Sin conexión al servidor.", "error"); return false; }
+}
+
+document.getElementById("adm_addProvinceBtn")?.addEventListener("click", async () => {
+  const input = document.getElementById("adm_newProvinceName");
+  const name = input?.value.trim();
+  if (!name) { toast("Escribe el nombre de la provincia.", "error"); return; }
+  const countryId = document.getElementById("adm_locationsTree")?.dataset.countryId || "PA";
+  if (await _locAdminRequest("POST", "/api/admin/locations/provinces", { countryId, name })) {
+    input.value = "";
+    toast("Provincia agregada ✓");
+  }
+});
+
+document.getElementById("adm_newProvinceName")?.addEventListener("keydown", e => {
+  if (e.key === "Enter") document.getElementById("adm_addProvinceBtn").click();
+});
+
+document.getElementById("adm_refreshLocationsBtn")?.addEventListener("click", loadAdminLocationsTab);
+
+document.getElementById("adm_locationsTree")?.addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-loc-action]");
+  if (!btn) return;
+  const action = btn.dataset.locAction;
+  const id = btn.dataset.id;
+
+  if (action === "add-city") {
+    const input = document.querySelector(`[data-new-city-input="${id}"]`);
+    const name = input?.value.trim();
+    if (!name) { toast("Escribe el nombre de la ciudad.", "error"); return; }
+    if (await _locAdminRequest("POST", "/api/admin/locations/cities", { provinceId: id, name })) toast("Ciudad agregada ✓");
+  }
+  else if (action === "rename-province") {
+    const name = prompt("Nuevo nombre de la provincia:", btn.dataset.name);
+    if (!name?.trim() || name.trim() === btn.dataset.name) return;
+    if (await _locAdminRequest("PUT", `/api/admin/locations/provinces/${id}`, { name: name.trim() })) toast("Provincia renombrada ✓");
+  }
+  else if (action === "rename-city") {
+    const name = prompt("Nuevo nombre de la ciudad:", btn.dataset.name);
+    if (!name?.trim() || name.trim() === btn.dataset.name) return;
+    if (await _locAdminRequest("PUT", `/api/admin/locations/cities/${id}`, { name: name.trim() })) toast("Ciudad renombrada ✓");
+  }
+  else if (action === "delete-province") {
+    if (Number(btn.dataset.count) > 0) { toast("La provincia tiene ciudades — elimínalas primero.", "error"); return; }
+    if (!confirm("¿Eliminar esta provincia?")) return;
+    if (await _locAdminRequest("DELETE", `/api/admin/locations/provinces/${id}`)) toast("Provincia eliminada ✓");
+  }
+  else if (action === "delete-city") {
+    if (!confirm(`¿Eliminar la ciudad "${btn.dataset.name}"?`)) return;
+    if (await _locAdminRequest("DELETE", `/api/admin/locations/cities/${id}`)) toast("Ciudad eliminada ✓");
+  }
+});
+
+// Enter en el input de nueva ciudad dispara el botón + de su provincia
+document.getElementById("adm_locationsTree")?.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  const input = e.target.closest("[data-new-city-input]");
+  if (!input) return;
+  e.preventDefault();
+  input.parentElement.querySelector('[data-loc-action="add-city"]')?.click();
 });

@@ -1982,6 +1982,7 @@ textarea {
 .pca-call { background: var(--accent-soft); color: var(--accent); }
 .pca-view { background: var(--surface-soft); color: var(--text); border: 1px solid var(--line); }
 .pca-share { background: var(--surface-soft); color: var(--muted); border: 1px solid var(--line); }
+.pca-quote { background: var(--gold, #F5B400); color: #1a1346; }
 
 @media (max-width: 720px) {
   .public-topbar { padding: 12px 16px; }
