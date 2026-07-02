@@ -1804,8 +1804,9 @@ function handleTenantAccess(req, res, id) {
 
 async function serveStatic(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
-  // Friendly profile URLs — serve index.html so JS can detect the slug and open the card
-  const isProfileUrl = /^\/(p|c)\/[^/]+\/?$/.test(url.pathname);
+  // Friendly profile URLs — serve index.html so JS can detect the slug and open the card.
+  // El slug nunca lleva punto: así /c/app.js (asset con ruta relativa) NO se reescribe.
+  const isProfileUrl = /^\/(p|c)\/[^/.]+\/?$/.test(url.pathname);
   const pathname = (url.pathname === "/" || isProfileUrl) ? "/index.html" : url.pathname;
   const filePath = path.normalize(path.join(rootDir, pathname));
   if (!filePath.startsWith(rootDir)) { res.writeHead(403); res.end("Forbidden"); return; }

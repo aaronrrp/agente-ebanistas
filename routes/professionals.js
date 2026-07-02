@@ -28,6 +28,15 @@ function saveProfessionals(list) {
 }
 let professionals = loadProfessionals();
 
+// Migración v50: los perfiles creados antes del sistema de slugs reciben uno al arrancar
+(function backfillSlugs() {
+  let changed = false;
+  for (const p of professionals) {
+    if (!p.slug && p.id) { p.slug = makeSlug(p.name, p.id); changed = true; }
+  }
+  if (changed) saveProfessionals(professionals);
+})();
+
 function publicProfessional(p) {
   const { passwordHash, passwordSalt, ...rest } = p;
   return rest;

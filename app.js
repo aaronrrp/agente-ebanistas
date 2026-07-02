@@ -9824,8 +9824,8 @@ async function tryAutoLogin() {
         if (_ppRes.ok) openProProfileModal((await _ppRes.json()).id);
       } catch {}
     } else {
-      document.querySelectorAll("[data-public-tab]").forEach(b => b.classList.remove("active"));
-      document.querySelector('[data-public-tab="empresas"]')?.classList.add("active");
+      document.querySelectorAll("[data-public-nav]").forEach(b => b.classList.remove("active"));
+      document.querySelector('[data-public-nav="empresas"]')?.classList.add("active");
       hideAllPublicSubviews();
       document.getElementById("publicCompaniesView")?.classList.remove("hidden");
       loadPublicCompanies();

@@ -25,6 +25,15 @@ function saveCompanies(list) {
 }
 let companies = loadCompanies();
 
+// Migración v50: las empresas creadas antes del sistema de slugs reciben uno al arrancar
+(function backfillSlugs() {
+  let changed = false;
+  for (const c of companies) {
+    if (!c.slug && c.id) { c.slug = makeSlug(c.name, c.id); changed = true; }
+  }
+  if (changed) saveCompanies(companies);
+})();
+
 function publicCompany(c) {
   const { passwordHash, passwordSalt, paymentNote, ...rest } = c; // paymentNote es solo para el admin, nunca sale al público ni a la empresa misma
   return rest;
