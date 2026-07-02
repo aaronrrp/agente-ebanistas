@@ -160,4 +160,4 @@ async function handle(req, res, { method, p, parts }) {
   return false;
 }
 
-module.exports = { handle };
+module.exports = { handle, reload: () => { locData = loadLocations(); } };

@@ -1846,6 +1846,7 @@ const BACKUP_DATA_FILES = {
   company_products:      path.join(__dirname, "company_products.json"),
   plans:                 path.join(__dirname, "plans.json"),
   roles:                 path.join(__dirname, "roles.json"),
+  locations:             path.join(__dirname, "locations.json"),
 };
 
 function createBackup() {
