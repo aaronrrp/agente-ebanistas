@@ -206,7 +206,7 @@ async function handle(req, res, { method, p, parts }) {
     const data = body ? JSON.parse(body) : {};
     // Campos editables por el propio profesional -- status/featured/plan/accessCode
     // quedan fuera a propósito, esos solo los cambia el admin (Fase 5).
-    for (const field of ["company", "description", "specialty", "experienceYears", "phone", "whatsapp", "email", "schedule", "photoUrl", "portfolioUrls", "location", "socialLinks"]) {
+    for (const field of ["company", "description", "specialty", "experienceYears", "phone", "whatsapp", "email", "schedule", "photoUrl", "portfolioUrls", "location", "socialLinks", "coverPhotoUrl", "services", "certifications", "availability", "videos"]) {
       if (data[field] !== undefined) prof[field] = data[field];
     }
     if (CATEGORIES.includes(data.category)) prof.category = data.category;

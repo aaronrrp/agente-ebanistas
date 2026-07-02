@@ -8438,6 +8438,7 @@ function showApp() {
   document.getElementById("loginScreen").style.display = "none";
   document.getElementById("publicShell").style.display = "none";
   document.getElementById("companyShell").style.display = "none";
+  document.getElementById("professionalShell").style.display = "none";
   document.getElementById("appShell").style.display = "";
   document.getElementById("logoutBtn").classList.toggle("hidden", AUTH.mode !== "admin");
   render();
@@ -8450,6 +8451,7 @@ function showLogin() {
   document.getElementById("appShell").style.display = "none";
   document.getElementById("publicShell").style.display = "none";
   document.getElementById("companyShell").style.display = "none";
+  document.getElementById("professionalShell").style.display = "none";
 }
 
 // ── Directorio Profesional (público, sin login) ─────────────────────────────
@@ -8556,6 +8558,7 @@ function showPublicDirectorio() {
   document.getElementById("loginScreen").style.display = "none";
   document.getElementById("appShell").style.display = "none";
   document.getElementById("companyShell").style.display = "none";
+  document.getElementById("professionalShell").style.display = "none";
   document.getElementById("publicShell").style.display = "";
   const catSel = document.getElementById("pf_filterCategory");
   if (catSel && catSel.options.length <= 1) {
@@ -9236,6 +9239,7 @@ document.querySelectorAll("[data-login-tab]").forEach(btn => {
     btn.classList.add("active");
     const tab = btn.dataset.loginTab;
     document.getElementById("loginCodePanel").classList.toggle("hidden", tab !== "code");
+    document.getElementById("loginProfessionalPanel")?.classList.toggle("hidden", tab !== "professional");
     document.getElementById("loginCompanyPanel").classList.toggle("hidden", tab !== "company");
     document.getElementById("loginSellerPanel").classList.toggle("hidden", tab !== "seller");
     document.getElementById("loginAdminPanel").classList.toggle("hidden", tab !== "admin");
@@ -9777,6 +9781,22 @@ async function tryAutoLogin() {
       } catch {}
     }
     sessionStorage.removeItem("coToken");
+    sessionStorage.removeItem("ebAuthMode");
+  }
+
+  if (savedMode === "professional") {
+    const savedProToken = sessionStorage.getItem("proToken");
+    if (savedProToken && window.location.protocol !== "file:") {
+      try {
+        const res = await fetch("/api/auth/professional/check", { headers: { Authorization: `Bearer ${savedProToken}` } });
+        const data = res.ok ? await res.json() : null;
+        if (data?.valid) {
+          const meRes = await fetch("/api/professionals/me", { headers: { Authorization: `Bearer ${savedProToken}` } });
+          if (meRes.ok) { _loginAsProfessional(await meRes.json(), savedProToken); return; }
+        }
+      } catch {}
+    }
+    sessionStorage.removeItem("proToken");
     sessionStorage.removeItem("ebAuthMode");
   }
 
@@ -10612,6 +10632,7 @@ function showCompanyShell() {
   document.getElementById("loginScreen").style.display = "none";
   document.getElementById("appShell").style.display = "none";
   document.getElementById("publicShell").style.display = "none";
+  document.getElementById("professionalShell").style.display = "none";
   document.getElementById("companyShell").style.display = "";
 }
 
@@ -11540,3 +11561,422 @@ function renderCoConfiguracion() {
     } catch { errEl.textContent = "Sin conexiÃ³n al servidor."; errEl.classList.remove("hidden"); }
   });
 }
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PANEL DE PROFESIONAL  (v50 Fase E — mismo patrón que el Portal de Empresa)
+// ═════════════════════════════════════════════════════════════════════════════
+
+AUTH.proToken = null;
+AUTH.professionalId = null;
+AUTH.professionalData = null;
+
+function showProfessionalShell() {
+  document.getElementById("appLoading")?.remove();
+  document.getElementById("loginScreen").style.display = "none";
+  document.getElementById("appShell").style.display = "none";
+  document.getElementById("publicShell").style.display = "none";
+  document.getElementById("companyShell").style.display = "none";
+  document.getElementById("professionalShell").style.display = "";
+}
+
+function _loginAsProfessional(pro, token) {
+  AUTH.mode = "professional";
+  AUTH.proToken = token;
+  AUTH.professionalId = pro.id;
+  AUTH.professionalData = pro;
+  sessionStorage.setItem("ebAuthMode", "professional");
+  sessionStorage.setItem("proToken", token);
+  const nameEl = document.getElementById("pro_sidebarName");
+  if (nameEl) nameEl.textContent = pro.name || "Mi Perfil";
+  const photoEl = document.getElementById("pro_sidebarPhoto");
+  if (photoEl) {
+    photoEl.innerHTML = pro.photoUrl
+      ? `<img src="${escapeHtml(pro.photoUrl)}" alt="" style="width:36px;height:36px;border-radius:8px;object-fit:cover">`
+      : "👷";
+  }
+  const banner = document.getElementById("pro_adminNoteBanner");
+  if (banner) {
+    const show = pro.status === "changes_requested" && pro.adminNote;
+    banner.classList.toggle("hidden", !show);
+    if (show) document.getElementById("pro_adminNoteText").textContent = pro.adminNote;
+  }
+  showProfessionalShell();
+  proShowView("proMiPerfil");
+}
+
+const PRO_VIEW_TITLES = {
+  proMiPerfil: "Mi Perfil", proPortfolio: "Portfolio",
+  proEstadisticas: "Estadísticas", proResenas: "Reseñas", proPassword: "Contraseña"
+};
+
+function proShowView(viewId) {
+  document.querySelectorAll("#professionalShell .co-view").forEach(v => v.classList.toggle("hidden", v.id !== viewId));
+  document.querySelectorAll("#professionalShell .co-nav-item").forEach(b => {
+    b.classList.toggle("active", b.dataset.proView === viewId);
+  });
+  const titleEl = document.getElementById("pro_topbarTitle");
+  if (titleEl) titleEl.textContent = PRO_VIEW_TITLES[viewId] || viewId;
+  document.getElementById("professionalShell")?.classList.remove("co-open");
+
+  if (viewId === "proMiPerfil") renderProMiPerfil();
+  else if (viewId === "proPortfolio") renderProPortfolio();
+  else if (viewId === "proEstadisticas") renderProEstadisticas();
+  else if (viewId === "proResenas") renderProResenas();
+}
+
+document.querySelectorAll(".co-nav-item[data-pro-view]").forEach(btn => {
+  btn.addEventListener("click", () => proShowView(btn.dataset.proView));
+});
+
+document.getElementById("proMenuBtn")?.addEventListener("click", () => {
+  document.getElementById("professionalShell")?.classList.toggle("co-open");
+});
+
+function proAuthHeader() {
+  return { Authorization: `Bearer ${AUTH.proToken || ""}`, "Content-Type": "application/json" };
+}
+
+async function proLogout() {
+  if (AUTH.proToken) {
+    try { await fetch("/api/auth/professional/logout", { method: "POST", headers: proAuthHeader() }); } catch {}
+  }
+  AUTH.mode = null; AUTH.proToken = null; AUTH.professionalId = null; AUTH.professionalData = null;
+  sessionStorage.removeItem("ebAuthMode");
+  sessionStorage.removeItem("proToken");
+  showPublicDirectorio();
+}
+document.getElementById("proLogoutBtn")?.addEventListener("click", proLogout);
+
+// ── Login con código + contraseña (profesional) ──────────────────────────────
+document.getElementById("loginProBtn")?.addEventListener("click", async () => {
+  const errEl = document.getElementById("loginProError");
+  errEl?.classList.add("hidden");
+  const code = document.getElementById("loginProCode").value.trim();
+  const password = document.getElementById("loginProPassword").value;
+  if (!code || !password) {
+    if (errEl) { errEl.textContent = "Ingresa tu código y contraseña."; errEl.classList.remove("hidden"); }
+    return;
+  }
+  try {
+    const res = await fetch("/api/auth/professional", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, password })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      if (errEl) { errEl.textContent = data.error || "No se pudo iniciar sesión."; errEl.classList.remove("hidden"); }
+      return;
+    }
+    _loginAsProfessional(data.professional, data.token);
+  } catch {
+    if (errEl) { errEl.textContent = "Sin conexión al servidor."; errEl.classList.remove("hidden"); }
+  }
+});
+document.getElementById("loginProPassword")?.addEventListener("keydown", e => {
+  if (e.key === "Enter") document.getElementById("loginProBtn").click();
+});
+
+// ── Vista: Mi Perfil ─────────────────────────────────────────────────────────
+const PRO_AVAILABILITY_OPTIONS = [
+  { value: "available", label: "Disponible" },
+  { value: "busy", label: "Ocupado" },
+  { value: "projects_only", label: "Solo proyectos grandes" }
+];
+
+function renderProMiPerfil() {
+  const el = document.getElementById("proMiPerfilContent");
+  const p = AUTH.professionalData;
+  if (!el || !p) return;
+  el.innerHTML = `
+    <div class="co-section-card">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap">
+        <div id="proPf_photoPreview" style="width:84px;height:84px;border-radius:12px;overflow:hidden;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;font-size:2rem;flex-shrink:0">
+          ${p.photoUrl ? `<img src="${escapeHtml(p.photoUrl)}" alt="" style="width:100%;height:100%;object-fit:cover">` : "👷"}
+        </div>
+        <div>
+          <strong style="font-size:1.05rem">${escapeHtml(p.name)}</strong>
+          <p class="login-hint" style="margin:2px 0 8px">El nombre solo lo puede cambiar el administrador.</p>
+          <label class="tiny-btn" style="cursor:pointer;display:inline-block">📷 Cambiar foto
+            <input id="proPf_photoFile" type="file" accept="image/*" style="display:none">
+          </label>
+        </div>
+      </div>
+      <div class="form-grid">
+        <label>Categoría
+          <select id="proPf_category">${PROFESSIONAL_CATEGORIES.map(c => `<option value="${c.value}"${c.value === p.category ? " selected" : ""}>${c.label}</option>`).join("")}</select>
+        </label>
+        <label>Empresa (opcional)
+          <input id="proPf_company" type="text" value="${escapeHtml(p.company || "")}">
+        </label>
+        <label>Especialidad
+          <input id="proPf_specialty" type="text" value="${escapeHtml(p.specialty || "")}" placeholder="Ej: cocinas, closets">
+        </label>
+        <label>Años de experiencia
+          <input id="proPf_experience" type="number" min="0" value="${Number(p.experienceYears) || 0}">
+        </label>
+        <label>Teléfono
+          <input id="proPf_phone" type="text" value="${escapeHtml(p.phone || "")}">
+        </label>
+        <label>WhatsApp
+          <input id="proPf_whatsapp" type="text" value="${escapeHtml(p.whatsapp || "")}">
+        </label>
+        <label>Correo
+          <input id="proPf_email" type="email" value="${escapeHtml(p.email || "")}">
+        </label>
+        <label>Disponibilidad
+          <select id="proPf_availability">${PRO_AVAILABILITY_OPTIONS.map(o => `<option value="${o.value}"${o.value === (p.availability || "available") ? " selected" : ""}>${o.label}</option>`).join("")}</select>
+        </label>
+        <label>Provincia
+          <select id="proPf_province"><option value="">Seleccionar…</option></select>
+        </label>
+        <label>Ciudad
+          <select id="proPf_city"><option value="">Seleccionar…</option></select>
+        </label>
+        <label class="span-2">Descripción
+          <textarea id="proPf_description" rows="3">${escapeHtml(p.description || "")}</textarea>
+        </label>
+        <label class="span-2">Servicios (separados por coma)
+          <input id="proPf_services" type="text" value="${escapeHtml((p.services || []).join(", "))}" placeholder="Ej: Instalación de cocinas, Reparación de muebles">
+        </label>
+        <label class="span-2">Horario
+          <input id="proPf_schedule" type="text" value="${escapeHtml(p.schedule || "")}" placeholder="Ej: Lun-Vie 8am-6pm">
+        </label>
+        <label>Facebook
+          <input id="proPf_facebook" type="url" value="${escapeHtml(p.socialLinks?.facebook || "")}">
+        </label>
+        <label>Instagram
+          <input id="proPf_instagram" type="url" value="${escapeHtml(p.socialLinks?.instagram || "")}">
+        </label>
+        <label>TikTok
+          <input id="proPf_tiktok" type="url" value="${escapeHtml(p.socialLinks?.tiktok || "")}">
+        </label>
+        <label>Sitio web
+          <input id="proPf_website" type="url" value="${escapeHtml(p.socialLinks?.website || "")}">
+        </label>
+      </div>
+      <p id="proPf_error" class="login-error hidden"></p>
+      <p id="proPf_ok" class="hidden" style="color:#16a34a;margin-top:8px">Cambios guardados ✓</p>
+    </div>`;
+
+  // Ubicación en cascada — reutiliza los helpers del directorio público
+  (async () => {
+    const provSel = document.getElementById("proPf_province");
+    const citySel = document.getElementById("proPf_city");
+    if (!provSel || !citySel) return;
+    await fillProvinceSelect(provSel, false, p.location?.province || "");
+    const provId = provSel.selectedOptions[0]?.dataset?.id || null;
+    await fillCitySelect(citySel, provId, false, p.location?.city || "");
+    provSel.addEventListener("change", () =>
+      fillCitySelect(citySel, provSel.selectedOptions[0]?.dataset?.id || null, false));
+  })();
+
+  // Foto de perfil — sube a Cloudinary via /api/upload-image
+  document.getElementById("proPf_photoFile")?.addEventListener("change", (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 8_000_000) { toast("La foto debe ser menor a 8 MB.", "error"); e.target.value = ""; return; }
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      toast("Subiendo foto…");
+      try {
+        const res = await fetch("/api/upload-image", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageData: ev.target.result, folder: "professionals" })
+        });
+        const data = await res.json();
+        if (!res.ok) { toast(data.error || "No se pudo subir la foto.", "error"); return; }
+        const saveRes = await fetch("/api/professionals/me", { method: "PUT", headers: proAuthHeader(), body: JSON.stringify({ photoUrl: data.url }) });
+        if (saveRes.ok) {
+          AUTH.professionalData = await saveRes.json();
+          document.getElementById("proPf_photoPreview").innerHTML = `<img src="${escapeHtml(data.url)}" alt="" style="width:100%;height:100%;object-fit:cover">`;
+          const photoEl = document.getElementById("pro_sidebarPhoto");
+          if (photoEl) photoEl.innerHTML = `<img src="${escapeHtml(data.url)}" alt="" style="width:36px;height:36px;border-radius:8px;object-fit:cover">`;
+          toast("Foto actualizada ✓");
+        }
+      } catch { toast("Sin conexión al servidor.", "error"); }
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+document.getElementById("proSavePerfilBtn")?.addEventListener("click", async () => {
+  const errEl = document.getElementById("proPf_error");
+  const okEl = document.getElementById("proPf_ok");
+  errEl?.classList.add("hidden"); okEl?.classList.add("hidden");
+  const payload = {
+    category: document.getElementById("proPf_category")?.value,
+    company: document.getElementById("proPf_company")?.value.trim() || "",
+    specialty: document.getElementById("proPf_specialty")?.value.trim() || "",
+    experienceYears: Number(document.getElementById("proPf_experience")?.value) || 0,
+    phone: document.getElementById("proPf_phone")?.value.trim() || "",
+    whatsapp: document.getElementById("proPf_whatsapp")?.value.trim() || "",
+    email: document.getElementById("proPf_email")?.value.trim() || "",
+    availability: document.getElementById("proPf_availability")?.value || "available",
+    description: document.getElementById("proPf_description")?.value.trim() || "",
+    services: (document.getElementById("proPf_services")?.value || "").split(",").map(s => s.trim()).filter(Boolean).slice(0, 20),
+    schedule: document.getElementById("proPf_schedule")?.value.trim() || "",
+    location: {
+      province: document.getElementById("proPf_province")?.value || "",
+      city: document.getElementById("proPf_city")?.value || "",
+      address: AUTH.professionalData?.location?.address || ""
+    },
+    socialLinks: {
+      facebook: document.getElementById("proPf_facebook")?.value.trim() || "",
+      instagram: document.getElementById("proPf_instagram")?.value.trim() || "",
+      tiktok: document.getElementById("proPf_tiktok")?.value.trim() || "",
+      website: document.getElementById("proPf_website")?.value.trim() || ""
+    }
+  };
+  try {
+    const res = await fetch("/api/professionals/me", { method: "PUT", headers: proAuthHeader(), body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (!res.ok) { if (errEl) { errEl.textContent = data.error || "No se pudo guardar."; errEl.classList.remove("hidden"); } return; }
+    AUTH.professionalData = data;
+    okEl?.classList.remove("hidden");
+    toast("Perfil actualizado ✓");
+  } catch { if (errEl) { errEl.textContent = "Sin conexión al servidor."; errEl.classList.remove("hidden"); } }
+});
+
+// ── Vista: Portfolio ─────────────────────────────────────────────────────────
+async function _proSavePortfolio(urls) {
+  const res = await fetch("/api/professionals/me", { method: "PUT", headers: proAuthHeader(), body: JSON.stringify({ portfolioUrls: urls.slice(0, 20) }) });
+  if (res.ok) { AUTH.professionalData = await res.json(); renderProPortfolio(); }
+  else toast("No se pudo guardar el portfolio.", "error");
+}
+
+function renderProPortfolio() {
+  const el = document.getElementById("proPortfolioContent");
+  const p = AUTH.professionalData;
+  if (!el || !p) return;
+  const urls = p.portfolioUrls || [];
+  el.innerHTML = `
+    <div class="co-section-card">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+        <label class="primary-btn" style="cursor:pointer;margin:0">📷 Subir foto
+          <input id="proPort_file" type="file" accept="image/*" style="display:none">
+        </label>
+        <input id="proPort_url" type="url" placeholder="…o pega un link a la foto" style="flex:1;min-width:220px;padding:8px 12px;border:1px solid var(--line);border-radius:8px">
+        <button id="proPort_addUrlBtn" class="secondary-btn" type="button">+ Agregar</button>
+      </div>
+      ${urls.length
+        ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px">
+            ${urls.map((u, i) => `
+              <div style="position:relative;border-radius:10px;overflow:hidden;border:1px solid var(--line)">
+                <img src="${escapeHtml(u)}" alt="" style="width:100%;height:120px;object-fit:cover;display:block">
+                <button type="button" data-port-remove="${i}" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:6px;width:26px;height:26px;cursor:pointer">✕</button>
+              </div>`).join("")}
+          </div>`
+        : '<p class="login-hint">Todavía no tienes fotos en tu portfolio. Sube fotos de tus mejores trabajos — aparecen en tu perfil público.</p>'}
+      <p class="login-hint" style="margin-top:10px">${urls.length}/20 fotos</p>
+    </div>`;
+
+  el.querySelectorAll("[data-port-remove]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const next = (AUTH.professionalData.portfolioUrls || []).filter((_, i) => i !== Number(btn.dataset.portRemove));
+      _proSavePortfolio(next);
+    });
+  });
+
+  document.getElementById("proPort_addUrlBtn")?.addEventListener("click", () => {
+    const input = document.getElementById("proPort_url");
+    const url = input?.value.trim();
+    if (!url) return;
+    _proSavePortfolio([...(AUTH.professionalData.portfolioUrls || []), url]);
+  });
+
+  document.getElementById("proPort_file")?.addEventListener("change", (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 8_000_000) { toast("La foto debe ser menor a 8 MB.", "error"); e.target.value = ""; return; }
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      toast("Subiendo foto…");
+      try {
+        const res = await fetch("/api/upload-image", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageData: ev.target.result, folder: "portfolio" })
+        });
+        const data = await res.json();
+        if (!res.ok) { toast(data.error || "No se pudo subir la foto.", "error"); return; }
+        _proSavePortfolio([...(AUTH.professionalData.portfolioUrls || []), data.url]);
+        toast("Foto agregada ✓");
+      } catch { toast("Sin conexión al servidor.", "error"); }
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// ── Vista: Estadísticas ──────────────────────────────────────────────────────
+async function renderProEstadisticas() {
+  const el = document.getElementById("proEstadisticasContent");
+  if (!el) return;
+  el.innerHTML = '<p class="login-hint">Cargando…</p>';
+  try {
+    const res = await fetch("/api/professionals/me", { headers: proAuthHeader() });
+    if (!res.ok) { el.innerHTML = '<p class="login-hint">No se pudieron cargar las estadísticas.</p>'; return; }
+    const p = await res.json();
+    AUTH.professionalData = p;
+    const statusLabels = { pending: "Pendiente de aprobación", approved: "Aprobado — visible en el directorio", rejected: "Rechazado", suspended: "Suspendido", changes_requested: "Cambios solicitados" };
+    el.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px">
+        <div class="co-section-card" style="text-align:center">
+          <div style="font-size:2rem;font-weight:800;color:var(--accent)">${Number(p.views) || 0}</div>
+          <div class="login-hint">Visitas a tu perfil</div>
+        </div>
+        <div class="co-section-card" style="text-align:center">
+          <div style="font-size:2rem;font-weight:800;color:var(--accent)">${Number(p.contactClicks) || 0}</div>
+          <div class="login-hint">Clics de contacto</div>
+        </div>
+        <div class="co-section-card" style="text-align:center">
+          <div style="font-size:2rem;font-weight:800;color:#f59e0b">${(p.ratings?.avg || 0).toFixed(1)} ★</div>
+          <div class="login-hint">${p.ratings?.count || 0} reseña${(p.ratings?.count || 0) !== 1 ? "s" : ""}</div>
+        </div>
+      </div>
+      <div class="co-section-card" style="margin-top:16px">
+        <h3>Estado de tu cuenta</h3>
+        <p>${statusBadgeHtml(p.status)} <span style="margin-left:6px">${statusLabels[p.status] || p.status}</span></p>
+        ${p.status === "changes_requested" && p.adminNote ? `<p style="background:#fef3c7;border-radius:8px;padding:10px;color:#78350f">📝 ${escapeHtml(p.adminNote)}</p>` : ""}
+        <p class="login-hint">Código de acceso: <strong>${escapeHtml(p.accessCode || "—")}</strong> · Plan: <strong>${escapeHtml(p.plan || "gratuito")}</strong></p>
+        ${p.slug ? `<p class="login-hint">Tu URL pública: <a href="/p/${escapeHtml(p.slug)}" target="_blank" rel="noopener">${escapeHtml(window.location.origin)}/p/${escapeHtml(p.slug)}</a></p>` : ""}
+      </div>`;
+  } catch { el.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>'; }
+}
+
+// ── Vista: Reseñas ───────────────────────────────────────────────────────────
+async function renderProResenas() {
+  const el = document.getElementById("proResenasContent");
+  if (!el || !AUTH.professionalId) return;
+  el.innerHTML = '<p class="login-hint">Cargando…</p>';
+  try {
+    const res = await fetch(`/api/professionals/${AUTH.professionalId}/ratings`);
+    const list = res.ok ? await res.json() : [];
+    if (!list.length) { el.innerHTML = '<p class="login-hint">Todavía no tienes reseñas. Comparte tu perfil con tus clientes para recibir valoraciones.</p>'; return; }
+    el.innerHTML = list.map(r => `
+      <div class="co-section-card" style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+          <strong>${escapeHtml(r.raterName || "Cliente")}</strong>
+          <span style="color:#f59e0b">${"★".repeat(r.stars)}${"☆".repeat(5 - r.stars)}</span>
+        </div>
+        ${r.comment ? `<p style="margin:8px 0 0">${escapeHtml(r.comment)}</p>` : ""}
+        <p class="login-hint" style="margin-top:6px">${new Date(r.createdAt).toLocaleDateString("es-PA", { year: "numeric", month: "long", day: "numeric" })}</p>
+      </div>`).join("");
+  } catch { el.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>'; }
+}
+
+// ── Cambio de contraseña ─────────────────────────────────────────────────────
+document.getElementById("proChangePasswordBtn")?.addEventListener("click", async () => {
+  const errEl = document.getElementById("proPasswordError");
+  errEl?.classList.add("hidden");
+  const pw = document.getElementById("proNewPassword")?.value;
+  const pw2 = document.getElementById("proNewPassword2")?.value;
+  if (!pw || pw.length < 4) { if (errEl) { errEl.textContent = "La contraseña necesita al menos 4 caracteres."; errEl.classList.remove("hidden"); } return; }
+  if (pw !== pw2) { if (errEl) { errEl.textContent = "Las contraseñas no coinciden."; errEl.classList.remove("hidden"); } return; }
+  try {
+    const res = await fetch("/api/professionals/me/password", { method: "PUT", headers: proAuthHeader(), body: JSON.stringify({ password: pw }) });
+    const data = await res.json();
+    if (!res.ok) { if (errEl) { errEl.textContent = data.error || "No se pudo cambiar."; errEl.classList.remove("hidden"); } return; }
+    document.getElementById("proNewPassword").value = "";
+    document.getElementById("proNewPassword2").value = "";
+    toast("Contraseña actualizada ✓");
+  } catch { if (errEl) { errEl.textContent = "Sin conexión al servidor."; errEl.classList.remove("hidden"); } }
+});

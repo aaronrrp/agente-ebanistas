@@ -26,6 +26,7 @@
 
       <div class="login-tabs" role="tablist" style="flex-wrap:wrap">
         <button class="login-tab active" data-login-tab="code" type="button" role="tab">Ebanista</button>
+        <button class="login-tab" data-login-tab="professional" type="button" role="tab">Profesional</button>
         <button class="login-tab" data-login-tab="company" type="button" role="tab">Empresa</button>
         <button class="login-tab" data-login-tab="seller" type="button" role="tab">Vendedor</button>
         <button class="login-tab" data-login-tab="admin" type="button" role="tab">Admin</button>
@@ -40,6 +41,18 @@
         <input id="loginEbPasswordInput" class="login-input hidden" type="password"
                placeholder="Tu contraseña" autocomplete="current-password">
         <button id="loginCodeBtn" class="primary-btn login-btn" type="button">Ingresar →</button>
+      </div>
+
+      <!-- Tab: profesional -->
+      <div id="loginProfessionalPanel" class="login-panel hidden" role="tabpanel">
+        <p class="login-hint">Accede con el código de acceso y contraseña de tu perfil profesional.</p>
+        <input id="loginProCode" class="login-input" type="text"
+               placeholder="Código de acceso (ej: juanperez-4f8a2c)"
+               autocomplete="off" autocapitalize="none" spellcheck="false">
+        <input id="loginProPassword" class="login-input" type="password"
+               placeholder="Contraseña" autocomplete="current-password">
+        <button id="loginProBtn" class="primary-btn login-btn" type="button">Entrar →</button>
+        <p id="loginProError" class="login-error hidden"></p>
       </div>
 
       <!-- Tab: empresa -->
@@ -779,6 +792,99 @@
 
   </div>
   <!-- ── END PORTAL DE EMPRESA ──────────────────────────────────── -->
+
+  <!-- ── PANEL DE PROFESIONAL (mismo layout que el portal de empresa) ── -->
+  <div id="professionalShell" style="display:none">
+    <div class="co-sidebar-overlay" onclick="document.getElementById('professionalShell').classList.remove('co-open')"></div>
+    <aside class="co-sidebar">
+      <div class="co-brand">
+        <div class="co-brand-logo" id="pro_sidebarPhoto">👷</div>
+        <div class="co-brand-text">
+          <strong id="pro_sidebarName">Mi Perfil</strong>
+          <span>Panel Profesional</span>
+        </div>
+      </div>
+      <nav class="co-nav">
+        <button class="co-nav-item active" data-pro-view="proMiPerfil">👤 <span>Mi Perfil</span></button>
+        <button class="co-nav-item" data-pro-view="proPortfolio">🖼️ <span>Portfolio</span></button>
+        <button class="co-nav-item" data-pro-view="proEstadisticas">📈 <span>Estadísticas</span></button>
+        <button class="co-nav-item" data-pro-view="proResenas">⭐ <span>Reseñas</span></button>
+        <button class="co-nav-item" data-pro-view="proPassword">🔑 <span>Contraseña</span></button>
+      </nav>
+      <div class="co-sidebar-footer">
+        <button id="proLogoutBtn" class="co-logout-btn" type="button">← Cerrar sesión</button>
+      </div>
+    </aside>
+
+    <div class="co-main">
+      <header class="co-topbar">
+        <button class="co-menu-btn" id="proMenuBtn" type="button" aria-label="Menú">☰</button>
+        <span id="pro_topbarTitle">Mi Perfil</span>
+        <div></div>
+      </header>
+
+      <div class="co-content">
+        <div id="pro_adminNoteBanner" class="hidden" style="background:#fef3c7;border:1px solid #f59e0b;border-radius:10px;padding:12px 16px;margin-bottom:16px">
+          <strong style="color:#b45309">📝 El administrador solicitó cambios en tu perfil:</strong>
+          <p id="pro_adminNoteText" style="margin:6px 0 0;color:#78350f"></p>
+        </div>
+
+        <!-- ── Mi Perfil ── -->
+        <div id="proMiPerfil" class="co-view">
+          <div class="co-page-header">
+            <div><h2>Mi Perfil</h2><p class="login-hint">Edita la información pública de tu perfil profesional.</p></div>
+            <button id="proSavePerfilBtn" class="primary-btn" type="button">💾 Guardar cambios</button>
+          </div>
+          <div id="proMiPerfilContent"><p class="login-hint">Cargando…</p></div>
+        </div>
+
+        <!-- ── Portfolio ── -->
+        <div id="proPortfolio" class="co-view hidden">
+          <div class="co-page-header">
+            <div><h2>Portfolio</h2><p class="login-hint">Fotos de tus trabajos (máx. 20). Se muestran en tu perfil público.</p></div>
+          </div>
+          <div id="proPortfolioContent"><p class="login-hint">Cargando…</p></div>
+        </div>
+
+        <!-- ── Estadísticas ── -->
+        <div id="proEstadisticas" class="co-view hidden">
+          <div class="co-page-header">
+            <div><h2>Estadísticas</h2><p class="login-hint">Visitas y contactos de tu perfil.</p></div>
+          </div>
+          <div id="proEstadisticasContent"><p class="login-hint">Cargando…</p></div>
+        </div>
+
+        <!-- ── Reseñas ── -->
+        <div id="proResenas" class="co-view hidden">
+          <div class="co-page-header">
+            <div><h2>Reseñas</h2><p class="login-hint">Lo que tus clientes dicen de ti.</p></div>
+          </div>
+          <div id="proResenasContent"><p class="login-hint">Cargando…</p></div>
+        </div>
+
+        <!-- ── Contraseña ── -->
+        <div id="proPassword" class="co-view hidden">
+          <div class="co-page-header">
+            <div><h2>Contraseña</h2><p class="login-hint">Cambia la contraseña de acceso a tu panel.</p></div>
+          </div>
+          <div class="subsection" style="max-width:420px">
+            <div class="form-grid" style="grid-template-columns:1fr">
+              <label>Nueva contraseña
+                <input id="proNewPassword" type="password" autocomplete="new-password">
+              </label>
+              <label>Repetir contraseña
+                <input id="proNewPassword2" type="password" autocomplete="new-password">
+              </label>
+            </div>
+            <button id="proChangePasswordBtn" class="primary-btn" type="button" style="margin-top:12px">Cambiar contraseña</button>
+            <p id="proPasswordError" class="login-error hidden"></p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <!-- ── END PANEL DE PROFESIONAL ───────────────────────────────── -->
 
   <div class="app-shell" id="appShell" style="display:none">
     <aside class="sidebar">
