@@ -22,7 +22,14 @@ const rootDir = __dirname;
 const port = Number(process.env.PORT || 5174);
 const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
 const imageModel = process.env.OPENAI_IMAGE_MODEL || "gpt-image-1";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin1234";
+// En producción (Render define RENDER=true) NO hay contraseña por defecto: si falta
+// ADMIN_PASSWORD el login de admin queda deshabilitado. El fallback "admin1234" solo
+// existe para desarrollo local.
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || (process.env.RENDER ? null : "admin1234");
+// Ruta privada que muestra el login de administrador. La plataforma pública nunca
+// enseña la opción "Admin" — solo quien conoce esta URL llega al panel.
+// Configurable en Render con ADMIN_ACCESS_PATH (ej: /mi-ruta-secreta-xyz).
+const ADMIN_ACCESS_PATH = process.env.ADMIN_ACCESS_PATH || "/acceso-admin";
 const TENANTS_FILE = path.join(__dirname, "tenants.json");
 
 // ── MIME types ─────────────────────────────────────────────────────────────
@@ -1327,9 +1334,15 @@ async function handleAuthAdmin(req, res) {
     sendJson(res, 429, { error: "Demasiados intentos. Espera 1 minuto." });
     return;
   }
+  if (!ADMIN_PASSWORD) {
+    // Producción sin ADMIN_PASSWORD configurada: el acceso admin queda cerrado.
+    logActivity({ actorType: "admin", actorId: "admin", actorLabel: "Admin", action: "auth.login.rejected_unconfigured", meta: { ip } });
+    sendJson(res, 503, { error: "Acceso administrativo no configurado. Define ADMIN_PASSWORD en las variables de entorno." });
+    return;
+  }
   const body = await readBody(req);
   const { password } = safeJson(body, {});
-  if (!safeCompare(password, ADMIN_PASSWORD)) {
+  if (!password || !safeCompare(password, ADMIN_PASSWORD)) {
     logActivity({ actorType: "admin", actorId: "admin", actorLabel: "Admin", action: "auth.login.failed", meta: { ip } });
     sendJson(res, 401, { error: "Contraseña incorrecta." });
     return;
@@ -1804,6 +1817,24 @@ function handleTenantAccess(req, res, id) {
 
 async function serveStatic(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
+  // Ruta privada de acceso admin: sirve index.html con un flag inyectado que el
+  // cliente usa para mostrar SOLO el login de administrador. La ruta nunca aparece
+  // en el código del cliente — vive únicamente aquí (y en la env var).
+  if (url.pathname === ADMIN_ACCESS_PATH || url.pathname === ADMIN_ACCESS_PATH + "/") {
+    try {
+      const html = await readFile(path.join(rootDir, "index.html"), "utf-8");
+      res.writeHead(200, {
+        "Content-Type": "text/html; charset=utf-8",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "X-Robots-Tag": "noindex, nofollow",
+        "Cache-Control": "no-store"
+      });
+      res.end(html.replace("</head>", "<script>window.__PILLA_ADMIN_GATE__=1</script></head>"));
+    } catch { res.writeHead(404); res.end("Not found"); }
+    return;
+  }
   // Friendly profile URLs — serve index.html so JS can detect the slug and open the card.
   // El slug nunca lleva punto: así /c/app.js (asset con ruta relativa) NO se reescribe.
   const isProfileUrl = /^\/(p|c)\/[^/.]+\/?$/.test(url.pathname);
@@ -1944,7 +1975,7 @@ const server = http.createServer(async (req, res) => {
         openaiConfigured: keySet,
         hfConfigured: Boolean(process.env.HF_TOKEN),
         model,
-        adminPasswordSet: ADMIN_PASSWORD !== "admin1234",
+        adminPasswordSet: Boolean(process.env.ADMIN_PASSWORD),
         tenantsCount: tenants.length,
         apiEndpoint: "chat/completions",
         build: "2026-06-05-v37"
@@ -2093,7 +2124,8 @@ const server = http.createServer(async (req, res) => {
 server.listen(port, () => {
   runMigrations();
   console.log(`\n🪚  Agente Ebanistas SaaS — http://localhost:${port}`);
-  console.log(`   Admin password  : ${ADMIN_PASSWORD === "admin1234" ? "admin1234 (⚠ cambia con ADMIN_PASSWORD=xxx)" : "configurada ✓"}`);
+  console.log(`   Admin password  : ${!ADMIN_PASSWORD ? "NO configurada — login admin DESHABILITADO (define ADMIN_PASSWORD)" : process.env.ADMIN_PASSWORD ? "configurada ✓" : "admin1234 solo-local (⚠ cambia con ADMIN_PASSWORD=xxx)"}`);
+  console.log(`   Acceso admin    : ${ADMIN_ACCESS_PATH}${process.env.ADMIN_ACCESS_PATH ? " (personalizada)" : " (default — personaliza con ADMIN_ACCESS_PATH)"}`);
   console.log(`   OpenAI          : ${process.env.OPENAI_API_KEY ? "activo ✓" : "no configurado (modo local)"}`);
   console.log(`   Ebanistas       : ${tenants.length} registrados\n`);
   tenants.forEach(t => console.log(`   • ${t.companyName.padEnd(30)} código: ${t.accessCode}  [${t.status}]`));

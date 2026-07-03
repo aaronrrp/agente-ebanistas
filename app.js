@@ -9811,6 +9811,20 @@ async function tryAutoLogin() {
     sessionStorage.removeItem("ebAuthMode");
   }
 
+  // ── 2.5 Ruta privada de administrador ─────────────────────────────────────
+  // El servidor inyecta window.__PILLA_ADMIN_GATE__ SOLO cuando se entra por la
+  // URL privada (ADMIN_ACCESS_PATH). Sin ese flag no existe forma visible de
+  // llegar al login de admin — la pestaña pública se eliminó en la auditoría.
+  if (window.__PILLA_ADMIN_GATE__) {
+    showLogin();
+    document.querySelectorAll("[data-login-tab]").forEach(b => b.classList.remove("active"));
+    ["loginCodePanel", "loginProfessionalPanel", "loginCompanyPanel", "loginSellerPanel"].forEach(id =>
+      document.getElementById(id)?.classList.add("hidden"));
+    document.querySelector(".login-tabs")?.classList.add("hidden");
+    document.getElementById("loginAdminPanel")?.classList.remove("hidden");
+    return;
+  }
+
   // ── 3. Sin sesión válida → directorio público por defecto
   // Detectar URLs amigables /p/:slug o /c/:slug para abrir el perfil directo
   const _ppParts = window.location.pathname.split("/").filter(Boolean);

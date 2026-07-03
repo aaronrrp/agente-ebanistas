@@ -24,12 +24,13 @@
       <h1 class="login-title">PiLLA</h1>
       <p class="login-subtitle">Profesionales que construyen soluciones</p>
 
+      <!-- El acceso de Administrador NO tiene botón público: solo se llega por la
+           ruta privada del servidor (ADMIN_ACCESS_PATH), que muestra su panel. -->
       <div class="login-tabs" role="tablist" style="flex-wrap:wrap">
         <button class="login-tab active" data-login-tab="code" type="button" role="tab">Ebanista</button>
         <button class="login-tab" data-login-tab="professional" type="button" role="tab">Profesional</button>
         <button class="login-tab" data-login-tab="company" type="button" role="tab">Empresa</button>
         <button class="login-tab" data-login-tab="seller" type="button" role="tab">Vendedor</button>
-        <button class="login-tab" data-login-tab="admin" type="button" role="tab">Admin</button>
       </div>
 
       <!-- Tab: ebanista por código -->
