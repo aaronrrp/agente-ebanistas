@@ -11805,7 +11805,7 @@ function renderProMiPerfil() {
       toast("Subiendo foto…");
       try {
         const res = await fetch("/api/upload-image", {
-          method: "POST", headers: { "Content-Type": "application/json" },
+          method: "POST", headers: proAuthHeader(),
           body: JSON.stringify({ imageData: ev.target.result, folder: "professionals" })
         });
         const data = await res.json();
@@ -11918,7 +11918,7 @@ function renderProPortfolio() {
       toast("Subiendo foto…");
       try {
         const res = await fetch("/api/upload-image", {
-          method: "POST", headers: { "Content-Type": "application/json" },
+          method: "POST", headers: proAuthHeader(),
           body: JSON.stringify({ imageData: ev.target.result, folder: "portfolio" })
         });
         const data = await res.json();

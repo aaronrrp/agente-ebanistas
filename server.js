@@ -8,7 +8,8 @@ const {
   sendJson, readBody, getToken,
   safeJson, atomicWrite, checkRateLimit, getClientIp, safeCompare, SECURITY_HEADERS,
   generatePassword, hashPassword, verifyPassword, makeStableId, todayIso, dataUrlToBlob,
-  adminSessions, SESSION_TTL, createSession, isValidSession, requireAdmin
+  adminSessions, SESSION_TTL, createSession, isValidSession, requireAdmin,
+  registerSessionChecker
 } = require("./lib/shared.js");
 const { logActivity } = require("./lib/activity-log.js");
 // require() está cacheado por Node -- estas referencias apuntan a los MISMOS módulos
@@ -232,6 +233,10 @@ function requireSeller(req, res) {
   if (!session) { sendJson(res, 401, { error: "No autorizado. Inicia sesión como vendedor." }); return null; }
   return session;
 }
+
+// Ebanistas y vendedores cuentan como "sesión válida" para endpoints compartidos
+registerSessionChecker(getEbanistaSession);
+registerSessionChecker(getSellerSession);
 
 function isTenantActive(t) {
   return t.status === "active" && t.expiresAt >= todayIso();
@@ -894,6 +899,11 @@ function imageOnlyResponse(result) {
 }
 
 async function handleAi(req, res) {
+  // Auditoría v51: cada llamada consume tokens de OpenAI — tope por IP contra abuso
+  if (!checkRateLimit(`ai:chat:${getClientIp(req)}`, 12, 60000)) {
+    sendJson(res, 429, { error: "Demasiadas consultas seguidas. Espera 1 minuto." });
+    return;
+  }
   if (!process.env.OPENAI_API_KEY) {
     sendJson(res, 503, { error: "OPENAI_API_KEY no configurada. Usando modo local." });
     return;
@@ -1038,6 +1048,10 @@ async function handleAi(req, res) {
 
 // ── Space analysis — dedicated endpoint for room/photo analysis ─────────────
 async function handleSpaceAnalysis(req, res) {
+  if (!checkRateLimit(`ai:space:${getClientIp(req)}`, 6, 60000)) {
+    sendJson(res, 429, { error: "Demasiados análisis seguidos. Espera 1 minuto." });
+    return;
+  }
   if (!process.env.OPENAI_API_KEY) {
     sendJson(res, 503, { error: "OPENAI_API_KEY no configurada. Sube tu clave en Render para usar análisis de espacios." });
     return;
@@ -1234,6 +1248,10 @@ fotografía profesional de catálogo.`.replace(/\s+/g, " ").trim();
 }
 
 async function handleEnhanceSketch(req, res) {
+  if (!checkRateLimit(`ai:sketch:${getClientIp(req)}`, 5, 60000)) {
+    sendJson(res, 429, { error: "Demasiadas imágenes seguidas. Espera 1 minuto." });
+    return;
+  }
   console.log(`[enhance-sketch] POST /api/enhance-sketch recibido`);
   const body = await readBody(req);
   const payload = body ? JSON.parse(body) : {};
@@ -1259,6 +1277,10 @@ async function handleEnhanceSketch(req, res) {
 
 // ── Cotización en PDF real (sin depender del diálogo de impresión del navegador) ──
 async function handleQuotePdf(req, res) {
+  if (!checkRateLimit(`pdf:${getClientIp(req)}`, 15, 60000)) {
+    sendJson(res, 429, { error: "Demasiados PDFs seguidos. Espera 1 minuto." });
+    return;
+  }
   const body = await readBody(req);
   const payload = body ? JSON.parse(body) : {};
   const { kind, quote } = payload;
@@ -1311,6 +1333,10 @@ async function handleQuotePdf(req, res) {
 }
 
 async function handleGenerateImage(req, res) {
+  if (!checkRateLimit(`ai:image:${getClientIp(req)}`, 5, 60000)) {
+    sendJson(res, 429, { error: "Demasiadas imágenes seguidas. Espera 1 minuto." });
+    return;
+  }
   const body = await readBody(req);
   const { prompt, quality: requestedQuality } = body ? JSON.parse(body) : {};
   if (!prompt) { sendJson(res, 400, { error: "Se requiere prompt." }); return; }

@@ -8,7 +8,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { sendJson, readBody, getToken, hashPassword, verifyPassword, generatePassword, todayIso, requireAdmin, atomicWrite, checkRateLimit, getClientIp } = require("../lib/shared.js");
+const { sendJson, readBody, getToken, hashPassword, verifyPassword, generatePassword, todayIso, requireAdmin, atomicWrite, checkRateLimit, getClientIp, registerSessionChecker } = require("../lib/shared.js");
 const { logActivity } = require("../lib/activity-log.js");
 
 const PROFESSIONALS_FILE = path.join(__dirname, "..", "professionals.json");
@@ -68,6 +68,7 @@ function requireProfessional(req, res) {
   if (!session) { sendJson(res, 401, { error: "No autorizado. Inicia sesión como profesional." }); return null; }
   return session;
 }
+registerSessionChecker(getProfessionalSession);
 
 function makeProfessionalCode(name) {
   const prefix = String(name || "profesional")

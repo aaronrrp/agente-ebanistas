@@ -15,7 +15,7 @@
 // 503 con un mensaje claro -- igual que el resto de la app "corre en modo local"
 // sin IA real cuando falta OPENAI_API_KEY.
 const crypto = require("node:crypto");
-const { sendJson, readBody, dataUrlToBlob } = require("../lib/shared.js");
+const { sendJson, readBody, dataUrlToBlob, getToken, isAnyValidSession, checkRateLimit, getClientIp } = require("../lib/shared.js");
 
 function cloudinaryConfigured() {
   return Boolean(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET);
@@ -55,6 +55,19 @@ async function uploadToCloudinary(blob, folder) {
 
 async function handle(req, res, { method, p }) {
   if (method !== "POST" || p !== "/api/upload-image") return false;
+
+  // Auditoría v51: subir imágenes consume la cuota de Cloudinary — requiere
+  // CUALQUIER sesión válida (profesional/empresa/ebanista/vendedor/usuario/admin)
+  // y tiene tope por IP para frenar abuso automatizado.
+  const ip = getClientIp(req);
+  if (!checkRateLimit(`upload:${ip}`, 10, 60000)) {
+    sendJson(res, 429, { error: "Demasiadas subidas seguidas. Espera 1 minuto." });
+    return true;
+  }
+  if (!isAnyValidSession(getToken(req))) {
+    sendJson(res, 401, { error: "Inicia sesión para subir imágenes." });
+    return true;
+  }
 
   if (!cloudinaryConfigured()) {
     console.log("[upload-image] CLOUDINARY_* no configurado -- ver routes/upload.js para las 3 variables necesarias");

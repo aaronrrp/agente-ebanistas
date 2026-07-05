@@ -6,7 +6,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { sendJson, readBody, getToken, hashPassword, verifyPassword, generatePassword, requireAdmin, atomicWrite, checkRateLimit, getClientIp } = require("../lib/shared.js");
+const { sendJson, readBody, getToken, hashPassword, verifyPassword, generatePassword, requireAdmin, atomicWrite, checkRateLimit, getClientIp, registerSessionChecker } = require("../lib/shared.js");
 const { logActivity } = require("../lib/activity-log.js");
 
 const COMPANIES_FILE = path.join(__dirname, "..", "companies.json");
@@ -65,6 +65,7 @@ function requireCompany(req, res) {
   if (!session) { sendJson(res, 401, { error: "No autorizado. Inicia sesión como empresa." }); return null; }
   return session;
 }
+registerSessionChecker(getCompanySession);
 
 function makeCompanyCode(name) {
   const prefix = String(name || "empresa")
