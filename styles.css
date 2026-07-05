@@ -2297,3 +2297,12 @@ textarea {
 .co-promo-expired { opacity: .6; }
 .co-promo-card { display: flex; gap: 12px; align-items: flex-start; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
 .co-promo-thumb { width: 80px; height: 80px; border-radius: 8px; object-fit: cover; flex-shrink: 0; }
+
+/* ── Mostrar contraseña (login) ──────────────────────────────────────────── */
+.show-pw-toggle {
+  display: flex; align-items: center; gap: 6px;
+  font-size: .8rem; color: var(--muted); cursor: pointer;
+  margin: -4px 0 10px; user-select: none;
+}
+.show-pw-toggle input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; margin: 0; }
+input.hidden + .show-pw-toggle { display: none; }

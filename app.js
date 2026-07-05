@@ -12186,3 +12186,18 @@ async function loadAdminAiUsageTab() {
   }
 }
 document.getElementById("adm_refreshAiUsageBtn")?.addEventListener("click", loadAdminAiUsageTab);
+
+// ── UX v51: mostrar/ocultar contraseña en el login ───────────────────────────
+// Checkbox explícito (no ícono) — más claro para el público 30-60 de PiLLA.
+// Si el input está oculto (paso de código sin contraseña), el CSS sibling
+// oculta también el toggle: input.hidden + .show-pw-toggle { display:none }.
+document.querySelectorAll('#loginScreen input[type="password"]').forEach(inp => {
+  const wrap = document.createElement("label");
+  wrap.className = "show-pw-toggle";
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  cb.addEventListener("change", () => { inp.type = cb.checked ? "text" : "password"; });
+  wrap.appendChild(cb);
+  wrap.appendChild(document.createTextNode(" Mostrar contraseña"));
+  inp.insertAdjacentElement("afterend", wrap);
+});
