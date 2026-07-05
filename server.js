@@ -661,25 +661,61 @@ const PRICE_USD = {
   imageOutputPer1M: 40.00,
   imagePerUnit: { low: 0.011, medium: 0.042, high: 0.167 } // respaldo si la API no manda "usage"
 };
+// ── Acumulador de consumo IA (v51) ───────────────────────────────────────────
+// Antes el costo estimado solo se veía en la consola de Render. Ahora cada
+// llamada se acumula por día en ai_usage.json y el admin lo consulta desde el
+// panel (tab "Consumo IA") sin acceso al servidor. Se conservan 90 días.
+const AI_USAGE_FILE = path.join(__dirname, "ai_usage.json");
+let aiUsage = (() => {
+  try { return JSON.parse(fs.readFileSync(AI_USAGE_FILE, "utf-8")); }
+  catch { return { days: {} }; }
+})();
+function recordAiUsage(kind, fields) {
+  const day = todayIso();
+  const d = aiUsage.days[day] || (aiUsage.days[day] = {
+    textCalls: 0, textIn: 0, textOut: 0, textCost: 0,
+    imagePaidCalls: 0, imageFreeCalls: 0, imageCost: 0
+  });
+  if (kind === "text") {
+    d.textCalls++;
+    d.textIn += fields.inTok; d.textOut += fields.outTok; d.textCost += fields.cost;
+  } else if (kind === "imagePaid") {
+    d.imagePaidCalls++; d.imageCost += fields.cost;
+  } else if (kind === "imageFree") {
+    d.imageFreeCalls++;
+  }
+  // Poda: solo los últimos 90 días
+  const keys = Object.keys(aiUsage.days).sort();
+  while (keys.length > 90) delete aiUsage.days[keys.shift()];
+  try { atomicWrite(AI_USAGE_FILE, aiUsage); } catch (e) { console.error("[ai-usage]", e.message); }
+}
+
 function logEstimatedCost(label, usage) {
   if (!usage) { console.log(`[costo] ${label}: sin datos de uso de tokens`); return; }
   const inTok = usage.input_tokens || 0;
   const outTok = usage.output_tokens || 0;
   const cost = (inTok / 1e6) * PRICE_USD.textInputPer1M + (outTok / 1e6) * PRICE_USD.textOutputPer1M;
   console.log(`[costo] ${label}: ${inTok} tokens entrada + ${outTok} tokens salida ≈ $${cost.toFixed(4)} USD (estimado)`);
+  recordAiUsage("text", { inTok, outTok, cost });
 }
 function logEstimatedImageCost(label, quality, source, usage) {
-  if (source !== imageModel) { console.log(`[costo] ${label}: imagen gratis (${source})`); return; }
+  if (source !== imageModel) {
+    console.log(`[costo] ${label}: imagen gratis (${source})`);
+    recordAiUsage("imageFree", {});
+    return;
+  }
   if (usage) {
     const textIn = usage.input_tokens_details?.text_tokens ?? 0;
     const imgIn = usage.input_tokens_details?.image_tokens ?? 0;
     const outTok = usage.output_tokens || 0;
     const cost = (textIn / 1e6) * PRICE_USD.imageTextInputPer1M + (imgIn / 1e6) * PRICE_USD.imageInputPer1M + (outTok / 1e6) * PRICE_USD.imageOutputPer1M;
     console.log(`[costo] ${label}: ${textIn} tokens texto + ${imgIn} tokens imagen entrada + ${outTok} tokens salida (${quality}, ${source}) ≈ $${cost.toFixed(4)} USD (estimado, real de la API)`);
+    recordAiUsage("imagePaid", { cost });
     return;
   }
   const cost = PRICE_USD.imagePerUnit[quality] ?? PRICE_USD.imagePerUnit.low;
   console.log(`[costo] ${label}: 1 imagen ${quality} (${source}) ≈ $${cost.toFixed(4)} USD (estimado, respaldo sin "usage")`);
+  recordAiUsage("imagePaid", { cost });
 }
 
 async function callOpenAI(sysPrompt, userContent, useWebSearch = true) {
@@ -1943,6 +1979,7 @@ const BACKUP_DATA_FILES = {
   plans:                 path.join(__dirname, "plans.json"),
   roles:                 path.join(__dirname, "roles.json"),
   locations:             path.join(__dirname, "locations.json"),
+  ai_usage:              AI_USAGE_FILE,
 };
 
 function createBackup() {
@@ -2065,6 +2102,13 @@ const server = http.createServer(async (req, res) => {
     if (method === "POST" && p === "/api/auth/seller")        { await handleAuthSeller(req, res); return; }
     if (method === "GET"  && p === "/api/auth/seller/check")  { handleAuthSellerCheck(req, res); return; }
     if (method === "POST" && p === "/api/auth/seller/logout") { await handleAuthSellerLogout(req, res); return; }
+
+    // Consumo IA acumulado por día (admin only) — tab "Consumo IA" del panel
+    if (method === "GET" && p === "/api/admin/ai-usage") {
+      if (!requireAdmin(req, res)) return;
+      sendJson(res, 200, { days: aiUsage.days, prices: PRICE_USD, model, imageModel });
+      return;
+    }
 
     // Backup / Restore (admin only)
     if (method === "GET" && p === "/api/admin/backup") {

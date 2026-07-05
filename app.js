@@ -659,7 +659,8 @@ const ADMIN_TAB_LOADERS = {
   ebanistas: renderAdmin,
   valoraciones: loadAdminRatingsTab,
   catalogo: loadAdminCatalogTab,
-  ubicaciones: loadAdminLocationsTab
+  ubicaciones: loadAdminLocationsTab,
+  consumoia: loadAdminAiUsageTab
 };
 
 function showAdminTab(tabId) {
@@ -12117,3 +12118,71 @@ document.getElementById("adm_locationsTree")?.addEventListener("keydown", (e) =>
   e.preventDefault();
   input.parentElement.querySelector('[data-loc-action="add-city"]')?.click();
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ADMIN — Consumo IA (v51: costo estimado de OpenAI visible sin entrar a Render)
+// ═════════════════════════════════════════════════════════════════════════════
+
+async function loadAdminAiUsageTab() {
+  const summaryEl = document.getElementById("adm_aiUsageSummary");
+  const tableEl = document.getElementById("adm_aiUsageTable");
+  if (!summaryEl || !tableEl) return;
+  tableEl.innerHTML = '<p class="login-hint">Cargando…</p>';
+  try {
+    const res = await fetch("/api/admin/ai-usage", { headers: adminAuthHeaderAdmin() });
+    if (!res.ok) { tableEl.innerHTML = '<p class="login-hint">No se pudo cargar el consumo.</p>'; return; }
+    const { days, model, imageModel } = await res.json();
+    const sorted = Object.entries(days).sort((a, b) => b[0].localeCompare(a[0])); // recientes primero
+
+    const today = new Date().toISOString().slice(0, 10);
+    const cutoff7 = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+    const cutoff30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+    const sum = (from) => sorted.reduce((acc, [day, d]) => {
+      if (day < from) return acc;
+      acc.cost += (d.textCost || 0) + (d.imageCost || 0);
+      acc.calls += (d.textCalls || 0) + (d.imagePaidCalls || 0) + (d.imageFreeCalls || 0);
+      return acc;
+    }, { cost: 0, calls: 0 });
+    const t = sum(today), w = sum(cutoff7), m = sum(cutoff30);
+
+    summaryEl.innerHTML = `
+      <article class="metric-card"><span>Hoy</span><strong>$${t.cost.toFixed(3)}</strong><span>${t.calls} llamada${t.calls !== 1 ? "s" : ""}</span></article>
+      <article class="metric-card"><span>Últimos 7 días</span><strong>$${w.cost.toFixed(3)}</strong><span>${w.calls} llamadas</span></article>
+      <article class="metric-card"><span>Últimos 30 días</span><strong>$${m.cost.toFixed(3)}</strong><span>${m.calls} llamadas</span></article>
+      <article class="metric-card"><span>Modelos</span><strong style="font-size:.95rem">${escapeHtml(model || "—")}</strong><span>${escapeHtml(imageModel || "—")}</span></article>`;
+
+    if (!sorted.length) {
+      tableEl.innerHTML = '<p class="login-hint">Todavía no hay consumo registrado. Los datos empiezan a acumularse con la primera llamada a la IA desde este deploy.</p>';
+      return;
+    }
+    tableEl.innerHTML = `
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:.85rem">
+          <thead>
+            <tr style="text-align:left;border-bottom:2px solid var(--line)">
+              <th style="padding:8px 10px">Fecha</th>
+              <th style="padding:8px 10px">Chats IA</th>
+              <th style="padding:8px 10px">Tokens (ent/sal)</th>
+              <th style="padding:8px 10px">Imágenes pagas</th>
+              <th style="padding:8px 10px">Imágenes gratis</th>
+              <th style="padding:8px 10px;text-align:right">Costo est.</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${sorted.map(([day, d]) => `
+              <tr style="border-bottom:1px solid var(--line)">
+                <td style="padding:7px 10px;white-space:nowrap">${day}${day === today ? ' <span class="admin-status-badge approved">hoy</span>' : ""}</td>
+                <td style="padding:7px 10px">${d.textCalls || 0}</td>
+                <td style="padding:7px 10px">${(d.textIn || 0).toLocaleString()} / ${(d.textOut || 0).toLocaleString()}</td>
+                <td style="padding:7px 10px">${d.imagePaidCalls || 0}</td>
+                <td style="padding:7px 10px">${d.imageFreeCalls || 0}</td>
+                <td style="padding:7px 10px;text-align:right;font-weight:600">$${((d.textCost || 0) + (d.imageCost || 0)).toFixed(4)}</td>
+              </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>`;
+  } catch {
+    tableEl.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>';
+  }
+}
+document.getElementById("adm_refreshAiUsageBtn")?.addEventListener("click", loadAdminAiUsageTab);
