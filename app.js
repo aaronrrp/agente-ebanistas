@@ -8743,17 +8743,9 @@ const PUBLIC_SUBVIEW_IDS = [
 function hideAllPublicSubviews() {
   PUBLIC_SUBVIEW_IDS.forEach(id => document.getElementById(id)?.classList.add("hidden"));
 }
-document.querySelectorAll("[data-public-tab]").forEach(btn => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll("[data-public-tab]").forEach(b => b.classList.remove("active"));
-    btn.classList.add("active");
-    const tab = btn.dataset.publicTab;
-    hideAllPublicSubviews();
-    if (tab === "profesionales") document.getElementById("publicDirectoryView").classList.remove("hidden");
-    if (tab === "empresas") { document.getElementById("publicCompaniesView").classList.remove("hidden"); loadPublicCompanies(); }
-    if (tab === "retazos") { document.getElementById("publicRetazosView").classList.remove("hidden"); loadPublicRetazos(); loadPublicInspiration(); }
-  });
-});
+// (El handler de [data-public-tab] se eliminó en la auditoría v51: v47 renombró
+// la navegación a [data-public-nav] — ver "Public nav links" — y este bloque
+// llevaba desde entonces escuchando botones que ya no existen en el DOM.)
 
 // ── Directorio de Empresas (mismo patrón que el de profesionales) ───────────
 const COMPANY_CATEGORIES = [
