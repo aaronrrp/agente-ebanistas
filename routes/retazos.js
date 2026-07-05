@@ -9,7 +9,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { sendJson, readBody, getToken, hashPassword, verifyPassword, generatePassword, requireAdmin, atomicWrite, checkRateLimit, getClientIp, registerSessionChecker } = require("../lib/shared.js");
+const { sendJson, readBody, getToken, hashPassword, verifyPassword, generatePassword, requireAdmin, atomicWrite, checkRateLimit, getClientIp, registerSessionChecker, registerSessionSweep } = require("../lib/shared.js");
 const { logActivity } = require("../lib/activity-log.js");
 
 const RETAZOS_FILE = path.join(__dirname, "..", "retazos.json");
@@ -56,6 +56,7 @@ function getFreeUserSession(token) {
   return s;
 }
 registerSessionChecker(getFreeUserSession);
+registerSessionSweep(freeUserSessions, SESSION_TTL);
 
 function makeFreeUserCode(name) {
   const prefix = String(name || "usuario")

@@ -9,7 +9,7 @@ const {
   safeJson, atomicWrite, checkRateLimit, getClientIp, safeCompare, SECURITY_HEADERS,
   generatePassword, hashPassword, verifyPassword, makeStableId, todayIso, dataUrlToBlob,
   adminSessions, SESSION_TTL, createSession, isValidSession, requireAdmin,
-  registerSessionChecker
+  registerSessionChecker, registerSessionSweep
 } = require("./lib/shared.js");
 const { logActivity } = require("./lib/activity-log.js");
 // require() está cacheado por Node -- estas referencias apuntan a los MISMOS módulos
@@ -237,6 +237,8 @@ function requireSeller(req, res) {
 // Ebanistas y vendedores cuentan como "sesión válida" para endpoints compartidos
 registerSessionChecker(getEbanistaSession);
 registerSessionChecker(getSellerSession);
+registerSessionSweep(ebanistaSessions, EB_SESSION_TTL);
+registerSessionSweep(sellerSessions, SELLER_SESSION_TTL);
 
 function isTenantActive(t) {
   return t.status === "active" && t.expiresAt >= todayIso();

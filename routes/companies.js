@@ -6,7 +6,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { sendJson, readBody, getToken, hashPassword, verifyPassword, generatePassword, requireAdmin, atomicWrite, checkRateLimit, getClientIp, registerSessionChecker } = require("../lib/shared.js");
+const { sendJson, readBody, getToken, hashPassword, verifyPassword, generatePassword, requireAdmin, atomicWrite, checkRateLimit, getClientIp, registerSessionChecker, registerSessionSweep } = require("../lib/shared.js");
 const { logActivity } = require("../lib/activity-log.js");
 
 const COMPANIES_FILE = path.join(__dirname, "..", "companies.json");
@@ -66,6 +66,7 @@ function requireCompany(req, res) {
   return session;
 }
 registerSessionChecker(getCompanySession);
+registerSessionSweep(companySessions, SESSION_TTL);
 
 function makeCompanyCode(name) {
   const prefix = String(name || "empresa")
