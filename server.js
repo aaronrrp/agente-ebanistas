@@ -1,6 +1,7 @@
 const http = require("node:http");
 const path = require("node:path");
 const fs = require("node:fs");
+const zlib = require("node:zlib");
 const crypto = require("node:crypto");
 const { readFile } = require("node:fs/promises");
 const { buildQuotePdf } = require("./pdf.js");
@@ -1870,20 +1871,56 @@ async function serveStatic(req, res) {
   const filePath = path.normalize(path.join(rootDir, pathname));
   if (!filePath.startsWith(rootDir)) { res.writeHead(403); res.end("Forbidden"); return; }
   try {
-    const file = await readFile(filePath);
+    const st = fs.statSync(filePath);
+    if (!st.isFile()) { res.writeHead(404); res.end("Not found"); return; }
     const ext = path.extname(filePath);
-    // HTML pages get full security headers; assets get minimal ones (cache is fine for them)
     const isHtml = ext === ".html";
+    const lastMod = new Date(st.mtimeMs).toUTCString();
+
+    // Revalidación barata: el navegador manda If-Modified-Since y recibe 304 sin
+    // cuerpo. Cache-Control: no-cache = "guarda pero revalida siempre" — los
+    // deploys se ven al instante y las recargas no re-descargan 800KB.
+    if (req.headers["if-modified-since"] === lastMod) {
+      res.writeHead(304, { "Last-Modified": lastMod, "Cache-Control": "no-cache", "Vary": "Accept-Encoding" });
+      res.end();
+      return;
+    }
+
+    // Caché en memoria + gzip pre-comprimido por archivo, invalidado por mtime/size.
+    // app.js pasa de 630KB a ~138KB por request — la mejora de latencia más grande
+    // disponible sin dependencias (node:zlib es built-in).
+    let entry = _staticCache.get(filePath);
+    if (!entry || entry.mtimeMs !== st.mtimeMs || entry.size !== st.size) {
+      const raw = await readFile(filePath);
+      entry = { mtimeMs: st.mtimeMs, size: st.size, raw, gz: null };
+      if (COMPRESSIBLE_EXT.has(ext) && raw.length > 1024) {
+        entry.gz = zlib.gzipSync(raw, { level: 6 });
+      }
+      // Archivos enormes no se cachean en memoria (no hay ninguno hoy; defensa futura)
+      if (st.size <= 5_000_000) _staticCache.set(filePath, entry);
+    }
+
+    const acceptsGzip = /\bgzip\b/.test(req.headers["accept-encoding"] || "");
+    const body = acceptsGzip && entry.gz ? entry.gz : entry.raw;
     res.writeHead(200, {
       "Content-Type": mimeTypes[ext] || "application/octet-stream",
+      "Content-Length": body.length,
       "X-Content-Type-Options": "nosniff",
+      "Last-Modified": lastMod,
+      "Cache-Control": "no-cache",
+      "Vary": "Accept-Encoding",
+      ...(acceptsGzip && entry.gz ? { "Content-Encoding": "gzip" } : {}),
       ...(isHtml ? { "X-Frame-Options": "DENY", "Referrer-Policy": "strict-origin-when-cross-origin" } : {})
     });
-    res.end(file);
+    res.end(body);
   } catch {
     res.writeHead(404); res.end("Not found");
   }
 }
+
+// Caché de estáticos para serveStatic() — ver comentario arriba
+const _staticCache = new Map(); // filePath -> { mtimeMs, size, raw, gz }
+const COMPRESSIBLE_EXT = new Set([".html", ".css", ".js", ".json", ".svg", ".txt", ".xml"]);
 
 // ── Backup / Restore ─────────────────────────────────────────────────────────
 // Lee TODOS los archivos JSON de la app en un solo objeto para descarga.
