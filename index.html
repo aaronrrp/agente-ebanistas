@@ -116,6 +116,116 @@
     <div id="publicBannerSlot"></div>
 
     <main class="public-main">
+
+      <!-- Vista: INICIO — portada de PiLLA -->
+      <section id="publicHomeView">
+        <div class="public-hero">
+          <p class="eyebrow">BIENVENIDO A PiLLA</p>
+          <h1>El ecosistema de la construcción y el mueble en Panamá</h1>
+          <p class="public-hero-sub">Profesionales verificados, empresas proveedoras y materiales — todo en un solo lugar.</p>
+          <div id="homeConsumerCta" style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:6px">
+            <button id="homeConsumerRegisterBtn" class="primary-btn" type="button">✨ Crear mi cuenta gratis</button>
+            <button id="homeConsumerLoginBtn" class="secondary-btn" type="button">Ya tengo cuenta</button>
+          </div>
+        </div>
+        <div class="home-cards">
+          <button class="home-card" type="button" data-home-go="profesionales">
+            <span class="home-card-icon">👷</span>
+            <strong>Buscar profesionales</strong>
+            <span>Ebanistas, plomeros, electricistas, remodeladores y más — con reseñas reales.</span>
+          </button>
+          <button class="home-card" type="button" data-home-go="empresas">
+            <span class="home-card-icon">🏢</span>
+            <strong>Buscar empresas</strong>
+            <span>Ferreterías, melamina, herrajes y maquinaria con catálogos y precios.</span>
+          </button>
+          <button class="home-card" type="button" data-home-go="retazos">
+            <span class="home-card-icon">♻️</span>
+            <strong>Centro Sostenible</strong>
+            <span>Retazos de madera y melamina — compra, vende o regala sobrantes.</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- Vista: DIRECTORIO — hub de acceso rápido -->
+      <section id="publicHubView" class="hidden">
+        <div class="public-hero">
+          <p class="eyebrow">DIRECTORIO</p>
+          <h1>¿Qué estás buscando?</h1>
+          <p class="public-hero-sub">Elige una sección para explorar.</p>
+        </div>
+        <div class="home-cards">
+          <button class="home-card" type="button" data-home-go="profesionales">
+            <span class="home-card-icon">👷</span>
+            <strong>Profesionales</strong>
+            <span>Busca por oficio, provincia, ciudad y calificación.</span>
+          </button>
+          <button class="home-card" type="button" data-home-go="empresas">
+            <span class="home-card-icon">🏢</span>
+            <strong>Empresas</strong>
+            <span>Proveedores con productos y contacto directo.</span>
+          </button>
+          <button class="home-card" type="button" data-home-go="retazos">
+            <span class="home-card-icon">♻️</span>
+            <strong>Retazos</strong>
+            <span>Material sobrante a precio de oportunidad.</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- Vista: registro/login de CONSUMIDOR (gate de búsqueda) -->
+      <section id="consumerGateView" class="hidden">
+        <div class="subsection" style="max-width:460px;margin:1.5rem auto">
+          <h3 style="margin-top:0">Tu cuenta de PiLLA</h3>
+          <p class="login-hint">Para buscar profesionales, empresas y retazos necesitas una cuenta — es <strong>gratis</strong> y toma un minuto.</p>
+          <div class="login-tabs" role="tablist">
+            <button class="login-tab active" data-cg-tab="register" type="button" role="tab">Crear cuenta</button>
+            <button class="login-tab" data-cg-tab="login" type="button" role="tab">Ya tengo cuenta</button>
+          </div>
+
+          <div id="cg_registerPanel" role="tabpanel">
+            <div class="form-grid" style="grid-template-columns:1fr">
+              <label>Tu nombre*
+                <input id="cg_regName" type="text" autocomplete="name">
+              </label>
+              <label>WhatsApp o teléfono (opcional)
+                <input id="cg_regPhone" type="text" autocomplete="tel">
+              </label>
+              <label>Contraseña* (mínimo 4 caracteres)
+                <input id="cg_regPassword" type="password" autocomplete="new-password">
+              </label>
+            </div>
+            <button id="cg_registerBtn" class="primary-btn" type="button" style="width:100%;margin-top:12px">Crear mi cuenta gratis</button>
+          </div>
+
+          <div id="cg_loginPanel" class="hidden" role="tabpanel">
+            <div class="form-grid" style="grid-template-columns:1fr">
+              <label>Código de acceso
+                <input id="cg_loginCode" type="text" placeholder="Ej: maria-4f8a2c" autocapitalize="none" spellcheck="false">
+              </label>
+              <label>Contraseña
+                <input id="cg_loginPassword" type="password" autocomplete="current-password">
+              </label>
+            </div>
+            <button id="cg_loginBtn" class="primary-btn" type="button" style="width:100%;margin-top:12px">Entrar →</button>
+          </div>
+
+          <div id="cg_success" class="hidden" style="text-align:center;padding:1rem 0 0">
+            <div style="font-size:2.4rem">✅</div>
+            <h3 style="margin:.5rem 0">¡Cuenta creada!</h3>
+            <p style="margin:0 0 6px">Tu código de acceso es:</p>
+            <div style="display:flex;gap:8px;justify-content:center;align-items:center;margin-bottom:10px">
+              <code id="cg_successCode" style="background:#fef9c3;border:1px solid #eab308;border-radius:8px;padding:8px 14px;font-size:1.05rem;font-weight:700"></code>
+              <button id="cg_copyCodeBtn" class="tiny-btn" type="button">Copiar</button>
+            </div>
+            <p class="login-hint">Guárdalo — con él y tu contraseña entras la próxima vez.</p>
+            <button id="cg_continueBtn" class="primary-btn" type="button" style="width:100%;margin-top:8px">Continuar →</button>
+          </div>
+
+          <p id="cg_error" class="login-error hidden"></p>
+        </div>
+      </section>
+
       <!-- Vista: listado + filtros (profesionales) -->
       <section id="publicDirectoryView">
         <div class="public-hero">

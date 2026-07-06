@@ -8581,7 +8581,7 @@ async function initLocationSelects() {
   }
 }
 
-function showPublicDirectorio() {
+function showPublicDirectorio(initialView = "inicio") {
   document.getElementById("appLoading")?.remove();
   document.getElementById("loginScreen").style.display = "none";
   document.getElementById("appShell").style.display = "none";
@@ -8597,8 +8597,8 @@ function showPublicDirectorio() {
     regCatSel.innerHTML = PROFESSIONAL_CATEGORIES.map(c => `<option value="${c.value}">${c.label}</option>`).join("");
   }
   initLocationSelects();
-  loadPublicDirectory();
   loadPublicBanner();
+  publicNavGo(initialView);
 }
 
 // Banner principal del directorio público -- solo se ve si el admin creó y activó
@@ -8762,17 +8762,81 @@ document.getElementById("pf_submitRegisterBtn")?.addEventListener("click", async
   }
 });
 
-// ── Tabs del directorio público: Profesionales / Empresas ───────────────────
+// ── Secciones de la parte pública ────────────────────────────────────────────
 const PUBLIC_SUBVIEW_IDS = [
+  "publicHomeView", "publicHubView", "consumerGateView",
   "publicDirectoryView", "publicRegisterView", "publicCompaniesView", "publicCompanyRegisterView",
   "publicRetazosView", "rz_loginGateView", "rz_publishView"
 ];
 function hideAllPublicSubviews() {
   PUBLIC_SUBVIEW_IDS.forEach(id => document.getElementById(id)?.classList.add("hidden"));
 }
-// (El handler de [data-public-tab] se eliminó en la auditoría v51: v47 renombró
-// la navegación a [data-public-nav] — ver "Public nav links" — y este bloque
-// llevaba desde entonces escuchando botones que ya no existen en el DOM.)
+
+// Navegación central de la parte pública — única fuente de verdad para cambiar
+// de sección (la usan el navbar, la portada, el hub Directorio y los deep links).
+// v52: "inicio" tiene portada propia y "directorio" es un hub — el hero
+// "Encuentra profesionales de confianza" vive SOLO en la sección Profesionales.
+function publicNavGo(nav) {
+  document.querySelectorAll("[data-public-nav]").forEach(b => b.classList.toggle("active", b.dataset.publicNav === nav));
+  hideAllPublicSubviews();
+  if (nav === "directorio") {
+    document.getElementById("publicHubView")?.classList.remove("hidden");
+  } else if (nav === "profesionales") {
+    document.getElementById("publicDirectoryView")?.classList.remove("hidden");
+    loadPublicDirectory();
+  } else if (nav === "empresas") {
+    document.getElementById("publicCompaniesView")?.classList.remove("hidden");
+    loadPublicCompanies?.();
+  } else if (nav === "retazos") {
+    document.getElementById("publicRetazosView")?.classList.remove("hidden");
+    loadPublicRetazos?.();
+    loadPublicInspiration?.();
+  } else { // "inicio" y cualquier valor desconocido → portada
+    document.getElementById("publicHomeView")?.classList.remove("hidden");
+  }
+}
+// ── Gate de consumidor (v52-B) ───────────────────────────────────────────────
+// Buscar profesionales/empresas/retazos requiere una cuenta. Cualquier sesión
+// vale (consumidor, profesional, empresa, ebanista, vendedor o admin). Los
+// enlaces compartidos /p/:slug y /c/:slug NO pasan por aquí a propósito —
+// entran por showPublicDirectorio() directo para no romper compartir/QR.
+let _pendingNav = null;
+
+function hasPublicSession() {
+  return Boolean(
+    _publicPostAuth?.token || AUTH.token || AUTH.ebToken || AUTH.sellerToken ||
+    AUTH.proToken || AUTH.coToken ||
+    sessionStorage.getItem("proToken") || sessionStorage.getItem("coToken") ||
+    sessionStorage.getItem("ebToken") || sessionStorage.getItem("sellerToken") ||
+    sessionStorage.getItem("ebAdminToken")
+  );
+}
+
+function showConsumerGate(mode = "register", pending = null) {
+  _pendingNav = pending;
+  hideAllPublicSubviews();
+  document.querySelectorAll("[data-public-nav]").forEach(b => b.classList.remove("active"));
+  document.getElementById("consumerGateView")?.classList.remove("hidden");
+  document.querySelectorAll("[data-cg-tab]").forEach(b => b.classList.toggle("active", b.dataset.cgTab === mode));
+  document.getElementById("cg_registerPanel")?.classList.toggle("hidden", mode !== "register");
+  document.getElementById("cg_loginPanel")?.classList.toggle("hidden", mode !== "login");
+  document.getElementById("cg_success")?.classList.add("hidden");
+  document.getElementById("cg_error")?.classList.add("hidden");
+}
+
+// Navegación CON gate — la usan el navbar y las tarjetas de portada/hub
+function publicNavRequest(nav) {
+  if (["profesionales", "empresas", "retazos"].includes(nav) && !hasPublicSession()) {
+    showConsumerGate("register", nav);
+    return;
+  }
+  publicNavGo(nav);
+}
+
+// Tarjetas de la portada y del hub Directorio
+document.querySelectorAll("[data-home-go]").forEach(btn => {
+  btn.addEventListener("click", () => publicNavRequest(btn.dataset.homeGo));
+});
 
 // ── Directorio de Empresas (mismo patrón que el de profesionales) ───────────
 const COMPANY_CATEGORIES = [
@@ -9845,18 +9909,14 @@ async function tryAutoLogin() {
   if (_ppParts.length === 2 && (_ppParts[0] === "p" || _ppParts[0] === "c")) {
     const _ppType = _ppParts[0];
     const _ppSlug = _ppParts[1];
-    showPublicDirectorio();
     if (_ppType === "p") {
+      showPublicDirectorio("profesionales");
       try {
         const _ppRes = await fetch(`/api/professionals/slug/${_ppSlug}`);
         if (_ppRes.ok) openProProfileModal((await _ppRes.json()).id);
       } catch {}
     } else {
-      document.querySelectorAll("[data-public-nav]").forEach(b => b.classList.remove("active"));
-      document.querySelector('[data-public-nav="empresas"]')?.classList.add("active");
-      hideAllPublicSubviews();
-      document.getElementById("publicCompaniesView")?.classList.remove("hidden");
-      loadPublicCompanies();
+      showPublicDirectorio("empresas");
     }
   } else {
     showPublicDirectorio();
@@ -10784,23 +10844,7 @@ document.getElementById("loginBackBtn")?.addEventListener("click", () => {
 
 // â”€â”€ Public nav links â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 document.querySelectorAll("[data-public-nav]").forEach(btn => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll("[data-public-nav]").forEach(b => b.classList.remove("active"));
-    btn.classList.add("active");
-    const nav = btn.dataset.publicNav;
-    hideAllPublicSubviews();
-    if (nav === "inicio" || nav === "directorio" || nav === "profesionales") {
-      document.getElementById("publicDirectoryView")?.classList.remove("hidden");
-      loadPublicDirectory();
-    } else if (nav === "empresas") {
-      document.getElementById("publicCompaniesView")?.classList.remove("hidden");
-      loadPublicCompanies?.();
-    } else if (nav === "retazos") {
-      document.getElementById("publicRetazosView")?.classList.remove("hidden");
-      loadPublicRetazos?.();
-      loadPublicInspiration?.();
-    }
-  });
+  btn.addEventListener("click", () => publicNavRequest(btn.dataset.publicNav));
 });
 
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -12347,4 +12391,97 @@ document.getElementById("adm_professionalsList")?.addEventListener("click", (ev)
 document.getElementById("adm_companiesList")?.addEventListener("click", (ev) => {
   const btn = ev.target.closest("[data-admin-view]");
   if (btn) openAdminEntityModal(btn.dataset.kind, btn.dataset.adminView);
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// CONSUMIDOR — registro/login desde la portada (v52-B)
+// Reutiliza las cuentas "usuario gratuito" (/api/free-users) que ya alimentan
+// el Centro de Retazos: una sola identidad de consumidor para toda la app.
+// ═════════════════════════════════════════════════════════════════════════════
+
+document.querySelectorAll("[data-cg-tab]").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("[data-cg-tab]").forEach(b => b.classList.toggle("active", b === btn));
+    document.getElementById("cg_registerPanel")?.classList.toggle("hidden", btn.dataset.cgTab !== "register");
+    document.getElementById("cg_loginPanel")?.classList.toggle("hidden", btn.dataset.cgTab !== "login");
+    document.getElementById("cg_success")?.classList.add("hidden");
+    document.getElementById("cg_error")?.classList.add("hidden");
+  });
+});
+
+function _cgError(msg) {
+  const el = document.getElementById("cg_error");
+  if (el) { el.textContent = msg; el.classList.remove("hidden"); }
+}
+
+document.getElementById("cg_registerBtn")?.addEventListener("click", async () => {
+  document.getElementById("cg_error")?.classList.add("hidden");
+  const name = document.getElementById("cg_regName")?.value.trim();
+  const phone = document.getElementById("cg_regPhone")?.value.trim() || "";
+  const password = document.getElementById("cg_regPassword")?.value || "";
+  if (!name) { _cgError("Escribe tu nombre."); return; }
+  if (password.length < 4) { _cgError("La contraseña necesita al menos 4 caracteres."); return; }
+  const btn = document.getElementById("cg_registerBtn");
+  btn.disabled = true;
+  try {
+    const res = await fetch("/api/free-users/register", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, phone, password })
+    });
+    const data = await res.json();
+    if (!res.ok) { _cgError(data.error || "No se pudo crear la cuenta."); return; }
+    // Login automático para que no tenga que teclear nada de nuevo
+    const login = await fetch("/api/auth/free-user", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: data.accessCode, password })
+    }).then(r => r.ok ? r.json() : null);
+    if (login?.token) setPublicPostAuth(login.token, "usuario_gratuito");
+    document.getElementById("cg_registerPanel")?.classList.add("hidden");
+    document.getElementById("cg_loginPanel")?.classList.add("hidden");
+    document.getElementById("cg_successCode").textContent = data.accessCode;
+    document.getElementById("cg_success")?.classList.remove("hidden");
+  } catch { _cgError("Sin conexión al servidor."); }
+  finally { btn.disabled = false; }
+});
+
+document.getElementById("cg_copyCodeBtn")?.addEventListener("click", async () => {
+  const code = document.getElementById("cg_successCode")?.textContent;
+  try { await navigator.clipboard.writeText(code); toast("Código copiado ✓"); } catch {}
+});
+
+document.getElementById("cg_continueBtn")?.addEventListener("click", () => {
+  publicNavGo(_pendingNav || "profesionales");
+  _pendingNav = null;
+});
+
+document.getElementById("cg_loginBtn")?.addEventListener("click", async () => {
+  document.getElementById("cg_error")?.classList.add("hidden");
+  const code = document.getElementById("cg_loginCode")?.value.trim();
+  const password = document.getElementById("cg_loginPassword")?.value || "";
+  if (!code || !password) { _cgError("Ingresa tu código y contraseña."); return; }
+  try {
+    const res = await fetch("/api/auth/free-user", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, password })
+    });
+    const data = await res.json();
+    if (!res.ok) { _cgError(data.error || "No se pudo iniciar sesión."); return; }
+    setPublicPostAuth(data.token, "usuario_gratuito");
+    toast(`¡Bienvenido, ${data.user?.name || "de nuevo"}!`);
+    publicNavGo(_pendingNav || "profesionales");
+    _pendingNav = null;
+  } catch { _cgError("Sin conexión al servidor."); }
+});
+document.getElementById("cg_loginPassword")?.addEventListener("keydown", e => {
+  if (e.key === "Enter") document.getElementById("cg_loginBtn").click();
+});
+
+// CTAs de la portada
+document.getElementById("homeConsumerRegisterBtn")?.addEventListener("click", () => {
+  if (hasPublicSession()) { toast("Ya tienes una sesión activa ✓"); publicNavGo("profesionales"); return; }
+  showConsumerGate("register");
+});
+document.getElementById("homeConsumerLoginBtn")?.addEventListener("click", () => {
+  if (hasPublicSession()) { toast("Ya tienes una sesión activa ✓"); publicNavGo("profesionales"); return; }
+  showConsumerGate("login");
 });

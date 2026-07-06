@@ -2315,3 +2315,21 @@ input.hidden + .show-pw-toggle { display: none; }
   cursor: pointer; transition: opacity .15s;
 }
 .public-admin-link:hover, .public-admin-link:focus-visible { opacity: 1; text-decoration: underline; }
+
+/* ── Portada (Inicio) y hub Directorio ───────────────────────────────────── */
+.home-cards {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 18px; max-width: 900px; margin: 1.5rem auto 2rem;
+}
+.home-card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+  padding: 26px 20px; text-align: center; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  box-shadow: 0 2px 10px rgba(26,19,70,.06);
+  transition: transform .18s, box-shadow .18s, border-color .18s;
+  font: inherit; color: var(--text);
+}
+.home-card:hover { transform: translateY(-3px); box-shadow: 0 8px 26px rgba(26,19,70,.14); border-color: var(--accent); }
+.home-card-icon { font-size: 2.3rem; line-height: 1; }
+.home-card strong { font-size: 1.05rem; }
+.home-card span:last-child { font-size: .85rem; color: var(--muted); line-height: 1.45; }
