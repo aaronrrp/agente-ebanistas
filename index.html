@@ -103,12 +103,11 @@
           <span class="public-topbar-tagline">Profesionales que construyen soluciones</span>
         </div>
       </div>
+      <!-- v52.1: solo "Inicio" — las secciones se abren desde las tarjetas de la
+           portada; los botones Directorio/Empresas/Profesionales/Centro Sostenible
+           duplicaban esos accesos y se eliminaron a pedido. -->
       <nav class="public-nav-links" aria-label="Navegación pública">
-        <button class="public-nav-link active" data-public-nav="inicio" type="button">Inicio</button>
-        <button class="public-nav-link" data-public-nav="directorio" type="button">Directorio</button>
-        <button class="public-nav-link" data-public-nav="empresas" type="button">Empresas</button>
-        <button class="public-nav-link" data-public-nav="profesionales" type="button">Profesionales</button>
-        <button class="public-nav-link" data-public-nav="retazos" type="button">♻️ Centro Sostenible</button>
+        <button class="public-nav-link active" data-public-nav="inicio" type="button">🏠 Inicio</button>
       </nav>
       <button id="publicLoginBtn" class="secondary-btn" type="button">Iniciar sesión</button>
     </header>
@@ -143,32 +142,6 @@
             <span class="home-card-icon">♻️</span>
             <strong>Centro Sostenible</strong>
             <span>Retazos de madera y melamina — compra, vende o regala sobrantes.</span>
-          </button>
-        </div>
-      </section>
-
-      <!-- Vista: DIRECTORIO — hub de acceso rápido -->
-      <section id="publicHubView" class="hidden">
-        <div class="public-hero">
-          <p class="eyebrow">DIRECTORIO</p>
-          <h1>¿Qué estás buscando?</h1>
-          <p class="public-hero-sub">Elige una sección para explorar.</p>
-        </div>
-        <div class="home-cards">
-          <button class="home-card" type="button" data-home-go="profesionales">
-            <span class="home-card-icon">👷</span>
-            <strong>Profesionales</strong>
-            <span>Busca por oficio, provincia, ciudad y calificación.</span>
-          </button>
-          <button class="home-card" type="button" data-home-go="empresas">
-            <span class="home-card-icon">🏢</span>
-            <strong>Empresas</strong>
-            <span>Proveedores con productos y contacto directo.</span>
-          </button>
-          <button class="home-card" type="button" data-home-go="retazos">
-            <span class="home-card-icon">♻️</span>
-            <strong>Retazos</strong>
-            <span>Material sobrante a precio de oportunidad.</span>
           </button>
         </div>
       </section>

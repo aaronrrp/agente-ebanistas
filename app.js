@@ -8764,7 +8764,7 @@ document.getElementById("pf_submitRegisterBtn")?.addEventListener("click", async
 
 // ── Secciones de la parte pública ────────────────────────────────────────────
 const PUBLIC_SUBVIEW_IDS = [
-  "publicHomeView", "publicHubView", "consumerGateView",
+  "publicHomeView", "consumerGateView",
   "publicDirectoryView", "publicRegisterView", "publicCompaniesView", "publicCompanyRegisterView",
   "publicRetazosView", "rz_loginGateView", "rz_publishView"
 ];
@@ -8773,15 +8773,14 @@ function hideAllPublicSubviews() {
 }
 
 // Navegación central de la parte pública — única fuente de verdad para cambiar
-// de sección (la usan el navbar, la portada, el hub Directorio y los deep links).
-// v52: "inicio" tiene portada propia y "directorio" es un hub — el hero
-// "Encuentra profesionales de confianza" vive SOLO en la sección Profesionales.
+// de sección (la usan el botón Inicio, las tarjetas de la portada y los deep links).
+// v52.1: el navbar solo tiene "Inicio"; Profesionales/Empresas/Retazos se abren
+// desde las tarjetas de la portada. El hero "Encuentra profesionales de
+// confianza" vive SOLO en la sección Profesionales.
 function publicNavGo(nav) {
   document.querySelectorAll("[data-public-nav]").forEach(b => b.classList.toggle("active", b.dataset.publicNav === nav));
   hideAllPublicSubviews();
-  if (nav === "directorio") {
-    document.getElementById("publicHubView")?.classList.remove("hidden");
-  } else if (nav === "profesionales") {
+  if (nav === "profesionales") {
     document.getElementById("publicDirectoryView")?.classList.remove("hidden");
     loadPublicDirectory();
   } else if (nav === "empresas") {
