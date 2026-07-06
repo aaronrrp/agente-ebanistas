@@ -8454,7 +8454,32 @@ function showLogin() {
   document.getElementById("publicShell").style.display = "none";
   document.getElementById("companyShell").style.display = "none";
   document.getElementById("professionalShell").style.display = "none";
+  // Restablecer el estado normal del login — el acceso de admin (botón discreto
+  // o ruta privada) oculta las pestañas y muestra solo su panel; si el usuario
+  // vuelve y abre el login normal, todo debe verse como siempre.
+  document.querySelector(".login-tabs")?.classList.remove("hidden");
+  if (!document.querySelector("[data-login-tab].active")) {
+    document.querySelector('[data-login-tab="code"]')?.classList.add("active");
+  }
+  const _activeTab = document.querySelector("[data-login-tab].active")?.dataset.loginTab || "code";
+  document.getElementById("loginCodePanel")?.classList.toggle("hidden", _activeTab !== "code");
+  document.getElementById("loginProfessionalPanel")?.classList.toggle("hidden", _activeTab !== "professional");
+  document.getElementById("loginCompanyPanel")?.classList.toggle("hidden", _activeTab !== "company");
+  document.getElementById("loginSellerPanel")?.classList.toggle("hidden", _activeTab !== "seller");
+  document.getElementById("loginAdminPanel")?.classList.add("hidden");
 }
+
+// Muestra el login con SOLO el panel de administrador (sin pestañas de roles).
+// Se llega por el botón discreto del directorio o por la ruta privada del servidor.
+function showAdminLoginGate() {
+  showLogin();
+  document.querySelectorAll("[data-login-tab]").forEach(b => b.classList.remove("active"));
+  ["loginCodePanel", "loginProfessionalPanel", "loginCompanyPanel", "loginSellerPanel"].forEach(id =>
+    document.getElementById(id)?.classList.add("hidden"));
+  document.querySelector(".login-tabs")?.classList.add("hidden");
+  document.getElementById("loginAdminPanel")?.classList.remove("hidden");
+}
+document.getElementById("publicAdminLink")?.addEventListener("click", showAdminLoginGate);
 
 // ── Directorio Profesional (público, sin login) ─────────────────────────────
 // Mismas categorías que routes/professionals.js (CATEGORIES) -- duplicado a propósito
@@ -9809,12 +9834,7 @@ async function tryAutoLogin() {
   // URL privada (ADMIN_ACCESS_PATH). Sin ese flag no existe forma visible de
   // llegar al login de admin — la pestaña pública se eliminó en la auditoría.
   if (window.__PILLA_ADMIN_GATE__) {
-    showLogin();
-    document.querySelectorAll("[data-login-tab]").forEach(b => b.classList.remove("active"));
-    ["loginCodePanel", "loginProfessionalPanel", "loginCompanyPanel", "loginSellerPanel"].forEach(id =>
-      document.getElementById(id)?.classList.add("hidden"));
-    document.querySelector(".login-tabs")?.classList.add("hidden");
-    document.getElementById("loginAdminPanel")?.classList.remove("hidden");
+    showAdminLoginGate();
     return;
   }
 

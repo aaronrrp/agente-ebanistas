@@ -2306,3 +2306,12 @@ textarea {
 }
 .show-pw-toggle input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; margin: 0; }
 input.hidden + .show-pw-toggle { display: none; }
+
+/* ── Acceso admin discreto (abajo a la derecha del directorio) ───────────── */
+.public-admin-link {
+  position: fixed; right: 12px; bottom: 10px; z-index: 60;
+  background: none; border: none; padding: 6px 10px;
+  font-size: .72rem; color: var(--muted); opacity: .35;
+  cursor: pointer; transition: opacity .15s;
+}
+.public-admin-link:hover, .public-admin-link:focus-visible { opacity: 1; text-decoration: underline; }
