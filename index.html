@@ -2052,6 +2052,14 @@ Yappy @miempresa"></textarea>
   <!-- ── Logout btn (admin only) ───────────────────────────────── -->
   <button id="logoutBtn" class="logout-btn hidden" type="button" title="Cerrar sesión admin">Salir</button>
 
+  <!-- ── Modal admin: datos completos de una solicitud/cuenta + credenciales ── -->
+  <div id="admEntityModal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal-box" style="max-width:640px;max-height:86vh;overflow-y:auto">
+      <button class="modal-close-btn" id="admEntityModalClose" type="button" aria-label="Cerrar">✕</button>
+      <div id="admEntityModalContent"><p class="login-hint">Cargando…</p></div>
+    </div>
+  </div>
+
   <script src="/app.js"></script>
 </body>
 </html>

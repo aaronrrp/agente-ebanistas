@@ -716,6 +716,7 @@ function adminEntityRowHtml(entity, kind) {
         <span>${escapeHtml(sub)}</span>
       </div>
       <div class="admin-entity-actions">
+        <button class="tiny-btn" type="button" data-admin-view="${entity.id}" data-kind="${kind}">👁 Ver datos</button>
         ${entity.status !== "approved" ? `<button class="tiny-btn" type="button" data-admin-action="approve" data-kind="${kind}" data-id="${entity.id}">✓ Aprobar</button>` : ""}
         ${entity.status !== "rejected" ? `<button class="tiny-btn danger" type="button" data-admin-action="reject" data-kind="${kind}" data-id="${entity.id}">✕ Rechazar</button>` : ""}
         ${entity.status !== "suspended" ? `<button class="tiny-btn" type="button" data-admin-action="suspend" data-kind="${kind}" data-id="${entity.id}">⏸ Suspender</button>` : ""}
@@ -12220,4 +12221,130 @@ document.querySelectorAll('#loginScreen input[type="password"]').forEach(inp => 
   wrap.appendChild(cb);
   wrap.appendChild(document.createTextNode(" Mostrar contraseña"));
   inp.insertAdjacentElement("afterend", wrap);
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ADMIN — Modal "Ver datos" de solicitudes/cuentas + generación de credenciales
+// (v52-C: el admin revisa TODOS los datos de un profesional o empresa y le
+//  genera/regenera usuario y contraseña sin salir del panel)
+// ═════════════════════════════════════════════════════════════════════════════
+
+function _admField(label, value) {
+  const v = (value === null || value === undefined || value === "") ? "—" : String(value);
+  return `<div style="padding:6px 0;border-bottom:1px solid var(--line)">
+    <span style="font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)">${label}</span><br>
+    <span style="font-size:.9rem">${escapeHtml(v)}</span>
+  </div>`;
+}
+
+function _admGenPassword() {
+  const alf = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  const bytes = crypto.getRandomValues(new Uint8Array(14));
+  return Array.from(bytes, b => alf[b % alf.length]).join("");
+}
+
+async function openAdminEntityModal(kind, id) {
+  const modal = document.getElementById("admEntityModal");
+  const box = document.getElementById("admEntityModalContent");
+  if (!modal || !box) return;
+  box.innerHTML = '<p class="login-hint">Cargando…</p>';
+  modal.classList.remove("hidden");
+  const endpoint = kind === "professional" ? "professionals" : "companies";
+  try {
+    const res = await fetch(`/api/admin/${endpoint}`, { headers: adminAuthHeaderAdmin() });
+    if (!res.ok) { box.innerHTML = '<p class="login-hint">No se pudo cargar.</p>'; return; }
+    const e = (await res.json()).find(x => x.id === id);
+    if (!e) { box.innerHTML = '<p class="login-hint">No encontrado.</p>'; return; }
+
+    const esPro = kind === "professional";
+    const catLabel = esPro ? professionalCategoryLabel(e.category) : companyCategoryLabel(e.category);
+    box.innerHTML = `
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
+        ${(esPro ? e.photoUrl : e.logoUrl)
+          ? `<img src="${escapeHtml(esPro ? e.photoUrl : e.logoUrl)}" alt="" style="width:64px;height:64px;border-radius:12px;object-fit:cover">`
+          : `<div style="width:64px;height:64px;border-radius:12px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;font-size:1.6rem;font-weight:800;color:var(--accent)">${escapeHtml((e.name || "?")[0].toUpperCase())}</div>`}
+        <div>
+          <h3 style="margin:0">${escapeHtml(e.name)}</h3>
+          <div>${statusBadgeHtml(e.status)} ${e.featured ? '<span class="admin-status-badge approved">★ Destacado</span>' : ""}</div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 18px">
+        ${_admField(esPro ? "Categoría" : "Rubro", catLabel)}
+        ${_admField("Plan", e.plan || "gratuito")}
+        ${_admField("Teléfono", e.phone)}
+        ${_admField("WhatsApp", e.whatsapp)}
+        ${_admField("Correo", e.email)}
+        ${_admField("Horario", e.schedule)}
+        ${_admField("Provincia", e.location?.province)}
+        ${_admField("Ciudad", e.location?.city)}
+        ${esPro ? _admField("Empresa", e.company) : _admField("Productos publicados", (e.products || []).length)}
+        ${esPro ? _admField("Especialidad", e.specialty) : _admField("Promociones", (e.promotions || []).length)}
+        ${esPro ? _admField("Años de experiencia", e.experienceYears) : _admField("Nota de pago", e.paymentNote)}
+        ${esPro ? _admField("Servicios", (e.services || []).join(", ")) : _admField("Sitio web", e.socialLinks?.website)}
+        ${_admField("Registrado", e.createdAt ? new Date(e.createdAt).toLocaleDateString("es-PA", { year: "numeric", month: "long", day: "numeric" }) : "")}
+        ${_admField("Último acceso", e.lastAccessAt ? new Date(e.lastAccessAt).toLocaleDateString("es-PA") : "nunca")}
+      </div>
+      ${e.description ? `<div style="margin-top:10px">${_admField("Descripción", e.description)}</div>` : ""}
+      ${e.adminNote ? `<div style="margin-top:10px;background:#fef3c7;border-radius:8px;padding:10px"><strong style="color:#b45309">Nota de cambios solicitados:</strong> ${escapeHtml(e.adminNote)}</div>` : ""}
+
+      <div style="margin-top:16px;background:var(--surface-soft);border:1px solid var(--line);border-radius:10px;padding:14px">
+        <h4 style="margin:0 0 8px">🔑 Credenciales de acceso</h4>
+        ${e.accessCode ? `
+          <p style="margin:0 0 4px;font-size:.85rem">Usuario (código de acceso):</p>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+            <code id="admCredCode" style="background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:.9rem">${escapeHtml(e.accessCode)}</code>
+            <button class="tiny-btn" type="button" id="admCopyCodeBtn">Copiar</button>
+          </div>
+          <div id="admCredPassZone">
+            <p class="login-hint" style="margin:0 0 8px">La contraseña actual no se puede ver (está cifrada). Puedes generar una nueva para entregársela:</p>
+            <button class="secondary-btn" type="button" id="admGenCredBtn" data-kind="${kind}" data-id="${e.id}">🔑 Generar nueva contraseña</button>
+          </div>`
+        : `<p class="login-hint" style="margin:0">Esta cuenta todavía no tiene credenciales — se generan automáticamente al <strong>aprobar</strong> la solicitud (el sistema te mostrará el usuario y la contraseña para que se los entregues).</p>`}
+      </div>`;
+
+    document.getElementById("admCopyCodeBtn")?.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(e.accessCode); toast("Código copiado ✓"); } catch {}
+    });
+    document.getElementById("admGenCredBtn")?.addEventListener("click", async (ev) => {
+      const btn = ev.currentTarget;
+      btn.disabled = true;
+      const nueva = _admGenPassword();
+      try {
+        const r = await fetch(`/api/admin/${endpoint}/${id}/password`, {
+          method: "PUT", headers: adminAuthHeaderAdmin(), body: JSON.stringify({ password: nueva })
+        });
+        if (!r.ok) { toast("No se pudo generar la contraseña.", "error"); btn.disabled = false; return; }
+        document.getElementById("admCredPassZone").innerHTML = `
+          <p style="margin:0 0 4px;font-size:.85rem">Contraseña nueva (cópiala AHORA — no se volverá a mostrar):</p>
+          <div style="display:flex;gap:8px;align-items:center">
+            <code style="background:#fef9c3;border:1px solid #eab308;border-radius:6px;padding:6px 10px;font-size:.95rem;font-weight:700">${escapeHtml(nueva)}</code>
+            <button class="tiny-btn" type="button" id="admCopyPassBtn">Copiar</button>
+          </div>
+          <p class="login-hint" style="margin:8px 0 0">Entrégale el código de acceso y esta contraseña — con eso entra a su panel desde "Iniciar sesión".</p>`;
+        document.getElementById("admCopyPassBtn")?.addEventListener("click", async () => {
+          try { await navigator.clipboard.writeText(nueva); toast("Contraseña copiada ✓"); } catch {}
+        });
+      } catch { toast("Sin conexión al servidor.", "error"); btn.disabled = false; }
+    });
+  } catch {
+    box.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>';
+  }
+}
+
+// Cierre del modal
+document.getElementById("admEntityModalClose")?.addEventListener("click", () =>
+  document.getElementById("admEntityModal").classList.add("hidden"));
+document.getElementById("admEntityModal")?.addEventListener("click", (ev) => {
+  if (ev.target === ev.currentTarget) ev.currentTarget.classList.add("hidden");
+});
+
+// Botones "Ver datos" en ambas listas
+document.getElementById("adm_professionalsList")?.addEventListener("click", (ev) => {
+  const btn = ev.target.closest("[data-admin-view]");
+  if (btn) openAdminEntityModal(btn.dataset.kind, btn.dataset.adminView);
+});
+document.getElementById("adm_companiesList")?.addEventListener("click", (ev) => {
+  const btn = ev.target.closest("[data-admin-view]");
+  if (btn) openAdminEntityModal(btn.dataset.kind, btn.dataset.adminView);
 });
