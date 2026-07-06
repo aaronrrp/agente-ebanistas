@@ -30,6 +30,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { sendJson, readBody, requireAdmin, atomicWrite } = require("../lib/shared.js");
 const { logActivity } = require("../lib/activity-log.js");
+const { findCompanyById } = require("./companies.js");
 
 const CATEGORIES_FILE = path.join(__dirname, "..", "catalog_categories.json");
 const PRODUCTS_FILE   = path.join(__dirname, "..", "company_products.json");
@@ -149,15 +150,36 @@ async function handle(req, res, { method, p, parts }) {
 
   // ── CATÁLOGO COMPLETO PARA COTIZACIÓN ─────────────────────────────────────
   // GET /api/companies/:id/catalog
+  // v52: combina DOS almacenes que antes vivían desconectados —
+  //   1. company_products.json (los que el admin carga en el tab Catálogo)
+  //   2. company.products[] embebido en companies.json (los que la propia
+  //      empresa carga desde su panel "Productos")
+  // Sin esta unión, los productos que la empresa subía nunca aparecían en el
+  // selector de materiales de la cotización.
   if (method === "GET" && parts[0]==="api" && parts[1]==="companies" && parts[2] && parts[3]==="catalog" && !parts[4]) {
     const cats = loadCategories().filter(c => c.companyId === parts[2]);
     const prods = loadProducts().filter(p => p.companyId === parts[2] && p.available && !p.discontinued);
-    // Enriquecer productos con nombre de ruta de categoría para el combo de cotización
     const enriched = prods.map(pr => ({
       ...pr,
       categoryPath: pr.categoryId ? catPathName(pr.categoryId, cats) : ""
     }));
-    sendJson(res, 200, { categories: cats, products: enriched });
+    // Productos propios del panel de la empresa (formato embebido → formato del combo)
+    const company = findCompanyById(parts[2]);
+    const own = (company?.products || [])
+      .filter(pr => pr.status !== "inactive" && pr.availability !== "out_of_stock")
+      .map(pr => ({
+        id: pr.id,
+        name: pr.name,
+        brand: pr.brand || "",
+        thickness: pr.thickness || "",
+        color: pr.color || "",
+        presentation: pr.presentation || "",
+        price: Number(pr.salePrice) > 0 ? Number(pr.salePrice) : Number(pr.price) || 0,
+        categoryPath: [pr.category, pr.subcategory].filter(Boolean).join(" › ")
+      }));
+    // Evitar duplicados si el mismo id existiera en ambos almacenes
+    const seen = new Set(enriched.map(p => p.id));
+    sendJson(res, 200, { categories: cats, products: [...enriched, ...own.filter(p => !seen.has(p.id))] });
     return true;
   }
 
