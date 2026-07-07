@@ -127,6 +127,8 @@ async function handle(req, res, { method, p, parts, getCallerIdentity }) {
     const user = freeUsers.find(x => x.accessCode === code);
     if (!user) { sendJson(res, 401, { error: "Código no válido." }); return true; }
     if (!verifyPassword(password, user.passwordSalt, user.passwordHash)) { sendJson(res, 401, { error: "Contraseña incorrecta." }); return true; }
+    // v52.3: una cuenta suspendida por el admin no puede iniciar sesión
+    if (user.status && user.status !== "active") { sendJson(res, 401, { error: "Tu cuenta está suspendida. Contacta a PiLLA." }); return true; }
     user.lastAccessAt = new Date().toISOString();
     saveFreeUsers(freeUsers);
     const token = createFreeUserSession(user.id);
@@ -242,6 +244,64 @@ async function handle(req, res, { method, p, parts, getCallerIdentity }) {
     retazo.status = "removed";
     saveRetazos(retazos);
     logActivity({ actorType: "admin", action: "retazo.removed_by_admin", meta: { id: retazo.id } });
+    sendJson(res, 200, { ok: true });
+    return true;
+  }
+
+  // ── Consumidores (admin) — v52.3 ─────────────────────────────────────────
+  // Las cuentas de consumidor (usuarios gratuitos) son la base de clientes
+  // finales de la plataforma: el admin las lista, edita, suspende, les genera
+  // contraseña nueva y las elimina desde la pestaña "Consumidores".
+
+  // GET /api/admin/free-users — todos, sin hashes de contraseña
+  if (method === "GET" && p === "/api/admin/free-users") {
+    if (!requireAdmin(req, res)) return true;
+    sendJson(res, 200, freeUsers.map(publicFreeUser));
+    return true;
+  }
+
+  // PUT /api/admin/free-users/:id — editar datos / estado
+  if (method === "PUT" && parts[0] === "api" && parts[1] === "admin" && parts[2] === "free-users" && parts[3] && !parts[4]) {
+    if (!requireAdmin(req, res)) return true;
+    const user = freeUsers.find(x => x.id === parts[3]);
+    if (!user) { sendJson(res, 404, { error: "No encontrado." }); return true; }
+    const body = await readBody(req);
+    const data = body ? JSON.parse(body) : {};
+    for (const field of ["name", "phone", "email"]) {
+      if (data[field] !== undefined) user[field] = String(data[field]).trim();
+    }
+    if (data.status === "active" || data.status === "suspended") user.status = data.status;
+    saveFreeUsers(freeUsers);
+    logActivity({ actorType: "admin", action: "free_user.edited", meta: { id: user.id, name: user.name } });
+    sendJson(res, 200, publicFreeUser(user));
+    return true;
+  }
+
+  // PUT /api/admin/free-users/:id/password — nueva contraseña
+  if (method === "PUT" && parts[0] === "api" && parts[1] === "admin" && parts[2] === "free-users" && parts[3] && parts[4] === "password") {
+    if (!requireAdmin(req, res)) return true;
+    const user = freeUsers.find(x => x.id === parts[3]);
+    if (!user) { sendJson(res, 404, { error: "No encontrado." }); return true; }
+    const body = await readBody(req);
+    const data = body ? JSON.parse(body) : {};
+    if (!data.password || String(data.password).length < 4) { sendJson(res, 400, { error: "La contraseña necesita al menos 4 caracteres." }); return true; }
+    const { salt, hash } = hashPassword(String(data.password));
+    user.passwordSalt = salt;
+    user.passwordHash = hash;
+    saveFreeUsers(freeUsers);
+    logActivity({ actorType: "admin", action: "free_user.password_changed", meta: { id: user.id, name: user.name } });
+    sendJson(res, 200, { ok: true });
+    return true;
+  }
+
+  // DELETE /api/admin/free-users/:id — eliminar la cuenta
+  if (method === "DELETE" && parts[0] === "api" && parts[1] === "admin" && parts[2] === "free-users" && parts[3]) {
+    if (!requireAdmin(req, res)) return true;
+    const user = freeUsers.find(x => x.id === parts[3]);
+    if (!user) { sendJson(res, 404, { error: "No encontrado." }); return true; }
+    freeUsers = freeUsers.filter(x => x.id !== parts[3]);
+    saveFreeUsers(freeUsers);
+    logActivity({ actorType: "admin", action: "free_user.deleted", meta: { id: user.id, name: user.name } });
     sendJson(res, 200, { ok: true });
     return true;
   }

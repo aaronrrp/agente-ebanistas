@@ -660,7 +660,8 @@ const ADMIN_TAB_LOADERS = {
   valoraciones: loadAdminRatingsTab,
   catalogo: loadAdminCatalogTab,
   ubicaciones: loadAdminLocationsTab,
-  consumoia: loadAdminAiUsageTab
+  consumoia: loadAdminAiUsageTab,
+  consumidores: loadAdminConsumersTab
 };
 
 function showAdminTab(tabId) {
@@ -12519,3 +12520,110 @@ document.getElementById("cg_loginPassword")?.addEventListener("keydown", e => {
 // Profesionales y el usuario nunca veía el login — v52.2 lo corrige.)
 document.getElementById("homeConsumerRegisterBtn")?.addEventListener("click", () => showConsumerGate("register"));
 document.getElementById("homeConsumerLoginBtn")?.addEventListener("click", () => showConsumerGate("login"));
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ADMIN — Consumidores (v52.3: control total de la base de clientes finales)
+// ═════════════════════════════════════════════════════════════════════════════
+
+let _admConsumersCache = [];
+
+async function loadAdminConsumersTab() {
+  const listEl = document.getElementById("adm_consumersList");
+  const sumEl = document.getElementById("adm_consumersSummary");
+  if (!listEl) return;
+  listEl.innerHTML = '<p class="login-hint">Cargando…</p>';
+  try {
+    const res = await fetch("/api/admin/free-users", { headers: adminAuthHeaderAdmin() });
+    if (!res.ok) { listEl.innerHTML = '<p class="login-hint">No se pudo cargar la lista.</p>'; return; }
+    _admConsumersCache = await res.json();
+
+    const ahora = Date.now();
+    const d7 = ahora - 7 * 86400000, d30 = ahora - 30 * 86400000;
+    const total = _admConsumersCache.length;
+    const nuevos7 = _admConsumersCache.filter(u => new Date(u.createdAt).getTime() > d7).length;
+    const activos30 = _admConsumersCache.filter(u => u.lastAccessAt && new Date(u.lastAccessAt).getTime() > d30).length;
+    const suspendidos = _admConsumersCache.filter(u => u.status === "suspended").length;
+    if (sumEl) sumEl.innerHTML = `
+      <article class="metric-card"><span>Total registrados</span><strong>${total}</strong></article>
+      <article class="metric-card"><span>Nuevos (7 días)</span><strong>${nuevos7}</strong></article>
+      <article class="metric-card"><span>Activos (30 días)</span><strong>${activos30}</strong></article>
+      <article class="metric-card"><span>Suspendidos</span><strong>${suspendidos}</strong></article>`;
+
+    _renderAdminConsumersList();
+  } catch { listEl.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>'; }
+}
+
+function _renderAdminConsumersList() {
+  const listEl = document.getElementById("adm_consumersList");
+  if (!listEl) return;
+  const q = (document.getElementById("adm_consumersSearch")?.value || "").toLowerCase().trim();
+  const list = _admConsumersCache.filter(u => !q ||
+    (u.name || "").toLowerCase().includes(q) ||
+    (u.accessCode || "").toLowerCase().includes(q) ||
+    (u.phone || "").toLowerCase().includes(q) ||
+    (u.email || "").toLowerCase().includes(q));
+  if (!list.length) {
+    listEl.innerHTML = `<p class="login-hint">${q ? "Sin resultados para esa búsqueda." : "Todavía no hay consumidores registrados — aparecerán aquí cuando la gente cree su cuenta para buscar."}</p>`;
+    return;
+  }
+  const fmt = d => d ? new Date(d).toLocaleDateString("es-PA", { day: "numeric", month: "short", year: "numeric" }) : "—";
+  listEl.innerHTML = list
+    .slice()
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+    .map(u => `
+    <div class="admin-entity-row" data-consumer-id="${u.id}">
+      <div class="admin-entity-info">
+        <strong>${escapeHtml(u.name || "(sin nombre)")} ${statusBadgeHtml(u.status || "active")}</strong>
+        <span>Código: <code>${escapeHtml(u.accessCode || "—")}</code>${u.phone ? " · 📱 " + escapeHtml(u.phone) : ""}${u.email ? " · ✉️ " + escapeHtml(u.email) : ""}</span>
+        <span>Registro: ${fmt(u.createdAt)} · Último acceso: ${fmt(u.lastAccessAt)}</span>
+      </div>
+      <div class="admin-entity-actions">
+        <button class="tiny-btn" type="button" data-consumer-action="edit" data-id="${u.id}">✏️ Editar</button>
+        <button class="tiny-btn" type="button" data-consumer-action="password" data-id="${u.id}">🔑 Contraseña</button>
+        ${u.status === "suspended"
+          ? `<button class="tiny-btn" type="button" data-consumer-action="activate" data-id="${u.id}">▶ Activar</button>`
+          : `<button class="tiny-btn" type="button" data-consumer-action="suspend" data-id="${u.id}">⏸ Suspender</button>`}
+        <button class="tiny-btn danger" type="button" data-consumer-action="delete" data-id="${u.id}">🗑 Eliminar</button>
+      </div>
+    </div>`).join("");
+}
+
+document.getElementById("adm_consumersSearch")?.addEventListener("input", _renderAdminConsumersList);
+document.getElementById("adm_refreshConsumersBtn")?.addEventListener("click", loadAdminConsumersTab);
+
+document.getElementById("adm_consumersList")?.addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-consumer-action]");
+  if (!btn) return;
+  const id = btn.dataset.id;
+  const user = _admConsumersCache.find(u => u.id === id);
+  if (!user) return;
+  const action = btn.dataset.consumerAction;
+
+  if (action === "edit") {
+    const name = prompt("Nombre:", user.name || "");
+    if (name === null) return;
+    const phone = prompt("Teléfono/WhatsApp:", user.phone || "");
+    if (phone === null) return;
+    const email = prompt("Correo:", user.email || "");
+    if (email === null) return;
+    const r = await fetch(`/api/admin/free-users/${id}`, { method: "PUT", headers: adminAuthHeaderAdmin(), body: JSON.stringify({ name, phone, email }) });
+    if (r.ok) { toast("Consumidor actualizado ✓"); loadAdminConsumersTab(); } else toast("No se pudo guardar.", "error");
+  }
+  else if (action === "password") {
+    const nueva = _admGenPassword();
+    const r = await fetch(`/api/admin/free-users/${id}/password`, { method: "PUT", headers: adminAuthHeaderAdmin(), body: JSON.stringify({ password: nueva }) });
+    if (r.ok) {
+      alert(`🔑 Nueva contraseña para ${user.name}\n\nCódigo de acceso: ${user.accessCode}\nContraseña: ${nueva}\n\nCópiala AHORA — no se volverá a mostrar.`);
+    } else toast("No se pudo cambiar la contraseña.", "error");
+  }
+  else if (action === "suspend" || action === "activate") {
+    const status = action === "suspend" ? "suspended" : "active";
+    const r = await fetch(`/api/admin/free-users/${id}`, { method: "PUT", headers: adminAuthHeaderAdmin(), body: JSON.stringify({ status }) });
+    if (r.ok) { toast(status === "suspended" ? "Cuenta suspendida" : "Cuenta activada ✓"); loadAdminConsumersTab(); } else toast("No se pudo cambiar el estado.", "error");
+  }
+  else if (action === "delete") {
+    if (!confirm(`¿Eliminar la cuenta de "${user.name}"? Esta acción no se puede deshacer.`)) return;
+    const r = await fetch(`/api/admin/free-users/${id}`, { method: "DELETE", headers: adminAuthHeaderAdmin() });
+    if (r.ok) { toast("Cuenta eliminada"); loadAdminConsumersTab(); } else toast("No se pudo eliminar.", "error");
+  }
+});
