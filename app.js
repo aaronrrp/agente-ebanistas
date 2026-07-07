@@ -8658,7 +8658,15 @@ async function loadPublicDirectory() {
   if (specialty) params.set("specialty", specialty);
   params.set("sort", sort);
   try {
-    const res = await fetch(`/api/professionals?${params.toString()}`);
+    const res = await fetch(`/api/professionals?${params.toString()}`, { headers: publicAuthHeader() });
+    if (res.status === 401) {
+      // Sesión inexistente o vencida — el servidor exige cuenta para buscar
+      _publicPostAuth = null;
+      sessionStorage.removeItem("publicPostAuth");
+      grid.innerHTML = "";
+      showConsumerGate("register");
+      return;
+    }
     const list = res.ok ? await res.json() : [];
     if (!list.length) { grid.innerHTML = '<p class="login-hint">No hay profesionales que coincidan todavía — sé el primero en registrarte.</p>'; return; }
     grid.innerHTML = list.map(p => {
@@ -8801,14 +8809,42 @@ function publicNavGo(nav) {
 // entran por showPublicDirectorio() directo para no romper compartir/QR.
 let _pendingNav = null;
 
+// Solo cuentan sesiones VALIDADAS: los campos AUTH.* se llenan únicamente tras
+// confirmar el token con el servidor (tryAutoLogin/login), y _publicPostAuth se
+// valida al arrancar (ver _validatePublicPostAuth). Antes se miraban tokens
+// crudos de sessionStorage y cualquier token viejo/vencido saltaba el registro.
 function hasPublicSession() {
   return Boolean(
     _publicPostAuth?.token || AUTH.token || AUTH.ebToken || AUTH.sellerToken ||
-    AUTH.proToken || AUTH.coToken ||
-    sessionStorage.getItem("proToken") || sessionStorage.getItem("coToken") ||
-    sessionStorage.getItem("ebToken") || sessionStorage.getItem("sellerToken") ||
-    sessionStorage.getItem("ebAdminToken")
+    AUTH.proToken || AUTH.coToken
   );
+}
+
+// Mejor token disponible para las búsquedas protegidas del directorio
+function publicAuthHeader() {
+  const token = _publicPostAuth?.token || AUTH.token || AUTH.ebToken || AUTH.sellerToken || AUTH.proToken || AUTH.coToken;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+// Al cargar la página, si quedó una sesión de consumidor guardada se comprueba
+// contra el servidor; si ya no vale (p.ej. Render se reinició) se descarta para
+// que el registro vuelva a pedirse.
+async function _validatePublicPostAuth() {
+  if (!_publicPostAuth?.token) return;
+  const checkUrls = {
+    usuario_gratuito: "/api/auth/free-user/check",
+    professional: "/api/auth/professional/check",
+    company: "/api/auth/company/check",
+    ebanista: "/api/auth/ebanista/check",
+    vendedor: "/api/auth/seller/check"
+  };
+  const url = checkUrls[_publicPostAuth.role];
+  if (!url) { _publicPostAuth = null; sessionStorage.removeItem("publicPostAuth"); return; }
+  try {
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${_publicPostAuth.token}` } });
+    const data = res.ok ? await res.json() : null;
+    if (!data?.valid) { _publicPostAuth = null; sessionStorage.removeItem("publicPostAuth"); }
+  } catch {} // sin conexión: no descartar — se reintenta en la próxima carga
 }
 
 function showConsumerGate(mode = "register", pending = null) {
@@ -9903,6 +9939,9 @@ async function tryAutoLogin() {
   }
 
   // ── 3. Sin sesión válida → directorio público por defecto
+  // Antes de decidir, validar la sesión de consumidor guardada (si el token ya
+  // murió, el gate de registro debe volver a aparecer).
+  await _validatePublicPostAuth();
   // Detectar URLs amigables /p/:slug o /c/:slug para abrir el perfil directo
   const _ppParts = window.location.pathname.split("/").filter(Boolean);
   if (_ppParts.length === 2 && (_ppParts[0] === "p" || _ppParts[0] === "c")) {
@@ -12475,12 +12514,8 @@ document.getElementById("cg_loginPassword")?.addEventListener("keydown", e => {
   if (e.key === "Enter") document.getElementById("cg_loginBtn").click();
 });
 
-// CTAs de la portada
-document.getElementById("homeConsumerRegisterBtn")?.addEventListener("click", () => {
-  if (hasPublicSession()) { toast("Ya tienes una sesión activa ✓"); publicNavGo("profesionales"); return; }
-  showConsumerGate("register");
-});
-document.getElementById("homeConsumerLoginBtn")?.addEventListener("click", () => {
-  if (hasPublicSession()) { toast("Ya tienes una sesión activa ✓"); publicNavGo("profesionales"); return; }
-  showConsumerGate("login");
-});
+// CTAs de la portada — siempre abren su formulario. (Antes, si quedaba
+// cualquier token viejo en el navegador, "Ya tengo cuenta" saltaba directo a
+// Profesionales y el usuario nunca veía el login — v52.2 lo corrige.)
+document.getElementById("homeConsumerRegisterBtn")?.addEventListener("click", () => showConsumerGate("register"));
+document.getElementById("homeConsumerLoginBtn")?.addEventListener("click", () => showConsumerGate("login"));

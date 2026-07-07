@@ -8,7 +8,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { sendJson, readBody, getToken, hashPassword, verifyPassword, generatePassword, todayIso, requireAdmin, atomicWrite, checkRateLimit, getClientIp, registerSessionChecker, registerSessionSweep } = require("../lib/shared.js");
+const { sendJson, readBody, getToken, hashPassword, verifyPassword, generatePassword, todayIso, requireAdmin, atomicWrite, checkRateLimit, getClientIp, registerSessionChecker, registerSessionSweep, isAnyValidSession } = require("../lib/shared.js");
 const { logActivity } = require("../lib/activity-log.js");
 
 const PROFESSIONALS_FILE = path.join(__dirname, "..", "professionals.json");
@@ -106,8 +106,16 @@ async function handle(req, res, { method, p, parts }) {
     return true;
   }
 
-  // GET /api/professionals — listado público filtrable
+  // GET /api/professionals — listado filtrable
+  // v52.2: BUSCAR profesionales exige cuenta (base de consumidores finales).
+  // Vale cualquier sesión: consumidor, profesional, empresa, ebanista, vendedor
+  // o admin. Los perfiles individuales (slug/:id) siguen públicos para que los
+  // enlaces compartidos y el QR funcionen sin registro.
   if (method === "GET" && p === "/api/professionals") {
+    if (!isAnyValidSession(getToken(req))) {
+      sendJson(res, 401, { error: "Regístrate gratis para buscar profesionales." });
+      return true;
+    }
     const q = Object.fromEntries(new URL(req.url, "http://x").searchParams);
     const list = professionals.filter(prof => matchesFilters(prof, q)).map(publicProfessionalForListing);
     const sort = q.sort || "recent";
