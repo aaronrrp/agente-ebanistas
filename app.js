@@ -8547,6 +8547,8 @@ const PROFESSIONAL_CATEGORIES = [
   { value: "vidriero", label: "Vidriero" },
   { value: "tecnico_ac", label: "Técnico de aire acondicionado" },
   { value: "disenador_interiores", label: "Diseñador de interiores" },
+  { value: "arquitecto", label: "Arquitecto" },
+  { value: "acarreos", label: "Acarreos / Transporte" },
   { value: "otra", label: "Otra especialidad" }
 ];
 
@@ -10359,8 +10361,12 @@ async function openProProfileModal(professionalId) {
           ${p.company ? `<p style="margin:0 0 2px;font-size:.88rem;color:var(--muted)">${escapeHtml(p.company)}</p>` : ""}
           <p style="margin:0 0 6px;font-size:.85rem">${escapeHtml(professionalCategoryLabel(p.category))}${p.specialty ? " · " + escapeHtml(p.specialty) : ""}</p>
           <div class="star-display">${avgStars}</div>
+          ${p.idoneidad?.has
+            ? `<span style="display:inline-flex;align-items:center;gap:4px;margin-top:6px;background:#dcfce7;color:#15803d;border-radius:999px;padding:3px 10px;font-size:.76rem;font-weight:700">✓ Idoneidad verificada${p.idoneidad.number ? " · N° " + escapeHtml(p.idoneidad.number) : ""}</span>`
+            : `<span style="display:inline-block;margin-top:6px;color:var(--muted);font-size:.76rem">Sin idoneidad registrada</span>`}
         </div>
       </div>
+      ${p.idoneidad?.has && p.idoneidad.photoUrl ? `<a href="${escapeHtml(p.idoneidad.photoUrl)}" target="_blank" rel="noopener" style="font-size:.82rem;display:inline-block;margin:0 0 10px">📄 Ver documento de idoneidad</a>` : ""}
       ${p.description ? `<p style="font-size:.88rem;line-height:1.5;margin:0 0 12px">${escapeHtml(p.description)}</p>` : ""}
       <div class="form-grid" style="margin-bottom:12px">
         ${p.experienceYears ? `<div><strong style="font-size:.8rem;color:var(--muted)">EXPERIENCIA</strong><p style="margin:2px 0;font-size:.9rem">${p.experienceYears} año${p.experienceYears !== 1 ? "s" : ""}</p></div>` : ""}
@@ -11868,6 +11874,16 @@ function renderProMiPerfil() {
           </label>
         </div>
       </div>
+
+      <!-- Estado del perfil: el profesional decide si aparece en el directorio -->
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--surface-soft);border:1px solid var(--line);border-radius:10px;margin-bottom:16px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;font-weight:600">
+          <input id="proPf_active" type="checkbox" ${p.active === false ? "" : "checked"} style="width:18px;height:18px;cursor:pointer">
+          Perfil activo (visible en el directorio)
+        </label>
+        <span class="login-hint" style="margin:0">Desactívalo si no quieres recibir contactos por ahora.</span>
+      </div>
+
       <div class="form-grid">
         <label>Categoría
           <select id="proPf_category">${PROFESSIONAL_CATEGORIES.map(c => `<option value="${c.value}"${c.value === p.category ? " selected" : ""}>${c.label}</option>`).join("")}</select>
@@ -11921,6 +11937,32 @@ function renderProMiPerfil() {
           <input id="proPf_website" type="url" value="${escapeHtml(p.socialLinks?.website || "")}">
         </label>
       </div>
+
+      <!-- Idoneidad: licencia profesional -->
+      <div style="margin-top:16px;padding:14px;background:var(--surface-soft);border:1px solid var(--line);border-radius:10px">
+        <h4 style="margin:0 0 8px">Idoneidad profesional</h4>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0 0 10px;font-weight:600">
+          <input id="proPf_idoHas" type="checkbox" ${p.idoneidad?.has ? "checked" : ""} style="width:18px;height:18px;cursor:pointer">
+          Cuento con idoneidad / licencia profesional
+        </label>
+        <div id="proPf_idoDetails" class="${p.idoneidad?.has ? "" : "hidden"}">
+          <div class="form-grid">
+            <label>Número de idoneidad
+              <input id="proPf_idoNumber" type="text" value="${escapeHtml(p.idoneidad?.number || "")}" placeholder="Ej: 12345-2020">
+            </label>
+            <div>
+              <span style="font-size:.82rem;color:var(--muted)">Foto/escaneo del documento</span>
+              <div id="proPf_idoPreview" style="width:100%;height:120px;border-radius:8px;overflow:hidden;background:var(--surface);border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;margin-top:4px">
+                ${p.idoneidad?.photoUrl ? `<img src="${escapeHtml(p.idoneidad.photoUrl)}" alt="" style="width:100%;height:100%;object-fit:contain">` : '<span class="login-hint">Sin documento</span>'}
+              </div>
+              <label class="tiny-btn" style="cursor:pointer;display:inline-block;margin-top:6px">📄 Subir documento
+                <input id="proPf_idoFile" type="file" accept="image/*" style="display:none">
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <p id="proPf_error" class="login-error hidden"></p>
       <p id="proPf_ok" class="hidden" style="color:#16a34a;margin-top:8px">Cambios guardados ✓</p>
     </div>`;
@@ -11954,7 +11996,25 @@ function renderProMiPerfil() {
     } catch (err) { toast(err.message || "No se pudo procesar la foto.", "error"); }
     finally { e.target.value = ""; }
   });
+
+  // Idoneidad: mostrar/ocultar detalles y subir documento
+  _proIdoPhotoUrl = p.idoneidad?.photoUrl || "";
+  document.getElementById("proPf_idoHas")?.addEventListener("change", (e) => {
+    document.getElementById("proPf_idoDetails")?.classList.toggle("hidden", !e.target.checked);
+  });
+  document.getElementById("proPf_idoFile")?.addEventListener("change", async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    toast("Procesando documento…");
+    try {
+      _proIdoPhotoUrl = await smartUploadImage(file, "idoneidad", proAuthHeader);
+      document.getElementById("proPf_idoPreview").innerHTML = `<img src="${escapeHtml(_proIdoPhotoUrl)}" alt="" style="width:100%;height:100%;object-fit:contain">`;
+      toast("Documento cargado — guarda los cambios para aplicarlo ✓");
+    } catch (err) { toast(err.message || "No se pudo procesar el documento.", "error"); }
+    finally { e.target.value = ""; }
+  });
 }
+let _proIdoPhotoUrl = "";
 
 document.getElementById("proSavePerfilBtn")?.addEventListener("click", async () => {
   const errEl = document.getElementById("proPf_error");
@@ -11982,6 +12042,12 @@ document.getElementById("proSavePerfilBtn")?.addEventListener("click", async () 
       instagram: document.getElementById("proPf_instagram")?.value.trim() || "",
       tiktok: document.getElementById("proPf_tiktok")?.value.trim() || "",
       website: document.getElementById("proPf_website")?.value.trim() || ""
+    },
+    active: document.getElementById("proPf_active")?.checked !== false,
+    idoneidad: {
+      has: Boolean(document.getElementById("proPf_idoHas")?.checked),
+      number: document.getElementById("proPf_idoNumber")?.value.trim() || "",
+      photoUrl: _proIdoPhotoUrl || ""
     }
   };
   try {

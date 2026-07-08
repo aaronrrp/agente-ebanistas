@@ -16,7 +16,7 @@ const PROFESSIONALS_FILE = path.join(__dirname, "..", "professionals.json");
 const CATEGORIES = [
   "ebanista", "carpintero", "plomero", "electricista", "gypsum", "remodelador",
   "pintor", "soldador", "marmolista", "instalador_cocinas", "instalador_muebles",
-  "vidriero", "tecnico_ac", "disenador_interiores", "otra"
+  "vidriero", "tecnico_ac", "disenador_interiores", "arquitecto", "acarreos", "otra"
 ];
 
 function loadProfessionals() {
@@ -88,6 +88,7 @@ function makeSlug(name, id) {
 
 function matchesFilters(p, q) {
   if (p.status !== "approved") return false;
+  if (p.active === false) return false; // perfil puesto en inactivo por el profesional
   if (q.name && !String(p.name || "").toLowerCase().includes(String(q.name).toLowerCase())) return false;
   if (q.category && p.category !== q.category) return false;
   if (q.province && p.location?.province !== q.province) return false;
@@ -156,6 +157,15 @@ async function handle(req, res, { method, p, parts }) {
       certifications: Array.isArray(data.certifications) ? data.certifications.slice(0, 20) : [],
       availability: ["available", "busy", "projects_only"].includes(data.availability) ? data.availability : "available",
       videos: Array.isArray(data.videos) ? data.videos.slice(0, 5) : [],
+      // v53: el profesional decide si su perfil se muestra en el directorio
+      active: data.active === false ? false : true,
+      // v53: idoneidad (licencia profesional de Panamá) — declara si la tiene,
+      // su número y una foto/escaneo del documento
+      idoneidad: {
+        has: Boolean(data.idoneidad?.has),
+        number: String(data.idoneidad?.number || "").trim().slice(0, 60),
+        photoUrl: data.idoneidad?.photoUrl || ""
+      },
       adminNote: "",
       ratings: { avg: 0, count: 0 },
       status: "pending",
@@ -229,6 +239,14 @@ async function handle(req, res, { method, p, parts }) {
       if (data[field] !== undefined) prof[field] = data[field];
     }
     if (CATEGORIES.includes(data.category)) prof.category = data.category;
+    if (data.active !== undefined) prof.active = Boolean(data.active);
+    if (data.idoneidad !== undefined) {
+      prof.idoneidad = {
+        has: Boolean(data.idoneidad?.has),
+        number: String(data.idoneidad?.number || "").trim().slice(0, 60),
+        photoUrl: data.idoneidad?.photoUrl || ""
+      };
+    }
     saveProfessionals(professionals);
     sendJson(res, 200, publicProfessional(prof));
     return true;
