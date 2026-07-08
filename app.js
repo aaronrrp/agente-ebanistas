@@ -3849,6 +3849,49 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+// ── Subida de imágenes robusta (v53) ─────────────────────────────────────────
+// Redimensiona la foto en el navegador (máx maxDim px, JPEG ~0.82) y luego:
+//   1. intenta subirla a Cloudinary vía /api/upload-image (si está configurado)
+//   2. si Cloudinary no está disponible (503) o falla, DEVUELVE el data URL
+//      redimensionado — que se guarda igual en el perfil y se muestra.
+// Así "poner fotos" funciona SIEMPRE, con o sin Cloudinary en Render.
+// authHeader: función que devuelve el header Authorization del rol actual.
+function _resizeImage(file, maxDim = 720, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("No se pudo leer el archivo."));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("Imagen inválida."));
+      img.onload = () => {
+        let { width: w, height: h } = img;
+        if (w > maxDim || h > maxDim) {
+          if (w >= h) { h = Math.round(h * maxDim / w); w = maxDim; }
+          else { w = Math.round(w * maxDim / h); h = maxDim; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function smartUploadImage(file, folder, authHeader) {
+  if (file.size > 15_000_000) throw new Error("La imagen es muy grande (máx 15 MB).");
+  const dataUrl = await _resizeImage(file, folder === "portfolio" ? 1000 : 720);
+  try {
+    const headers = Object.assign({ "Content-Type": "application/json" }, (typeof authHeader === "function" ? authHeader() : authHeader) || {});
+    const res = await fetch("/api/upload-image", { method: "POST", headers, body: JSON.stringify({ imageData: dataUrl, folder }) });
+    if (res.ok) { const d = await res.json(); if (d.url) return d.url; }
+    // 503 = Cloudinary no configurado → usar el data URL redimensionado
+  } catch {}
+  return dataUrl;
+}
+
 function renderAssistantOutput(item, prompt, plan = {}) {
   if (!els.assistantOutput) return;
   const pieces = generatePiecesForItem(item);
@@ -11894,32 +11937,22 @@ function renderProMiPerfil() {
       fillCitySelect(citySel, provSel.selectedOptions[0]?.dataset?.id || null, false));
   })();
 
-  // Foto de perfil — sube a Cloudinary via /api/upload-image
-  document.getElementById("proPf_photoFile")?.addEventListener("change", (e) => {
+  // Foto de perfil — redimensiona y sube (Cloudinary o data URL como respaldo)
+  document.getElementById("proPf_photoFile")?.addEventListener("change", async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 8_000_000) { toast("La foto debe ser menor a 8 MB.", "error"); e.target.value = ""; return; }
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      toast("Subiendo foto…");
-      try {
-        const res = await fetch("/api/upload-image", {
-          method: "POST", headers: proAuthHeader(),
-          body: JSON.stringify({ imageData: ev.target.result, folder: "professionals" })
-        });
-        const data = await res.json();
-        if (!res.ok) { toast(data.error || "No se pudo subir la foto.", "error"); return; }
-        const saveRes = await fetch("/api/professionals/me", { method: "PUT", headers: proAuthHeader(), body: JSON.stringify({ photoUrl: data.url }) });
-        if (saveRes.ok) {
-          AUTH.professionalData = await saveRes.json();
-          document.getElementById("proPf_photoPreview").innerHTML = `<img src="${escapeHtml(data.url)}" alt="" style="width:100%;height:100%;object-fit:cover">`;
-          const photoEl = document.getElementById("pro_sidebarPhoto");
-          if (photoEl) photoEl.innerHTML = `<img src="${escapeHtml(data.url)}" alt="" style="width:36px;height:36px;border-radius:8px;object-fit:cover">`;
-          toast("Foto actualizada ✓");
-        }
-      } catch { toast("Sin conexión al servidor.", "error"); }
-    };
-    reader.readAsDataURL(file);
+    toast("Procesando foto…");
+    try {
+      const url = await smartUploadImage(file, "professionals", proAuthHeader);
+      const saveRes = await fetch("/api/professionals/me", { method: "PUT", headers: proAuthHeader(), body: JSON.stringify({ photoUrl: url }) });
+      if (!saveRes.ok) { toast("No se pudo guardar la foto.", "error"); return; }
+      AUTH.professionalData = await saveRes.json();
+      document.getElementById("proPf_photoPreview").innerHTML = `<img src="${escapeHtml(url)}" alt="" style="width:100%;height:100%;object-fit:cover">`;
+      const photoEl = document.getElementById("pro_sidebarPhoto");
+      if (photoEl) photoEl.innerHTML = `<img src="${escapeHtml(url)}" alt="" style="width:36px;height:36px;border-radius:8px;object-fit:cover">`;
+      toast("Foto actualizada ✓");
+    } catch (err) { toast(err.message || "No se pudo procesar la foto.", "error"); }
+    finally { e.target.value = ""; }
   });
 }
 
@@ -12008,25 +12041,16 @@ function renderProPortfolio() {
     _proSavePortfolio([...(AUTH.professionalData.portfolioUrls || []), url]);
   });
 
-  document.getElementById("proPort_file")?.addEventListener("change", (e) => {
+  document.getElementById("proPort_file")?.addEventListener("change", async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 8_000_000) { toast("La foto debe ser menor a 8 MB.", "error"); e.target.value = ""; return; }
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      toast("Subiendo foto…");
-      try {
-        const res = await fetch("/api/upload-image", {
-          method: "POST", headers: proAuthHeader(),
-          body: JSON.stringify({ imageData: ev.target.result, folder: "portfolio" })
-        });
-        const data = await res.json();
-        if (!res.ok) { toast(data.error || "No se pudo subir la foto.", "error"); return; }
-        _proSavePortfolio([...(AUTH.professionalData.portfolioUrls || []), data.url]);
-        toast("Foto agregada ✓");
-      } catch { toast("Sin conexión al servidor.", "error"); }
-    };
-    reader.readAsDataURL(file);
+    toast("Procesando foto…");
+    try {
+      const url = await smartUploadImage(file, "portfolio", proAuthHeader);
+      _proSavePortfolio([...(AUTH.professionalData.portfolioUrls || []), url]);
+      toast("Foto agregada ✓");
+    } catch (err) { toast(err.message || "No se pudo procesar la foto.", "error"); }
+    finally { e.target.value = ""; }
   });
 }
 
