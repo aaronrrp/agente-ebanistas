@@ -8766,8 +8766,7 @@ document.getElementById("publicShowRegisterBtn")?.addEventListener("click", () =
   document.getElementById("publicRegisterView").classList.remove("hidden");
 });
 document.getElementById("publicBackToDirectoryBtn")?.addEventListener("click", () => {
-  document.getElementById("publicRegisterView").classList.add("hidden");
-  document.getElementById("publicDirectoryView").classList.remove("hidden");
+  showPublicDirectorio("inicio");
 });
 document.getElementById("pf_applyFiltersBtn")?.addEventListener("click", loadPublicDirectory);
 document.getElementById("pf_sortSelect")?.addEventListener("change", loadPublicDirectory);
@@ -8814,13 +8813,27 @@ document.getElementById("pf_submitRegisterBtn")?.addEventListener("click", async
     if (!res.ok) { errEl.textContent = data.error || "No se pudo registrar."; errEl.classList.remove("hidden"); return; }
     const firstName = (name || "").split(" ")[0];
     toast(`¡Registro enviado, ${firstName}! 🎉`);
-    alert(`¡Gracias por registrarte, ${firstName}!\n\nTu perfil profesional quedó EN REVISIÓN. Nuestro equipo lo revisará y, una vez aprobado, aparecerá en el directorio.\n\nTu código de acceso es:\n${data.accessCode}\n\nGuárdalo — con él y tu contraseña entras a tu panel desde "Iniciar sesión → Profesional".${payload.email ? "\n\nTambién te enviamos un correo de confirmación." : ""}`);
-    document.getElementById("publicRegisterView").classList.add("hidden");
-    showPublicDirectorio("inicio");
+    document.getElementById("pf_registerForm")?.classList.add("hidden");
+    const titleEl = document.getElementById("pf_successTitle");
+    if (titleEl) titleEl.textContent = `¡Gracias por registrarte, ${firstName}!`;
+    document.getElementById("pf_successCode").textContent = data.accessCode;
+    document.getElementById("pf_registerSuccess")?.classList.remove("hidden");
   } catch {
     errEl.textContent = "Sin conexión al servidor.";
     errEl.classList.remove("hidden");
   }
+});
+// Copiar código y continuar desde la pantalla de éxito del registro profesional
+document.getElementById("pf_copyCodeBtn")?.addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText(document.getElementById("pf_successCode")?.textContent); toast("Código copiado ✓"); } catch {}
+});
+document.getElementById("pf_successContinueBtn")?.addEventListener("click", () => {
+  // Restablecer el formulario para el próximo registro y volver al inicio
+  document.getElementById("pf_registerSuccess")?.classList.add("hidden");
+  document.getElementById("pf_registerForm")?.classList.remove("hidden");
+  ["pf_regName","pf_regCompany","pf_regSpecialty","pf_regExperience","pf_regPhone","pf_regWhatsapp","pf_regEmail","pf_regDescription","pf_regSchedule","pf_regPassword"]
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
+  showPublicDirectorio("inicio");
 });
 
 // ── Secciones de la parte pública ────────────────────────────────────────────
@@ -9036,8 +9049,7 @@ document.getElementById("publicShowCompanyRegisterBtn")?.addEventListener("click
   document.getElementById("publicCompanyRegisterView").classList.remove("hidden");
 });
 document.getElementById("publicBackToCompaniesBtn")?.addEventListener("click", () => {
-  document.getElementById("publicCompanyRegisterView").classList.add("hidden");
-  document.getElementById("publicCompaniesView").classList.remove("hidden");
+  showPublicDirectorio("inicio");
 });
 
 document.getElementById("co_submitRegisterBtn")?.addEventListener("click", async () => {

@@ -303,10 +303,12 @@
 
       <!-- Vista: registro de profesional -->
       <section id="publicRegisterView" class="hidden">
-        <button id="publicBackToDirectoryBtn" class="secondary-btn" type="button">← Volver al directorio</button>
+        <div style="max-width:560px;margin:1rem auto 0"><button id="publicBackToDirectoryBtn" class="secondary-btn" type="button">← Volver al inicio</button></div>
         <div class="subsection" style="max-width:560px;margin:1rem auto">
-          <h3>Registra tu perfil profesional</h3>
-          <p class="login-hint">Gratis. Tu perfil queda pendiente de aprobación antes de aparecer en el directorio.</p>
+          <div id="pf_registerForm">
+          <div style="text-align:center;margin-bottom:6px"><div style="font-size:2.4rem">👷</div></div>
+          <h3 style="margin:0;text-align:center">Regístrate como profesional</h3>
+          <p class="login-hint" style="text-align:center;margin:.4rem 0 1rem">Es <strong>gratis</strong>. Tu perfil queda en revisión y, una vez aprobado, aparece en el directorio para que los clientes te encuentren.</p>
           <div class="form-grid">
             <label>Nombre completo*
               <input id="pf_regName" type="text" required>
@@ -348,8 +350,22 @@
               <input id="pf_regPassword" type="password" required>
             </label>
           </div>
-          <button id="pf_submitRegisterBtn" class="primary-btn" type="button">Registrarme</button>
+          <button id="pf_submitRegisterBtn" class="primary-btn" type="button" style="width:100%;margin-top:4px">Registrarme</button>
           <p id="pf_registerError" class="login-error hidden"></p>
+          </div>
+
+          <div id="pf_registerSuccess" class="hidden" style="text-align:center;padding:1rem 0">
+            <div style="font-size:3rem">🎉</div>
+            <h3 id="pf_successTitle" style="margin:.5rem 0">¡Registro enviado!</h3>
+            <p style="margin:0 0 12px">Tu perfil profesional quedó <strong>en revisión</strong>. Una vez aprobado, aparecerá en el directorio y los clientes podrán contactarte.</p>
+            <p style="margin:0 0 6px;font-size:.88rem;color:var(--muted)">Guarda tu código de acceso — lo necesitas para entrar a tu panel:</p>
+            <div style="display:flex;gap:8px;justify-content:center;align-items:center;margin-bottom:6px">
+              <code id="pf_successCode" style="background:#fef9c3;border:1px solid #eab308;border-radius:8px;padding:8px 14px;font-size:1.05rem;font-weight:700"></code>
+              <button id="pf_copyCodeBtn" class="tiny-btn" type="button">Copiar</button>
+            </div>
+            <p class="login-hint" style="margin-bottom:14px">Entra desde "Iniciar sesión → Profesional" con este código y tu contraseña.</p>
+            <button id="pf_successContinueBtn" class="primary-btn" type="button" style="width:100%">Ir al inicio →</button>
+          </div>
         </div>
       </section>
 
@@ -383,18 +399,19 @@
 
       <!-- Vista: registro de empresa -->
       <section id="publicCompanyRegisterView" class="hidden">
-        <button id="publicBackToCompaniesBtn" class="secondary-btn" type="button">← Volver a empresas</button>
+        <div style="max-width:560px;margin:1rem auto 0"><button id="publicBackToCompaniesBtn" class="secondary-btn" type="button">← Volver al inicio</button></div>
         <div class="subsection" style="max-width:560px;margin:1rem auto">
           <div id="co_registerSuccess" class="hidden" style="text-align:center;padding:2rem 1rem">
             <div style="font-size:3rem;margin-bottom:1rem">🎉</div>
             <h3 style="margin:0 0 .75rem">¡Solicitud enviada!</h3>
             <p style="margin:0 0 .5rem">Tu empresa quedó <strong>en revisión</strong>. Una vez aprobada, aparecerá en el directorio y recibirás tus credenciales de acceso.</p>
             <p class="login-hint" style="margin:0 0 1.5rem">Te contactaremos por correo o WhatsApp para activarla.</p>
-            <button id="co_registerSuccessBackBtn" class="secondary-btn" type="button">← Volver al inicio</button>
+            <button id="co_registerSuccessBackBtn" class="primary-btn" type="button" style="width:100%">Ir al inicio →</button>
           </div>
           <div id="co_registerForm">
-            <h3>Registra tu empresa</h3>
-            <p class="login-hint">Gratis. Recibirás tus credenciales de acceso una vez que revisemos tu solicitud.</p>
+            <div style="text-align:center;margin-bottom:6px"><div style="font-size:2.4rem">🏢</div></div>
+            <h3 style="margin:0;text-align:center">Registra tu empresa</h3>
+            <p class="login-hint" style="text-align:center;margin:.4rem 0 1rem">Es <strong>gratis</strong>. Tu empresa queda en revisión y, al aprobarla, recibes tus credenciales y apareces en el directorio.</p>
             <div class="form-grid">
               <label>Nombre de la empresa*
                 <input id="co_regName" type="text" required>
@@ -427,7 +444,7 @@
                 <input id="co_regSchedule" type="text" placeholder="Ej: Lun-Vie 8am-6pm">
               </label>
             </div>
-            <button id="co_submitRegisterBtn" class="primary-btn" type="button">Registrar empresa</button>
+            <button id="co_submitRegisterBtn" class="primary-btn" type="button" style="width:100%;margin-top:4px">Registrar empresa</button>
             <p id="co_registerError" class="login-error hidden"></p>
           </div>
         </div>
