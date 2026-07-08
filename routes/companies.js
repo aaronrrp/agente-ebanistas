@@ -8,6 +8,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { sendJson, readBody, getToken, hashPassword, verifyPassword, generatePassword, requireAdmin, atomicWrite, checkRateLimit, getClientIp, registerSessionChecker, registerSessionSweep } = require("../lib/shared.js");
 const { logActivity } = require("../lib/activity-log.js");
+const { sendEmail, reviewPendingHtml, approvedHtml } = require("../lib/email.js");
 
 const COMPANIES_FILE = path.join(__dirname, "..", "companies.json");
 
@@ -143,6 +144,10 @@ async function handle(req, res, { method, p, parts }) {
     companies.push(company);
     saveCompanies(companies);
     logActivity({ actorType: "company", actorId: company.id, actorLabel: company.name, action: "company.registered", meta: { category: company.category } });
+    if (company.email) {
+      sendEmail({ to: company.email, subject: "Tu empresa en PiLLA está en revisión", html: reviewPendingHtml(company.name, "company") })
+        .catch(e => console.log("[email] company register:", e.message));
+    }
     sendJson(res, 201, { ok: true, message: "Solicitud recibida. Te contactaremos por correo o WhatsApp para activar tu cuenta." });
     return true;
   }
@@ -538,6 +543,7 @@ async function handle(req, res, { method, p, parts }) {
     const action = parts[4];
     if (action === "approve") {
       company.status = "approved";
+      if (company.email) sendEmail({ to: company.email, subject: "¡Tu empresa en PiLLA fue aprobada!", html: approvedHtml(company.name, "company", company.accessCode) }).catch(() => {});
       if (!company.accessCode) {
         const passwordPlain = generatePassword();
         const { salt, hash } = hashPassword(passwordPlain);

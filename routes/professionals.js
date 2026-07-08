@@ -10,6 +10,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { sendJson, readBody, getToken, hashPassword, verifyPassword, generatePassword, todayIso, requireAdmin, atomicWrite, checkRateLimit, getClientIp, registerSessionChecker, registerSessionSweep, isAnyValidSession } = require("../lib/shared.js");
 const { logActivity } = require("../lib/activity-log.js");
+const { sendEmail, reviewPendingHtml, approvedHtml } = require("../lib/email.js");
 
 const PROFESSIONALS_FILE = path.join(__dirname, "..", "professionals.json");
 
@@ -183,6 +184,11 @@ async function handle(req, res, { method, p, parts }) {
     professionals.push(professional);
     saveProfessionals(professionals);
     logActivity({ actorType: "professional", actorId: professional.id, actorLabel: professional.name, action: "professional.registered", meta: { category: professional.category } });
+    // Correo "en revisión" (no bloquea la respuesta; no-op si el correo no está configurado)
+    if (professional.email) {
+      sendEmail({ to: professional.email, subject: "Tu perfil en PiLLA está en revisión", html: reviewPendingHtml(professional.name, "professional") })
+        .catch(e => console.log("[email] pro register:", e.message));
+    }
     sendJson(res, 201, { ...publicProfessional(professional), passwordPlain });
     return true;
   }
@@ -341,7 +347,11 @@ async function handle(req, res, { method, p, parts }) {
     const action = parts[4];
     const body2 = ["feature", "request-changes"].includes(action) ? (await readBody(req)) : null;
     const d2 = body2 ? JSON.parse(body2) : {};
-    if (action === "approve") { prof.status = "approved"; logActivity({ actorType: "admin", action: "professional.approved", meta: { id: prof.id, name: prof.name } }); }
+    if (action === "approve") {
+      prof.status = "approved";
+      logActivity({ actorType: "admin", action: "professional.approved", meta: { id: prof.id, name: prof.name } });
+      if (prof.email) sendEmail({ to: prof.email, subject: "¡Tu perfil en PiLLA fue aprobado!", html: approvedHtml(prof.name, "professional", prof.accessCode) }).catch(() => {});
+    }
     else if (action === "reject") { prof.status = "rejected"; logActivity({ actorType: "admin", action: "professional.rejected", meta: { id: prof.id, name: prof.name } }); }
     else if (action === "suspend") { prof.status = "suspended"; logActivity({ actorType: "admin", action: "professional.suspended", meta: { id: prof.id, name: prof.name } }); }
     else if (action === "request-changes") {
