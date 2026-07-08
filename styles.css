@@ -2333,3 +2333,6 @@ input.hidden + .show-pw-toggle { display: none; }
 .home-card-icon { font-size: 2.3rem; line-height: 1; }
 .home-card strong { font-size: 1.05rem; }
 .home-card span:last-child { font-size: .85rem; color: var(--muted); line-height: 1.45; }
+
+/* Destacar la tarjeta de consumidores en el dashboard */
+.metric-card--accent { border: 1px solid var(--accent); background: var(--accent-soft); }

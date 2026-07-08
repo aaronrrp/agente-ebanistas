@@ -312,5 +312,6 @@ async function handle(req, res, { method, p, parts, getCallerIdentity }) {
 module.exports = {
   handle, MATERIALS, getFreeUserSession,
   getAllRetazos: () => retazos,
+  getAllFreeUsers: () => freeUsers,
   reload: () => { retazos = loadRetazos(); freeUsers = loadFreeUsers(); }
 };

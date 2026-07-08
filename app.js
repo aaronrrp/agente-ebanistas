@@ -694,6 +694,8 @@ async function loadAdminDashboard() {
       <article class="metric-card"><span>Pend. profesionales</span><strong>${d.professionals.pending}</strong></article>
       <article class="metric-card"><span>Empresas</span><strong>${d.companies.total}</strong></article>
       <article class="metric-card"><span>Pend. empresas</span><strong>${d.companies.pending}</strong></article>
+      <article class="metric-card metric-card--accent"><span>Consumidores</span><strong>${d.consumers?.total ?? 0}</strong></article>
+      <article class="metric-card"><span>Consumidores nuevos (7d)</span><strong>${d.consumers?.new7 ?? 0}</strong></article>
       <article class="metric-card"><span>Retazos activos</span><strong>${d.retazos.total}</strong></article>
       <article class="metric-card"><span>Envíos a vendedores</span><strong>${d.handoffs.total}</strong></article>`;
     activityEl.innerHTML = d.recentActivity.length
@@ -10755,16 +10757,16 @@ async function _deleteProduct(productId) {
   } catch { alert("Sin conexión."); }
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ════════════════════════════════════════════════════════════════════════════
 // PORTAL DE EMPRESA  (v45)
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ════════════════════════════════════════════════════════════════════════════
 
-// â”€â”€ Estado de sesiÃ³n de empresa â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Estado de sesión de empresa ──────────────────────────────────────────────
 AUTH.coToken = null;
 AUTH.companyId = null;
 AUTH.companyData = null;
 
-// â”€â”€ Muestra el portal de empresa â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Muestra el portal de empresa ─────────────────────────────────────────────
 function showCompanyShell() {
   document.getElementById("appLoading")?.remove();
   document.getElementById("loginScreen").style.display = "none";
@@ -10774,7 +10776,7 @@ function showCompanyShell() {
   document.getElementById("companyShell").style.display = "";
 }
 
-// â”€â”€ Login como empresa â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Login como empresa ────────────────────────────────────────────────────────
 function _loginAsCompany(company, token) {
   AUTH.mode = "company";
   AUTH.coToken = token;
@@ -10785,7 +10787,7 @@ function _loginAsCompany(company, token) {
   const nameEl = document.getElementById("co_sidebarName");
   if (nameEl) nameEl.textContent = company.name || "Mi Empresa";
   const logoEl = document.getElementById("co_sidebarLogo");
-  if (logoEl) logoEl.textContent = company.logoUrl ? "" : "ðŸ¢";
+  if (logoEl) logoEl.textContent = company.logoUrl ? "" : "🏢";
   if (company.logoUrl && logoEl) {
     logoEl.innerHTML = `<img src="${escapeHtml(company.logoUrl)}" alt="" style="width:36px;height:36px;border-radius:8px;object-fit:cover">`;
   }
@@ -10793,13 +10795,13 @@ function _loginAsCompany(company, token) {
   coShowView("coDashboard");
 }
 
-// â”€â”€ NavegaciÃ³n del panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Navegación del panel ──────────────────────────────────────────────────────
 const CO_VIEW_TITLES = {
   coDashboard: "Dashboard", coMiEmpresa: "Mi Empresa", coSucursales: "Sucursales",
-  coProductos: "Productos", coCategorias: "CategorÃ­as", coPromociones: "Promociones",
-  coPublicidad: "Publicidad", coPedidos: "Pedidos", coSolicitudes: "Solicitudes de CotizaciÃ³n",
-  coClientes: "Clientes", coEstadisticas: "EstadÃ­sticas", coPerfil: "Perfil PÃºblico",
-  coConfiguracion: "ConfiguraciÃ³n"
+  coProductos: "Productos", coCategorias: "Categorías", coPromociones: "Promociones",
+  coPublicidad: "Publicidad", coPedidos: "Pedidos", coSolicitudes: "Solicitudes de Cotización",
+  coClientes: "Clientes", coEstadisticas: "Estadísticas", coPerfil: "Perfil Público",
+  coConfiguracion: "Configuración"
 };
 
 function coShowView(viewId) {
@@ -10826,22 +10828,22 @@ function coShowView(viewId) {
   else if (viewId === "coConfiguracion") renderCoConfiguracion();
 }
 
-// â”€â”€ Sidebar nav click â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Sidebar nav click ─────────────────────────────────────────────────────────
 document.querySelectorAll(".co-nav-item[data-co-view]").forEach(btn => {
   btn.addEventListener("click", () => coShowView(btn.dataset.coView));
 });
 
-// â”€â”€ Mobile sidebar toggle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Mobile sidebar toggle ─────────────────────────────────────────────────────
 document.getElementById("coMenuBtn")?.addEventListener("click", () => {
   document.getElementById("companyShell")?.classList.toggle("co-open");
 });
 
-// â”€â”€ Helper: request header con token de empresa â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Helper: request header con token de empresa ───────────────────────────────
 function coAuthHeader() {
   return { Authorization: `Bearer ${AUTH.coToken || ""}`, "Content-Type": "application/json" };
 }
 
-// â”€â”€ Logout de empresa â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Logout de empresa ─────────────────────────────────────────────────────────
 async function coLogout() {
   if (AUTH.coToken) {
     try { await fetch("/api/auth/company/logout", { method: "POST", headers: coAuthHeader() }); } catch {}
@@ -10853,21 +10855,21 @@ async function coLogout() {
 }
 document.getElementById("coLogoutBtn")?.addEventListener("click", coLogout);
 
-// â”€â”€ Login con cÃ³digo + contraseÃ±a (empresa) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Login con código + contraseña (empresa) ────────────────────────────────────
 document.getElementById("loginCompanyBtn")?.addEventListener("click", async () => {
   const code = document.getElementById("loginCompanyCode").value.trim();
   const password = document.getElementById("loginCompanyPassword").value;
-  if (!code || !password) { setLoginError("Completa cÃ³digo y contraseÃ±a."); return; }
+  if (!code || !password) { setLoginError("Completa código y contraseña."); return; }
   try {
     const res = await fetch("/api/auth/company", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code, password })
     });
     const data = await res.json();
-    if (!res.ok) { setLoginError(data.error || "CÃ³digo o contraseÃ±a incorrectos."); return; }
+    if (!res.ok) { setLoginError(data.error || "Código o contraseña incorrectos."); return; }
     setLoginError("");
     _loginAsCompany(data.company, data.token);
-  } catch { setLoginError("Sin conexiÃ³n al servidor."); }
+  } catch { setLoginError("Sin conexión al servidor."); }
 });
 document.getElementById("loginCompanyCode")?.addEventListener("keydown", e => {
   if (e.key === "Enter") document.getElementById("loginCompanyBtn").click();
@@ -10876,19 +10878,19 @@ document.getElementById("loginCompanyPassword")?.addEventListener("keydown", e =
   if (e.key === "Enter") document.getElementById("loginCompanyBtn").click();
 });
 
-// â”€â”€ "â† Volver al inicio" en la pantalla de login â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── "← Volver al inicio" en la pantalla de login ──────────────────────────────
 document.getElementById("loginBackBtn")?.addEventListener("click", () => {
   showPublicDirectorio();
 });
 
-// â”€â”€ Public nav links â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Public nav links ──────────────────────────────────────────────────────────
 document.querySelectorAll("[data-public-nav]").forEach(btn => {
   btn.addEventListener("click", () => publicNavRequest(btn.dataset.publicNav));
 });
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ════════════════════════════════════════════════════════════════════════════
 // DASHBOARD
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ════════════════════════════════════════════════════════════════════════════
 async function renderCoDashboard() {
   const el = document.getElementById("coDashboardContent");
   if (!el) return;
@@ -10922,19 +10924,19 @@ async function renderCoDashboard() {
       </div>
     </div>
     <div class="co-section-card" style="margin-top:24px">
-      <h3 style="margin:0 0 8px">Accesos rÃ¡pidos</h3>
+      <h3 style="margin:0 0 8px">Accesos rápidos</h3>
       <div style="display:flex;flex-wrap:wrap;gap:8px">
-        <button class="secondary-btn" type="button" onclick="coShowView('coProductos')">ðŸ“¦ Agregar producto</button>
-        <button class="secondary-btn" type="button" onclick="coShowView('coPromociones')">ðŸ·ï¸ Nueva promociÃ³n</button>
-        <button class="secondary-btn" type="button" onclick="coShowView('coSucursales')">ðŸ“ Nueva sucursal</button>
-        <button class="secondary-btn" type="button" onclick="coShowView('coMiEmpresa')">ðŸ¢ Editar perfil</button>
+        <button class="secondary-btn" type="button" onclick="coShowView('coProductos')">📦 Agregar producto</button>
+        <button class="secondary-btn" type="button" onclick="coShowView('coPromociones')">🏷️ Nueva promoción</button>
+        <button class="secondary-btn" type="button" onclick="coShowView('coSucursales')">📍 Nueva sucursal</button>
+        <button class="secondary-btn" type="button" onclick="coShowView('coMiEmpresa')">🏢 Editar perfil</button>
       </div>
     </div>`;
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ════════════════════════════════════════════════════════════════════════════
 // MI EMPRESA
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ════════════════════════════════════════════════════════════════════════════
 async function renderCoMiEmpresa() {
   const el = document.getElementById("coMiEmpresaContent");
   if (!el) return;
@@ -10945,21 +10947,21 @@ async function renderCoMiEmpresa() {
     AUTH.companyData = c;
     el.innerHTML = `
       <div class="co-section-card">
-        <h3>InformaciÃ³n principal</h3>
+        <h3>Información principal</h3>
         <div class="form-grid">
           <label class="span-2">Nombre comercial*
             <input id="coE_name" type="text" value="${escapeHtml(c.name || "")}">
           </label>
-          <label class="span-2">RazÃ³n social
+          <label class="span-2">Razón social
             <input id="coE_businessName" type="text" value="${escapeHtml(c.businessName || "")}">
           </label>
-          <label>RUC / NÃºmero fiscal
+          <label>RUC / Número fiscal
             <input id="coE_ruc" type="text" value="${escapeHtml(c.ruc || "")}">
           </label>
-          <label>CategorÃ­a
-            <input id="coE_category" type="text" value="${escapeHtml(c.category || "")}" placeholder="Ej: ferreteria, muebleriaâ€¦">
+          <label>Categoría
+            <input id="coE_category" type="text" value="${escapeHtml(c.category || "")}" placeholder="Ej: ferreteria, muebleria…">
           </label>
-          <label class="span-2">DescripciÃ³n
+          <label class="span-2">Descripción
             <textarea id="coE_description" rows="3">${escapeHtml(c.description || "")}</textarea>
           </label>
         </div>
@@ -10967,7 +10969,7 @@ async function renderCoMiEmpresa() {
       <div class="co-section-card">
         <h3>Contacto</h3>
         <div class="form-grid">
-          <label>TelÃ©fono
+          <label>Teléfono
             <input id="coE_phone" type="text" value="${escapeHtml(c.phone || "")}">
           </label>
           <label>WhatsApp
@@ -10982,10 +10984,10 @@ async function renderCoMiEmpresa() {
           <label>Ciudad
             <input id="coE_city" type="text" value="${escapeHtml(c.location?.city || "")}">
           </label>
-          <label class="span-2">DirecciÃ³n
+          <label class="span-2">Dirección
             <input id="coE_address" type="text" value="${escapeHtml(c.location?.address || "")}">
           </label>
-          <label class="span-2">Horario de atenciÃ³n
+          <label class="span-2">Horario de atención
             <input id="coE_schedule" type="text" value="${escapeHtml(c.schedule || "")}" placeholder="Ej: Lun-Vie 8am-6pm">
           </label>
         </div>
@@ -11008,13 +11010,13 @@ async function renderCoMiEmpresa() {
         </div>
       </div>
       <div class="co-section-card">
-        <h3>ImÃ¡genes</h3>
+        <h3>Imágenes</h3>
         <div class="form-grid">
           <label class="span-2">URL de logo
-            <input id="coE_logoUrl" type="url" value="${escapeHtml(c.logoUrl || "")}" placeholder="https://â€¦">
+            <input id="coE_logoUrl" type="url" value="${escapeHtml(c.logoUrl || "")}" placeholder="https://…">
           </label>
           <label class="span-2">URL de imagen de portada
-            <input id="coE_coverUrl" type="url" value="${escapeHtml(c.coverUrl || "")}" placeholder="https://â€¦">
+            <input id="coE_coverUrl" type="url" value="${escapeHtml(c.coverUrl || "")}" placeholder="https://…">
           </label>
         </div>
       </div>
@@ -11022,7 +11024,7 @@ async function renderCoMiEmpresa() {
         <h3>Servicios y cobertura</h3>
         <div class="form-grid">
           <label class="span-2">Servicios que ofrece
-            <textarea id="coE_services" rows="3" placeholder="Ej: Venta de materiales, instalaciÃ³n, diseÃ±oâ€¦">${escapeHtml((c.services || []).join(", "))}</textarea>
+            <textarea id="coE_services" rows="3" placeholder="Ej: Venta de materiales, instalación, diseño…">${escapeHtml((c.services || []).join(", "))}</textarea>
           </label>
           <label class="span-2">Zonas de cobertura
             <input id="coE_coverage" type="text" value="${escapeHtml((c.coverage || []).join(", "))}" placeholder="Ej: Quito, Guayaquil, Cuenca">
@@ -11030,7 +11032,7 @@ async function renderCoMiEmpresa() {
         </div>
       </div>
       <p id="coEmpresaError" class="login-error hidden"></p>`;
-  } catch { el.innerHTML = '<p class="login-hint">Error de conexiÃ³n.</p>'; }
+  } catch { el.innerHTML = '<p class="login-hint">Error de conexión.</p>'; }
 }
 
 document.getElementById("coSaveEmpresaBtn")?.addEventListener("click", async () => {
@@ -11069,39 +11071,39 @@ document.getElementById("coSaveEmpresaBtn")?.addEventListener("click", async () 
     AUTH.companyData = data;
     const nameEl = document.getElementById("co_sidebarName");
     if (nameEl) nameEl.textContent = data.name || "Mi Empresa";
-    toast("Datos guardados âœ“");
-  } catch { if (errEl) { errEl.textContent = "Sin conexiÃ³n al servidor."; errEl.classList.remove("hidden"); } }
+    toast("Datos guardados ✓");
+  } catch { if (errEl) { errEl.textContent = "Sin conexión al servidor."; errEl.classList.remove("hidden"); } }
 });
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ════════════════════════════════════════════════════════════════════════════
 // SUCURSALES
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ════════════════════════════════════════════════════════════════════════════
 let _coBranchEditId = null;
 
 async function renderCoSucursales() {
   const el = document.getElementById("coSucursalesContent");
   if (!el) return;
-  el.innerHTML = '<p class="login-hint">Cargandoâ€¦</p>';
+  el.innerHTML = '<p class="login-hint">Cargando…</p>';
   try {
     const res = await fetch("/api/companies/me/branches", { headers: coAuthHeader() });
     const list = res.ok ? await res.json() : [];
-    if (!list.length) { el.innerHTML = '<p class="login-hint">AÃºn no tienes sucursales. Haz clic en "+ Nueva sucursal" para agregar la primera.</p>'; return; }
+    if (!list.length) { el.innerHTML = '<p class="login-hint">Aún no tienes sucursales. Haz clic en "+ Nueva sucursal" para agregar la primera.</p>'; return; }
     el.innerHTML = `<div class="co-branch-list">${list.map(b => `
       <div class="co-branch-card">
         <div style="flex:1">
           <strong>${escapeHtml(b.name)}</strong>
           <span class="co-branch-status-${b.status === "active" ? "active" : "inactive"}">${b.status === "active" ? "Activa" : "Inactiva"}</span>
-          ${b.address ? `<div style="font-size:.85rem;color:var(--muted)">ðŸ“ ${escapeHtml(b.address)}${b.city ? ", " + escapeHtml(b.city) : ""}</div>` : ""}
-          ${b.phone ? `<div style="font-size:.85rem;color:var(--muted)">ðŸ“ž ${escapeHtml(b.phone)}</div>` : ""}
-          ${b.schedule ? `<div style="font-size:.85rem;color:var(--muted)">ðŸ• ${escapeHtml(b.schedule)}</div>` : ""}
-          ${b.manager ? `<div style="font-size:.85rem;color:var(--muted)">ðŸ‘¤ ${escapeHtml(b.manager)}</div>` : ""}
+          ${b.address ? `<div style="font-size:.85rem;color:var(--muted)">📍 ${escapeHtml(b.address)}${b.city ? ", " + escapeHtml(b.city) : ""}</div>` : ""}
+          ${b.phone ? `<div style="font-size:.85rem;color:var(--muted)">📞 ${escapeHtml(b.phone)}</div>` : ""}
+          ${b.schedule ? `<div style="font-size:.85rem;color:var(--muted)">🕐 ${escapeHtml(b.schedule)}</div>` : ""}
+          ${b.manager ? `<div style="font-size:.85rem;color:var(--muted)">👤 ${escapeHtml(b.manager)}</div>` : ""}
         </div>
         <div style="display:flex;gap:6px;align-items:center">
           <button class="secondary-btn" data-edit-branch="${b.id}" type="button">Editar</button>
           <button class="secondary-btn" data-delete-branch="${b.id}" type="button" style="color:var(--red,#e53e3e)">Eliminar</button>
         </div>
       </div>`).join("")}</div>`;
-  } catch { el.innerHTML = '<p class="login-hint">Error de conexiÃ³n.</p>'; }
+  } catch { el.innerHTML = '<p class="login-hint">Error de conexión.</p>'; }
 }
 
 function coOpenBranchModal(branch) {
@@ -11130,7 +11132,7 @@ document.getElementById("coSucursalesContent")?.addEventListener("click", async 
     return;
   }
   const delId = e.target.closest("[data-delete-branch]")?.dataset.deleteBranch;
-  if (delId && confirm("Â¿Eliminar esta sucursal?")) {
+  if (delId && confirm("¿Eliminar esta sucursal?")) {
     await fetch(`/api/companies/me/branches/${delId}`, { method: "DELETE", headers: coAuthHeader() });
     renderCoSucursales();
   }
@@ -11164,7 +11166,7 @@ document.getElementById("coBranchSaveBtn")?.addEventListener("click", async () =
       const brRes = await fetch("/api/companies/me/branches", { headers: coAuthHeader() });
       if (brRes.ok) { const branches = await brRes.json(); c.branches = branches; renderCoDashboard(); }
     }
-  } catch { errEl.textContent = "Sin conexiÃ³n al servidor."; errEl.classList.remove("hidden"); }
+  } catch { errEl.textContent = "Sin conexión al servidor."; errEl.classList.remove("hidden"); }
 });
 
 ["coBranchModalClose", "coBranchModalClose2"].forEach(id => {
@@ -11174,25 +11176,25 @@ document.getElementById("coBranchModal")?.addEventListener("click", e => {
   if (e.target === document.getElementById("coBranchModal")) document.getElementById("coBranchModal").classList.add("hidden");
 });
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// CATEGORÃAS
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ════════════════════════════════════════════════════════════════════════════
+// CATEGORÍAS
+// ════════════════════════════════════════════════════════════════════════════
 let _coCatEditId = null;
 let _coCatList = [];
 
 async function renderCoCategorias() {
   const el = document.getElementById("coCategoriasContent");
   if (!el) return;
-  el.innerHTML = '<p class="login-hint">Cargandoâ€¦</p>';
+  el.innerHTML = '<p class="login-hint">Cargando…</p>';
   try {
     const res = await fetch("/api/companies/me/categories", { headers: coAuthHeader() });
     _coCatList = res.ok ? await res.json() : [];
-    if (!_coCatList.length) { el.innerHTML = '<p class="login-hint">Sin categorÃ­as. Agrega la primera con el botÃ³n de arriba.</p>'; return; }
+    if (!_coCatList.length) { el.innerHTML = '<p class="login-hint">Sin categorías. Agrega la primera con el botón de arriba.</p>'; return; }
     const roots = _coCatList.filter(c => !c.parentId);
     const children = _coCatList.filter(c => c.parentId);
     el.innerHTML = `<div class="co-cat-tree">${roots.map(r => `
       <div class="co-cat-row">
-        <span><strong>${escapeHtml(r.name)}</strong>${r.description ? ` â€” <span style="color:var(--muted);font-size:.85rem">${escapeHtml(r.description)}</span>` : ""}</span>
+        <span><strong>${escapeHtml(r.name)}</strong>${r.description ? ` — <span style="color:var(--muted);font-size:.85rem">${escapeHtml(r.description)}</span>` : ""}</span>
         <div style="display:flex;gap:6px">
           <button class="secondary-btn" data-edit-cat="${r.id}" type="button">Editar</button>
           <button class="secondary-btn" data-delete-cat="${r.id}" type="button" style="color:var(--red,#e53e3e)">Eliminar</button>
@@ -11200,25 +11202,25 @@ async function renderCoCategorias() {
       </div>
       ${children.filter(c => c.parentId === r.id).map(sub => `
       <div class="co-cat-child">
-        <span>â†³ ${escapeHtml(sub.name)}${sub.description ? ` â€” <span style="color:var(--muted);font-size:.8rem">${escapeHtml(sub.description)}</span>` : ""}</span>
+        <span>↳ ${escapeHtml(sub.name)}${sub.description ? ` — <span style="color:var(--muted);font-size:.8rem">${escapeHtml(sub.description)}</span>` : ""}</span>
         <div style="display:flex;gap:6px">
           <button class="secondary-btn" data-edit-cat="${sub.id}" type="button">Editar</button>
           <button class="secondary-btn" data-delete-cat="${sub.id}" type="button" style="color:var(--red,#e53e3e)">Eliminar</button>
         </div>
       </div>`).join("")}`).join("")}</div>`;
     _populateCatSelects();
-  } catch { el.innerHTML = '<p class="login-hint">Error de conexiÃ³n.</p>'; }
+  } catch { el.innerHTML = '<p class="login-hint">Error de conexión.</p>'; }
 }
 
 function _populateCatSelects() {
   const parentSel = document.getElementById("coCat_parent");
   if (parentSel) {
-    parentSel.innerHTML = '<option value="">â€” RaÃ­z â€”</option>' +
+    parentSel.innerHTML = '<option value="">— Raíz —</option>' +
       _coCatList.filter(c => !c.parentId).map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
   }
   const productCatSel = document.getElementById("coP_category");
   if (productCatSel) {
-    productCatSel.innerHTML = '<option value="">â€” Sin categorÃ­a â€”</option>' +
+    productCatSel.innerHTML = '<option value="">— Sin categoría —</option>' +
       _coCatList.filter(c => !c.parentId).map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
     _updateSubcategorySelect(productCatSel.value);
   }
@@ -11228,7 +11230,7 @@ function _updateSubcategorySelect(parentId) {
   const subSel = document.getElementById("coP_subcategory");
   if (!subSel) return;
   const subs = _coCatList.filter(c => c.parentId === parentId);
-  subSel.innerHTML = '<option value="">â€” Sin subcategorÃ­a â€”</option>' +
+  subSel.innerHTML = '<option value="">— Sin subcategoría —</option>' +
     subs.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
 }
 
@@ -11236,7 +11238,7 @@ document.getElementById("coP_category")?.addEventListener("change", e => _update
 
 function coOpenCatModal(cat) {
   _coCatEditId = cat?.id || null;
-  document.getElementById("coCatModalTitle").textContent = cat ? "Editar categorÃ­a" : "Nueva categorÃ­a";
+  document.getElementById("coCatModalTitle").textContent = cat ? "Editar categoría" : "Nueva categoría";
   document.getElementById("coCat_name").value = cat?.name || "";
   document.getElementById("coCat_description").value = cat?.description || "";
   const parentSel = document.getElementById("coCat_parent");
@@ -11259,7 +11261,7 @@ document.getElementById("coCategoriasContent")?.addEventListener("click", async 
   const editId = e.target.closest("[data-edit-cat]")?.dataset.editCat;
   if (editId) { coOpenCatModal(_coCatList.find(c => c.id === editId)); return; }
   const delId = e.target.closest("[data-delete-cat]")?.dataset.deleteCat;
-  if (delId && confirm("Â¿Eliminar esta categorÃ­a? Las subcategorÃ­as pasarÃ¡n a ser raÃ­z.")) {
+  if (delId && confirm("¿Eliminar esta categoría? Las subcategorías pasarán a ser raíz.")) {
     await fetch(`/api/companies/me/categories/${delId}`, { method: "DELETE", headers: coAuthHeader() });
     renderCoCategorias();
   }
@@ -11281,7 +11283,7 @@ document.getElementById("coCatSaveBtn")?.addEventListener("click", async () => {
     if (!res.ok) { errEl.textContent = data.error || "Error guardando."; errEl.classList.remove("hidden"); return; }
     document.getElementById("coCatModal").classList.add("hidden");
     renderCoCategorias();
-  } catch { errEl.textContent = "Sin conexiÃ³n al servidor."; errEl.classList.remove("hidden"); }
+  } catch { errEl.textContent = "Sin conexión al servidor."; errEl.classList.remove("hidden"); }
 });
 
 ["coCatModalClose", "coCatModalClose2"].forEach(id => {
@@ -11291,16 +11293,16 @@ document.getElementById("coCatModal")?.addEventListener("click", e => {
   if (e.target === document.getElementById("coCatModal")) document.getElementById("coCatModal").classList.add("hidden");
 });
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ════════════════════════════════════════════════════════════════════════════
 // PRODUCTOS
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ════════════════════════════════════════════════════════════════════════════
 let _coProductEditId = null;
 let _coProductList = [];
 
 async function renderCoProductos() {
   const el = document.getElementById("coProductosContent");
   if (!el) return;
-  el.innerHTML = '<p class="login-hint">Cargandoâ€¦</p>';
+  el.innerHTML = '<p class="login-hint">Cargando…</p>';
   // Also load categories for selects
   try {
     const [prRes, catRes] = await Promise.all([
@@ -11311,7 +11313,7 @@ async function renderCoProductos() {
     _coCatList = catRes.ok ? await catRes.json() : [];
     _populateCatSelects();
     _coRenderProductGrid();
-  } catch { el.innerHTML = '<p class="login-hint">Error de conexiÃ³n.</p>'; }
+  } catch { el.innerHTML = '<p class="login-hint">Error de conexión.</p>'; }
 }
 
 function _coRenderProductGrid(filter) {
@@ -11319,11 +11321,11 @@ function _coRenderProductGrid(filter) {
   if (!el) return;
   const q = (filter || document.getElementById("coProductSearch")?.value || "").toLowerCase();
   const list = q ? _coProductList.filter(p => (p.name || "").toLowerCase().includes(q) || (p.code || "").toLowerCase().includes(q) || (p.description || "").toLowerCase().includes(q)) : _coProductList;
-  if (!list.length) { el.innerHTML = '<p class="login-hint">Sin productos' + (q ? ' que coincidan con "' + escapeHtml(q) + '"' : ". Agrega el primero con el botÃ³n de arriba.") + '</p>'; return; }
+  if (!list.length) { el.innerHTML = '<p class="login-hint">Sin productos' + (q ? ' que coincidan con "' + escapeHtml(q) + '"' : ". Agrega el primero con el botón de arriba.") + '</p>'; return; }
   el.innerHTML = `<div class="co-product-grid">${list.map(p => {
     const catName = _coCatList.find(c => c.id === p.category)?.name || p.category || "";
     return `<div class="co-product-card">
-      ${p.photoUrl ? `<img src="${escapeHtml(p.photoUrl)}" class="co-product-thumb" alt="">` : `<div class="co-product-thumb" style="background:var(--line);display:flex;align-items:center;justify-content:center;font-size:2rem">ðŸ“¦</div>`}
+      ${p.photoUrl ? `<img src="${escapeHtml(p.photoUrl)}" class="co-product-thumb" alt="">` : `<div class="co-product-thumb" style="background:var(--line);display:flex;align-items:center;justify-content:center;font-size:2rem">📦</div>`}
       <div class="co-product-info">
         ${catName ? `<span class="co-cat-badge">${escapeHtml(catName)}</span>` : ""}
         <strong style="display:block;margin:4px 0">${escapeHtml(p.name)}</strong>
@@ -11372,7 +11374,7 @@ document.getElementById("coProductosContent")?.addEventListener("click", async (
   const editId = e.target.closest("[data-edit-product]")?.dataset.editProduct;
   if (editId) { coOpenProductModal(_coProductList.find(p => p.id === editId)); return; }
   const delId = e.target.closest("[data-delete-product]")?.dataset.deleteProduct;
-  if (delId && confirm("Â¿Eliminar este producto?")) {
+  if (delId && confirm("¿Eliminar este producto?")) {
     await fetch(`/api/companies/me/products/${delId}`, { method: "DELETE", headers: coAuthHeader() });
     renderCoProductos();
   }
@@ -11412,7 +11414,7 @@ document.getElementById("coProductSaveBtn")?.addEventListener("click", async () 
     document.getElementById("coProductModal").classList.add("hidden");
     renderCoProductos();
     renderCoDashboard();
-  } catch { errEl.textContent = "Sin conexiÃ³n al servidor."; errEl.classList.remove("hidden"); }
+  } catch { errEl.textContent = "Sin conexión al servidor."; errEl.classList.remove("hidden"); }
 });
 
 ["coProductModalClose", "coProductModalClose2"].forEach(id => {
@@ -11422,20 +11424,20 @@ document.getElementById("coProductModal")?.addEventListener("click", e => {
   if (e.target === document.getElementById("coProductModal")) document.getElementById("coProductModal").classList.add("hidden");
 });
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ════════════════════════════════════════════════════════════════════════════
 // PROMOCIONES
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ════════════════════════════════════════════════════════════════════════════
 let _coPromoEditId = null;
 
 async function renderCoPromociones() {
   const el = document.getElementById("coPromocionesContent");
   if (!el) return;
-  el.innerHTML = '<p class="login-hint">Cargandoâ€¦</p>';
+  el.innerHTML = '<p class="login-hint">Cargando…</p>';
   try {
     const res = await fetch("/api/companies/me", { headers: coAuthHeader() });
     const c = res.ok ? await res.json() : null;
     const list = c?.promotions || [];
-    if (!list.length) { el.innerHTML = '<p class="login-hint">Sin promociones activas. Crea la primera con el botÃ³n de arriba.</p>'; return; }
+    if (!list.length) { el.innerHTML = '<p class="login-hint">Sin promociones activas. Crea la primera con el botón de arriba.</p>'; return; }
     const now = new Date().toISOString().slice(0, 10);
     el.innerHTML = `<div class="co-promo-grid">${list.map(pr => {
       const expired = pr.endsAt && pr.endsAt < now;
@@ -11443,7 +11445,7 @@ async function renderCoPromociones() {
         ${pr.photoUrl ? `<img src="${escapeHtml(pr.photoUrl)}" class="co-promo-thumb" alt="">` : ""}
         <div style="flex:1">
           <strong>${escapeHtml(pr.title)}</strong>
-          ${pr.discountText ? `<span style="color:var(--accent);font-weight:700"> â€” ${escapeHtml(pr.discountText)}</span>` : ""}
+          ${pr.discountText ? `<span style="color:var(--accent);font-weight:700"> — ${escapeHtml(pr.discountText)}</span>` : ""}
           ${pr.description ? `<p style="font-size:.85rem;color:var(--muted);margin:4px 0">${escapeHtml(pr.description)}</p>` : ""}
           ${pr.endsAt ? `<span style="font-size:.8rem;color:${expired ? "var(--red,#e53e3e)" : "var(--muted)"}">Hasta ${pr.endsAt}${expired ? " (vencida)" : ""}</span>` : ""}
           <span class="co-branch-status-${pr.active ? "active" : "inactive"}" style="display:block;margin-top:4px">${pr.active ? "Activa" : "Inactiva"}</span>
@@ -11454,12 +11456,12 @@ async function renderCoPromociones() {
         </div>
       </div>`;
     }).join("")}</div>`;
-  } catch { el.innerHTML = '<p class="login-hint">Error de conexiÃ³n.</p>'; }
+  } catch { el.innerHTML = '<p class="login-hint">Error de conexión.</p>'; }
 }
 
 function coOpenPromoModal(promo) {
   _coPromoEditId = promo?.id || null;
-  document.getElementById("coPromoModalTitle").textContent = promo ? "Editar promociÃ³n" : "Nueva promociÃ³n";
+  document.getElementById("coPromoModalTitle").textContent = promo ? "Editar promoción" : "Nueva promoción";
   document.getElementById("coPr_title").value = promo?.title || "";
   document.getElementById("coPr_type").value = promo?.type || "descuento";
   document.getElementById("coPr_discount").value = promo?.discount || "";
@@ -11483,7 +11485,7 @@ document.getElementById("coPromocionesContent")?.addEventListener("click", async
     return;
   }
   const delId = e.target.closest("[data-delete-promo]")?.dataset.deletePromo;
-  if (delId && confirm("Â¿Eliminar esta promociÃ³n?")) {
+  if (delId && confirm("¿Eliminar esta promoción?")) {
     await fetch(`/api/companies/me/promotions/${delId}`, { method: "DELETE", headers: coAuthHeader() });
     renderCoPromociones();
     renderCoDashboard();
@@ -11506,7 +11508,7 @@ document.getElementById("coPromoSaveBtn")?.addEventListener("click", async () =>
     photoUrl: document.getElementById("coPr_photoUrl")?.value.trim(),
     active: document.getElementById("coPr_active")?.value === "true"
   };
-  if (!payload.title) { errEl.textContent = "El tÃ­tulo es obligatorio."; errEl.classList.remove("hidden"); return; }
+  if (!payload.title) { errEl.textContent = "El título es obligatorio."; errEl.classList.remove("hidden"); return; }
   try {
     const url = _coPromoEditId ? `/api/companies/me/promotions/${_coPromoEditId}` : "/api/companies/me/promotions";
     const res = await fetch(url, { method: _coPromoEditId ? "PUT" : "POST", headers: coAuthHeader(), body: JSON.stringify(payload) });
@@ -11515,7 +11517,7 @@ document.getElementById("coPromoSaveBtn")?.addEventListener("click", async () =>
     document.getElementById("coPromoModal").classList.add("hidden");
     renderCoPromociones();
     renderCoDashboard();
-  } catch { errEl.textContent = "Sin conexiÃ³n al servidor."; errEl.classList.remove("hidden"); }
+  } catch { errEl.textContent = "Sin conexión al servidor."; errEl.classList.remove("hidden"); }
 });
 
 ["coPromoModalClose", "coPromoModalClose2"].forEach(id => {
@@ -11525,9 +11527,9 @@ document.getElementById("coPromoModal")?.addEventListener("click", e => {
   if (e.target === document.getElementById("coPromoModal")) document.getElementById("coPromoModal").classList.add("hidden");
 });
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ════════════════════════════════════════════════════════════════════════════
 // PUBLICIDAD
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ════════════════════════════════════════════════════════════════════════════
 async function renderCoPublicidad() {
   const el = document.getElementById("coPublicidadContent");
   if (!el) return;
@@ -11536,8 +11538,8 @@ async function renderCoPublicidad() {
     <div class="co-section-card">
       <h3>Estado del plan publicitario</h3>
       <p>Plan actual: <strong>${escapeHtml(c.plan || "empresa")}</strong></p>
-      <p>Destacado en directorio: <strong>${c.featured ? "SÃ­ (hasta " + (c.featuredUntil || "â€¦") + ")" : "No"}</strong></p>
-      <p style="color:var(--muted);font-size:.9rem;margin-top:12px">Para activar publicidad o campaÃ±a de destacado, contacta al administrador de la plataforma.</p>
+      <p>Destacado en directorio: <strong>${c.featured ? "Sí (hasta " + (c.featuredUntil || "…") + ")" : "No"}</strong></p>
+      <p style="color:var(--muted);font-size:.9rem;margin-top:12px">Para activar publicidad o campaña de destacado, contacta al administrador de la plataforma.</p>
     </div>
     <div class="co-stat-grid" style="margin-top:16px">
       <div class="co-stat-card">
@@ -11551,21 +11553,21 @@ async function renderCoPublicidad() {
     </div>`;
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// SOLICITUDES DE COTIZACIÃ“N (placeholder)
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ════════════════════════════════════════════════════════════════════════════
+// SOLICITUDES DE COTIZACIÓN (placeholder)
+// ════════════════════════════════════════════════════════════════════════════
 function renderCoSolicitudes() {
   const el = document.getElementById("coSolicitudesContent");
   if (el) el.innerHTML = `
     <div class="co-coming-soon">
-      ðŸ“‹<br>Solicitudes de CotizaciÃ³n<br>
-      <small>Los clientes podrÃ¡n enviar solicitudes directamente a tu empresa. <br>Esta funciÃ³n estarÃ¡ disponible prÃ³ximamente.</small>
+      📋<br>Solicitudes de Cotización<br>
+      <small>Los clientes podrán enviar solicitudes directamente a tu empresa. <br>Esta función estará disponible próximamente.</small>
     </div>`;
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// ESTADÃSTICAS
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ════════════════════════════════════════════════════════════════════════════
+// ESTADÍSTICAS
+// ════════════════════════════════════════════════════════════════════════════
 async function renderCoEstadisticas() {
   const el = document.getElementById("coEstadisticasContent");
   if (!el) return;
@@ -11595,13 +11597,13 @@ async function renderCoEstadisticas() {
           <div class="co-stat-label">Sucursales</div>
         </div>
       </div>
-      <p style="color:var(--muted);font-size:.85rem;margin-top:16px">AnalÃ­ticas detalladas (por perÃ­odo, conversiones, etc.) prÃ³ximamente.</p>`;
-  } catch { el.innerHTML = '<p class="login-hint">Error cargando estadÃ­sticas.</p>'; }
+      <p style="color:var(--muted);font-size:.85rem;margin-top:16px">Analíticas detalladas (por período, conversiones, etc.) próximamente.</p>`;
+  } catch { el.innerHTML = '<p class="login-hint">Error cargando estadísticas.</p>'; }
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// PERFIL PÃšBLICO
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ════════════════════════════════════════════════════════════════════════════
+// PERFIL PÚBLICO
+// ════════════════════════════════════════════════════════════════════════════
 function renderCoPerfil() {
   const el = document.getElementById("coPerfilContent");
   if (!el) return;
@@ -11612,7 +11614,7 @@ function renderCoPerfil() {
     <div class="co-section-card">
       ${c.coverUrl ? `<img src="${escapeHtml(c.coverUrl)}" alt="" style="width:100%;max-height:180px;object-fit:cover;border-radius:10px;margin-bottom:12px">` : ""}
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
-        ${c.logoUrl ? `<img src="${escapeHtml(c.logoUrl)}" alt="" style="width:56px;height:56px;border-radius:10px;object-fit:cover">` : `<div style="width:56px;height:56px;border-radius:10px;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:1.5rem">ðŸ¢</div>`}
+        ${c.logoUrl ? `<img src="${escapeHtml(c.logoUrl)}" alt="" style="width:56px;height:56px;border-radius:10px;object-fit:cover">` : `<div style="width:56px;height:56px;border-radius:10px;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:1.5rem">🏢</div>`}
         <div>
           <h2 style="margin:0">${escapeHtml(c.name || "Mi Empresa")}</h2>
           ${c.businessName ? `<span style="color:var(--muted);font-size:.9rem">${escapeHtml(c.businessName)}</span>` : ""}
@@ -11620,49 +11622,49 @@ function renderCoPerfil() {
       </div>
       ${c.description ? `<p>${escapeHtml(c.description)}</p>` : ""}
       <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:8px">
-        ${c.phone ? `<span>ðŸ“ž ${escapeHtml(c.phone)}</span>` : ""}
-        ${c.whatsapp ? `<span>ðŸ’¬ ${escapeHtml(c.whatsapp)}</span>` : ""}
-        ${c.email ? `<span>âœ‰ï¸ ${escapeHtml(c.email)}</span>` : ""}
-        ${c.location?.city ? `<span>ðŸ“ ${escapeHtml(c.location.city)}</span>` : ""}
-        ${c.schedule ? `<span>ðŸ• ${escapeHtml(c.schedule)}</span>` : ""}
+        ${c.phone ? `<span>📞 ${escapeHtml(c.phone)}</span>` : ""}
+        ${c.whatsapp ? `<span>💬 ${escapeHtml(c.whatsapp)}</span>` : ""}
+        ${c.email ? `<span>✉️ ${escapeHtml(c.email)}</span>` : ""}
+        ${c.location?.city ? `<span>📍 ${escapeHtml(c.location.city)}</span>` : ""}
+        ${c.schedule ? `<span>🕐 ${escapeHtml(c.schedule)}</span>` : ""}
       </div>
       ${(c.products || []).length ? `
       <hr style="margin:16px 0">
       <h4>Productos (${c.products.length})</h4>
       <div class="co-product-grid" style="max-height:260px;overflow-y:auto">${(c.products || []).slice(0, 6).map(p => `
         <div class="co-product-card">
-          ${p.photoUrl ? `<img src="${escapeHtml(p.photoUrl)}" class="co-product-thumb" alt="">` : `<div class="co-product-thumb" style="background:var(--line);display:flex;align-items:center;justify-content:center;font-size:2rem">ðŸ“¦</div>`}
+          ${p.photoUrl ? `<img src="${escapeHtml(p.photoUrl)}" class="co-product-thumb" alt="">` : `<div class="co-product-thumb" style="background:var(--line);display:flex;align-items:center;justify-content:center;font-size:2rem">📦</div>`}
           <div class="co-product-info"><strong>${escapeHtml(p.name)}</strong>${p.price > 0 ? `<span class="co-price">$${Number(p.price).toFixed(2)}</span>` : ""}</div>
         </div>`).join("")}</div>` : ""}
     </div>`;
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// CONFIGURACIÃ“N
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ════════════════════════════════════════════════════════════════════════════
+// CONFIGURACIÓN
+// ════════════════════════════════════════════════════════════════════════════
 function renderCoConfiguracion() {
   const el = document.getElementById("coConfiguracionContent");
   if (!el) return;
   const c = AUTH.companyData || {};
   el.innerHTML = `
     <div class="co-section-card">
-      <h3>Cambiar contraseÃ±a</h3>
+      <h3>Cambiar contraseña</h3>
       <div class="form-grid">
-        <label class="span-2">Nueva contraseÃ±a (mÃ­nimo 4 caracteres)
-          <input id="coConf_newPassword" type="password" placeholder="Nueva contraseÃ±a">
+        <label class="span-2">Nueva contraseña (mínimo 4 caracteres)
+          <input id="coConf_newPassword" type="password" placeholder="Nueva contraseña">
         </label>
-        <label class="span-2">Confirmar contraseÃ±a
-          <input id="coConf_confirmPassword" type="password" placeholder="Repite la nueva contraseÃ±a">
+        <label class="span-2">Confirmar contraseña
+          <input id="coConf_confirmPassword" type="password" placeholder="Repite la nueva contraseña">
         </label>
       </div>
-      <button id="coSavePasswordBtn" class="primary-btn" type="button" style="margin-top:12px">Cambiar contraseÃ±a</button>
+      <button id="coSavePasswordBtn" class="primary-btn" type="button" style="margin-top:12px">Cambiar contraseña</button>
       <p id="coConfPasswordError" class="login-error hidden"></p>
-      <p id="coConfPasswordOk" class="hidden" style="color:var(--green,#38a169);margin-top:8px">ContraseÃ±a actualizada âœ“</p>
+      <p id="coConfPasswordOk" class="hidden" style="color:var(--green,#38a169);margin-top:8px">Contraseña actualizada ✓</p>
     </div>
     <div class="co-section-card" style="margin-top:16px">
-      <h3>InformaciÃ³n de cuenta</h3>
-      <p>CÃ³digo de acceso: <strong>${escapeHtml(c.accessCode || "â€”")}</strong></p>
-      <p style="color:var(--muted);font-size:.85rem">Para cambiar tu cÃ³digo de acceso, contacta al administrador de la plataforma.</p>
+      <h3>Información de cuenta</h3>
+      <p>Código de acceso: <strong>${escapeHtml(c.accessCode || "—")}</strong></p>
+      <p style="color:var(--muted);font-size:.85rem">Para cambiar tu código de acceso, contacta al administrador de la plataforma.</p>
     </div>`;
 
   document.getElementById("coSavePasswordBtn")?.addEventListener("click", async () => {
@@ -11671,16 +11673,16 @@ function renderCoConfiguracion() {
     errEl.classList.add("hidden"); okEl.classList.add("hidden");
     const pw = document.getElementById("coConf_newPassword")?.value;
     const pw2 = document.getElementById("coConf_confirmPassword")?.value;
-    if (!pw || pw.length < 4) { errEl.textContent = "La contraseÃ±a debe tener al menos 4 caracteres."; errEl.classList.remove("hidden"); return; }
-    if (pw !== pw2) { errEl.textContent = "Las contraseÃ±as no coinciden."; errEl.classList.remove("hidden"); return; }
+    if (!pw || pw.length < 4) { errEl.textContent = "La contraseña debe tener al menos 4 caracteres."; errEl.classList.remove("hidden"); return; }
+    if (pw !== pw2) { errEl.textContent = "Las contraseñas no coinciden."; errEl.classList.remove("hidden"); return; }
     try {
       const res = await fetch("/api/companies/me/password", { method: "PUT", headers: coAuthHeader(), body: JSON.stringify({ password: pw }) });
       const data = await res.json();
-      if (!res.ok) { errEl.textContent = data.error || "Error cambiando contraseÃ±a."; errEl.classList.remove("hidden"); return; }
+      if (!res.ok) { errEl.textContent = data.error || "Error cambiando contraseña."; errEl.classList.remove("hidden"); return; }
       okEl.classList.remove("hidden");
       document.getElementById("coConf_newPassword").value = "";
       document.getElementById("coConf_confirmPassword").value = "";
-    } catch { errEl.textContent = "Sin conexiÃ³n al servidor."; errEl.classList.remove("hidden"); }
+    } catch { errEl.textContent = "Sin conexión al servidor."; errEl.classList.remove("hidden"); }
   });
 }
 
