@@ -2336,3 +2336,7 @@ input.hidden + .show-pw-toggle { display: none; }
 
 /* Destacar la tarjeta de consumidores en el dashboard */
 .metric-card--accent { border: 1px solid var(--accent); background: var(--accent-soft); }
+
+/* Botón que parece enlace (para cross-links en el gate de cuenta) */
+.linklike { background: none; border: none; padding: 0; color: var(--accent); font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
+.linklike:hover { color: var(--accent-dark, #2a1f6b); }

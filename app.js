@@ -12641,6 +12641,21 @@ document.getElementById("cg_loginPassword")?.addEventListener("keydown", e => {
 document.getElementById("homeConsumerRegisterBtn")?.addEventListener("click", () => showConsumerGate("register"));
 document.getElementById("homeConsumerLoginBtn")?.addEventListener("click", () => showConsumerGate("login"));
 
+// Cross-links del gate de cliente hacia el registro de PROVEEDOR (separación
+// clara: la cuenta de cliente es solo para buscar; ofrecer servicios/vender
+// materiales es un registro distinto — profesional o empresa).
+document.querySelectorAll("[data-go-provider]").forEach(btn => {
+  btn.addEventListener("click", () => {
+    hideAllPublicSubviews();
+    if (btn.dataset.goProvider === "empresa") {
+      ensureCompanyCategoryOptions();
+      document.getElementById("publicCompanyRegisterView")?.classList.remove("hidden");
+    } else {
+      document.getElementById("publicRegisterView")?.classList.remove("hidden");
+    }
+  });
+});
+
 // ═════════════════════════════════════════════════════════════════════════════
 // ADMIN — Consumidores (v52.3: control total de la base de clientes finales)
 // ═════════════════════════════════════════════════════════════════════════════
