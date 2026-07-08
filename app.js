@@ -10873,6 +10873,7 @@ function _loginAsCompany(company, token) {
 // ── Navegación del panel ──────────────────────────────────────────────────────
 const CO_VIEW_TITLES = {
   coDashboard: "Dashboard", coMiEmpresa: "Mi Empresa", coSucursales: "Sucursales",
+  coVendedores: "Vendedores",
   coProductos: "Productos", coCategorias: "Categorías", coPromociones: "Promociones",
   coPublicidad: "Publicidad", coPedidos: "Pedidos", coSolicitudes: "Solicitudes de Cotización",
   coClientes: "Clientes", coEstadisticas: "Estadísticas", coPerfil: "Perfil Público",
@@ -10893,6 +10894,7 @@ function coShowView(viewId) {
   if (viewId === "coDashboard") renderCoDashboard();
   else if (viewId === "coMiEmpresa") renderCoMiEmpresa();
   else if (viewId === "coSucursales") renderCoSucursales();
+  else if (viewId === "coVendedores") renderCoVendedores();
   else if (viewId === "coProductos") renderCoProductos();
   else if (viewId === "coCategorias") renderCoCategorias();
   else if (viewId === "coPromociones") renderCoPromociones();
@@ -12743,5 +12745,70 @@ document.getElementById("adm_consumersList")?.addEventListener("click", async (e
     if (!confirm(`¿Eliminar la cuenta de "${user.name}"? Esta acción no se puede deshacer.`)) return;
     const r = await fetch(`/api/admin/free-users/${id}`, { method: "DELETE", headers: adminAuthHeaderAdmin() });
     if (r.ok) { toast("Cuenta eliminada"); loadAdminConsumersTab(); } else toast("No se pudo eliminar.", "error");
+  }
+});
+
+// ── Panel Empresa: Vendedores (v53-C9) ───────────────────────────────────────
+async function renderCoVendedores() {
+  const el = document.getElementById("coVendedoresContent");
+  if (!el) return;
+  el.innerHTML = '<p class="login-hint">Cargando…</p>';
+  try {
+    const res = await fetch("/api/companies/me/sellers", { headers: coAuthHeader() });
+    const list = res.ok ? await res.json() : [];
+    el.innerHTML = list.length
+      ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px">${list.map(s => `
+          <div class="co-section-card">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              ${s.photoUrl ? `<img src="${escapeHtml(s.photoUrl)}" alt="" style="width:44px;height:44px;border-radius:50%;object-fit:cover">` : `<div style="width:44px;height:44px;border-radius:50%;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent)">${escapeHtml((s.name||"?")[0].toUpperCase())}</div>`}
+              <div><strong>${escapeHtml(s.name)}</strong>${s.position ? `<br><span class="login-hint">${escapeHtml(s.position)}</span>` : ""}</div>
+            </div>
+            <p style="margin:2px 0;font-size:.85rem">${s.whatsapp ? "📱 " + escapeHtml(s.whatsapp) : s.phone ? "📞 " + escapeHtml(s.phone) : ""}</p>
+            ${s.email ? `<p style="margin:2px 0;font-size:.85rem">✉️ ${escapeHtml(s.email)}</p>` : ""}
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <button class="tiny-btn" type="button" data-co-seller-edit="${s.id}">✏️ Editar</button>
+              <button class="tiny-btn danger" type="button" data-co-seller-del="${s.id}">🗑 Quitar</button>
+            </div>
+          </div>`).join("")}</div>`
+      : '<p class="login-hint">Todavía no has agregado vendedores. Usa "+ Nuevo vendedor".</p>';
+    el._sellers = list;
+  } catch { el.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>'; }
+}
+
+function _coSellerPrompt(existing) {
+  const name = prompt("Nombre del vendedor:", existing?.name || "");
+  if (name === null || !name.trim()) return null;
+  const position = prompt("Cargo (opcional):", existing?.position || "");
+  if (position === null) return null;
+  const whatsapp = prompt("WhatsApp:", existing?.whatsapp || "");
+  if (whatsapp === null) return null;
+  const phone = prompt("Teléfono (opcional):", existing?.phone || "");
+  if (phone === null) return null;
+  const email = prompt("Correo (opcional):", existing?.email || "");
+  if (email === null) return null;
+  return { name: name.trim(), position, whatsapp, phone, email };
+}
+
+document.getElementById("coAddSellerBtn")?.addEventListener("click", async () => {
+  const data = _coSellerPrompt(null);
+  if (!data) return;
+  const r = await fetch("/api/companies/me/sellers", { method: "POST", headers: coAuthHeader(), body: JSON.stringify(data) });
+  if (r.ok) { toast("Vendedor agregado ✓"); renderCoVendedores(); } else toast("No se pudo agregar.", "error");
+});
+
+document.getElementById("coVendedoresContent")?.addEventListener("click", async (e) => {
+  const editBtn = e.target.closest("[data-co-seller-edit]");
+  const delBtn = e.target.closest("[data-co-seller-del]");
+  const el = document.getElementById("coVendedoresContent");
+  if (editBtn) {
+    const seller = (el._sellers || []).find(s => s.id === editBtn.dataset.coSellerEdit);
+    const data = _coSellerPrompt(seller);
+    if (!data) return;
+    const r = await fetch(`/api/companies/me/sellers/${editBtn.dataset.coSellerEdit}`, { method: "PUT", headers: coAuthHeader(), body: JSON.stringify(data) });
+    if (r.ok) { toast("Vendedor actualizado ✓"); renderCoVendedores(); } else toast("No se pudo guardar.", "error");
+  } else if (delBtn) {
+    if (!confirm("¿Quitar este vendedor?")) return;
+    const r = await fetch(`/api/companies/me/sellers/${delBtn.dataset.coSellerDel}`, { method: "DELETE", headers: coAuthHeader() });
+    if (r.ok) { toast("Vendedor eliminado"); renderCoVendedores(); } else toast("No se pudo eliminar.", "error");
   }
 });

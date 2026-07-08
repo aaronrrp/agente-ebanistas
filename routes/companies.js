@@ -272,6 +272,62 @@ async function handle(req, res, { method, p, parts }) {
     }
   }
 
+  // ── Vendedores de la empresa (/api/companies/me/sellers) — v53 ───────────
+  // Equipo de ventas propio de la empresa (contacto), embebido en el registro
+  // igual que products[]. Se muestran en el perfil público de la empresa.
+  if (p === "/api/companies/me/sellers" && method === "GET") {
+    const session = requireCompany(req, res); if (!session) return true;
+    const company = findCompanyById(session.companyId);
+    if (!company) { sendJson(res, 404, { error: "No encontrado." }); return true; }
+    sendJson(res, 200, company.sellers || []);
+    return true;
+  }
+  if (p === "/api/companies/me/sellers" && method === "POST") {
+    const session = requireCompany(req, res); if (!session) return true;
+    const company = findCompanyById(session.companyId);
+    if (!company) { sendJson(res, 404, { error: "No encontrado." }); return true; }
+    const data = JSON.parse((await readBody(req)) || "{}");
+    if (!data.name?.trim()) { sendJson(res, 400, { error: "Falta el nombre del vendedor." }); return true; }
+    if (!company.sellers) company.sellers = [];
+    const seller = {
+      id: crypto.randomUUID(),
+      name: String(data.name).trim().slice(0, 80),
+      position: String(data.position || "").trim().slice(0, 60),
+      phone: String(data.phone || "").trim().slice(0, 30),
+      whatsapp: String(data.whatsapp || "").trim().slice(0, 30),
+      email: String(data.email || "").trim().slice(0, 120),
+      photoUrl: data.photoUrl || "",
+      createdAt: new Date().toISOString()
+    };
+    company.sellers.push(seller);
+    saveCompanies(companies);
+    sendJson(res, 201, seller);
+    return true;
+  }
+  if (parts[0] === "api" && parts[1] === "companies" && parts[2] === "me" && parts[3] === "sellers" && parts[4]) {
+    const session = requireCompany(req, res); if (!session) return true;
+    const company = findCompanyById(session.companyId);
+    if (!company) { sendJson(res, 404, { error: "No encontrado." }); return true; }
+    const sid = parts[4];
+    if (method === "PUT") {
+      const data = JSON.parse((await readBody(req)) || "{}");
+      const seller = (company.sellers || []).find(s => s.id === sid);
+      if (!seller) { sendJson(res, 404, { error: "Vendedor no encontrado." }); return true; }
+      for (const f of ["name", "position", "phone", "whatsapp", "email", "photoUrl"]) {
+        if (data[f] !== undefined) seller[f] = String(data[f]).trim();
+      }
+      saveCompanies(companies);
+      sendJson(res, 200, seller);
+      return true;
+    }
+    if (method === "DELETE") {
+      company.sellers = (company.sellers || []).filter(s => s.id !== sid);
+      saveCompanies(companies);
+      sendJson(res, 200, { ok: true });
+      return true;
+    }
+  }
+
   // ── Categorías (/api/companies/me/categories) ───────────────────────────
   if (p === "/api/companies/me/categories" && method === "GET") {
     const session = requireCompany(req, res); if (!session) return true;
