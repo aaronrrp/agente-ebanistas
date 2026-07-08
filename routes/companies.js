@@ -12,8 +12,9 @@ const { logActivity } = require("../lib/activity-log.js");
 const COMPANIES_FILE = path.join(__dirname, "..", "companies.json");
 
 const CATEGORIES = [
-  "ferreteria", "melamina", "herrajes", "mdf", "madera", "pinturas", "adhesivos",
-  "maquinaria", "cnc", "herramientas", "transporte", "marmol", "vidrio", "otra"
+  "ferreteria", "distribuidor_materiales", "melamina", "herrajes", "mdf", "madera",
+  "pinturas", "adhesivos", "maquinaria", "cnc", "herramientas", "transporte",
+  "marmol", "vidrio", "electrico", "plomeria", "cocinas", "tapiceria", "otra"
 ];
 
 function loadCompanies() {
@@ -119,6 +120,7 @@ async function handle(req, res, { method, p, parts }) {
       slug: makeSlug(String(data.name).trim(), id),
       name: String(data.name).trim(),
       category: CATEGORIES.includes(data.category) ? data.category : "otra",
+      categoryOther: String(data.categoryOther || "").trim().slice(0, 60),
       logoUrl: data.logoUrl || "",
       description: data.description || "",
       phone: data.phone || "", whatsapp: data.whatsapp || "", email: data.email || "",
@@ -528,7 +530,7 @@ async function handle(req, res, { method, p, parts }) {
     if (!company) { sendJson(res, 404, { error: "No encontrado." }); return true; }
     const body = await readBody(req);
     const data = body ? JSON.parse(body) : {};
-    const editableFields = ["name", "description", "phone", "whatsapp", "email", "schedule", "logoUrl", "coverPhotoUrl", "location", "socialLinks", "category", "plan", "status", "adminNote", "paymentNote"];
+    const editableFields = ["name", "description", "phone", "whatsapp", "email", "schedule", "logoUrl", "coverPhotoUrl", "location", "socialLinks", "category", "categoryOther", "plan", "status", "adminNote", "paymentNote"];
     for (const field of editableFields) {
       if (data[field] !== undefined) company[field] = data[field];
     }

@@ -710,7 +710,7 @@ function adminEntityRowHtml(entity, kind) {
   const name = entity.name || entity.company || "(sin nombre)";
   const sub = kind === "professional"
     ? [professionalCategoryLabel(entity.category), entity.specialty, entity.location?.city].filter(Boolean).join(" · ")
-    : [companyCategoryLabel(entity.category), entity.location?.city].filter(Boolean).join(" · ");
+    : [companyCategoryLabel(entity.category, entity.categoryOther), entity.location?.city].filter(Boolean).join(" · ");
   const featuredTag = entity.featured ? ' <span class="admin-status-badge approved">★ Destacado</span>' : "";
   return `
     <div class="admin-entity-row" data-entity-id="${entity.id}">
@@ -8922,25 +8922,34 @@ document.querySelectorAll("[data-home-go]").forEach(btn => {
 });
 
 // ── Directorio de Empresas (mismo patrón que el de profesionales) ───────────
+// Tipos de empresa / rubro. Los valores viejos (melamina, mdf, madera...) se
+// conservan para no romper las empresas ya registradas; se añaden tipos de
+// negocio más claros. Si el rubro no está, "otra" habilita un campo libre.
 const COMPANY_CATEGORIES = [
   { value: "ferreteria", label: "Ferretería" },
-  { value: "melamina", label: "Melamina" },
-  { value: "herrajes", label: "Herrajes" },
-  { value: "mdf", label: "MDF" },
-  { value: "madera", label: "Madera" },
-  { value: "pinturas", label: "Pinturas" },
-  { value: "adhesivos", label: "Adhesivos" },
+  { value: "distribuidor_materiales", label: "Distribuidor de materiales" },
+  { value: "melamina", label: "Melamina y tableros" },
+  { value: "herrajes", label: "Herrajes y accesorios" },
+  { value: "mdf", label: "MDF / Aglomerados" },
+  { value: "madera", label: "Maderas" },
+  { value: "pinturas", label: "Pinturas y acabados" },
+  { value: "adhesivos", label: "Adhesivos y químicos" },
   { value: "maquinaria", label: "Maquinaria" },
-  { value: "cnc", label: "CNC" },
+  { value: "cnc", label: "Servicios CNC" },
   { value: "herramientas", label: "Herramientas" },
-  { value: "transporte", label: "Transporte" },
-  { value: "marmol", label: "Mármol" },
-  { value: "vidrio", label: "Vidrio" },
-  { value: "otra", label: "Otra" }
+  { value: "transporte", label: "Transporte y acarreos" },
+  { value: "marmol", label: "Mármol y granito" },
+  { value: "vidrio", label: "Vidriería y aluminio" },
+  { value: "electrico", label: "Materiales eléctricos" },
+  { value: "plomeria", label: "Plomería y sanitarios" },
+  { value: "cocinas", label: "Cocinas y closets" },
+  { value: "tapiceria", label: "Tapicería y telas" },
+  { value: "otra", label: "Otro (especificar)" }
 ];
 
-function companyCategoryLabel(value) {
-  return COMPANY_CATEGORIES.find(c => c.value === value)?.label || value;
+function companyCategoryLabel(value, other) {
+  if (value === "otra" && other) return other;
+  return COMPANY_CATEGORIES.find(c => c.value === value)?.label || value || "—";
 }
 
 function ensureCompanyCategoryOptions() {
@@ -8950,7 +8959,11 @@ function ensureCompanyCategoryOptions() {
   }
   const regSel = document.getElementById("co_regCategory");
   if (regSel && !regSel.options.length) {
-    regSel.innerHTML = COMPANY_CATEGORIES.map(c => `<option value="${c.value}">${c.label}</option>`).join("");
+    regSel.innerHTML = '<option value="">Selecciona…</option>' + COMPANY_CATEGORIES.map(c => `<option value="${c.value}">${c.label}</option>`).join("");
+    // Mostrar el campo de rubro libre solo cuando eligen "Otro"
+    regSel.addEventListener("change", () => {
+      document.getElementById("co_regCategoryOtherWrap")?.classList.toggle("hidden", regSel.value !== "otra");
+    });
   }
 }
 
@@ -8985,7 +8998,7 @@ async function loadPublicCompanies() {
         </div>
         <div class="pro-card-body">
           <h3 class="pro-card-name">${escapeHtml(c.name)}</h3>
-          <div class="pro-card-meta">${escapeHtml(companyCategoryLabel(c.category))}</div>
+          <div class="pro-card-meta">${escapeHtml(companyCategoryLabel(c.category, c.categoryOther))}</div>
           ${c.location?.city ? `<div class="pro-card-location">📍 ${escapeHtml(c.location.city)}${c.location.province ? ", " + escapeHtml(c.location.province) : ""}</div>` : ""}
           ${c.ratings?.count ? `<div class="pro-card-rating">${starHtml(c.ratings.avg, c.ratings.count)}</div>` : ""}
           ${c.products?.length ? `<div class="pro-card-specialty">${c.products.length} producto${c.products.length !== 1 ? "s" : ""} publicado${c.products.length !== 1 ? "s" : ""}</div>` : ""}
@@ -9027,9 +9040,13 @@ document.getElementById("co_submitRegisterBtn")?.addEventListener("click", async
   errEl.classList.add("hidden");
   const name = document.getElementById("co_regName").value.trim();
   if (!name) { errEl.textContent = "Falta el nombre de la empresa."; errEl.classList.remove("hidden"); return; }
+  const catVal = document.getElementById("co_regCategory").value;
+  const catOther = document.getElementById("co_regCategoryOther")?.value.trim() || "";
+  if (catVal === "otra" && !catOther) { errEl.textContent = "Escribe tu rubro."; errEl.classList.remove("hidden"); return; }
   const payload = {
     name,
-    category: document.getElementById("co_regCategory").value,
+    category: catVal,
+    categoryOther: catVal === "otra" ? catOther : "",
     phone: document.getElementById("co_regPhone").value.trim(),
     whatsapp: document.getElementById("co_regWhatsapp").value.trim(),
     email: document.getElementById("co_regEmail").value.trim(),
@@ -12432,7 +12449,7 @@ async function openAdminEntityModal(kind, id) {
     if (!e) { box.innerHTML = '<p class="login-hint">No encontrado.</p>'; return; }
 
     const esPro = kind === "professional";
-    const catLabel = esPro ? professionalCategoryLabel(e.category) : companyCategoryLabel(e.category);
+    const catLabel = esPro ? professionalCategoryLabel(e.category) : companyCategoryLabel(e.category, e.categoryOther);
     box.innerHTML = `
       <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
         ${(esPro ? e.photoUrl : e.logoUrl)
