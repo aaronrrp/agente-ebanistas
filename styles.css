@@ -2340,3 +2340,23 @@ input.hidden + .show-pw-toggle { display: none; }
 /* Botón que parece enlace (para cross-links en el gate de cuenta) */
 .linklike { background: none; border: none; padding: 0; color: var(--accent); font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
 .linklike:hover { color: var(--accent-dark, #2a1f6b); }
+
+/* Etiquetas de grupo en la pantalla de login (Cliente vs Trabaja con PiLLA) */
+.login-group-label { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 700; margin: .5rem 0 .3rem; text-align: left; }
+
+/* ── Portada reorganizada (v53.1) ────────────────────────────────────────── */
+.home-section-label { text-align: center; font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; margin: 1.5rem 0 .25rem; }
+.home-account-bar {
+  max-width: 720px; margin: 2rem auto 0; padding: 18px 22px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  box-shadow: 0 2px 10px rgba(26,19,70,.06);
+}
+.home-account-bar strong { display: block; font-size: 1rem; }
+.home-account-bar span { font-size: .85rem; color: var(--muted); }
+.home-account-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.home-provider-line { text-align: center; margin: 1.25rem auto 0; font-size: .88rem; color: var(--muted); max-width: 720px; }
+@media (max-width: 560px) {
+  .home-account-bar { flex-direction: column; align-items: stretch; text-align: center; }
+  .home-account-actions { justify-content: center; }
+}

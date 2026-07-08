@@ -8504,11 +8504,12 @@ function showLogin() {
   // Restablecer el estado normal del login — el acceso de admin (botón discreto
   // o ruta privada) oculta las pestañas y muestra solo su panel; si el usuario
   // vuelve y abre el login normal, todo debe verse como siempre.
-  document.querySelector(".login-tabs")?.classList.remove("hidden");
+  document.querySelectorAll(".login-tabs, .login-group-label").forEach(el => el.classList.remove("hidden"));
   if (!document.querySelector("[data-login-tab].active")) {
-    document.querySelector('[data-login-tab="code"]')?.classList.add("active");
+    document.querySelector('[data-login-tab="client"]')?.classList.add("active");
   }
-  const _activeTab = document.querySelector("[data-login-tab].active")?.dataset.loginTab || "code";
+  const _activeTab = document.querySelector("[data-login-tab].active")?.dataset.loginTab || "client";
+  document.getElementById("loginClientPanel")?.classList.toggle("hidden", _activeTab !== "client");
   document.getElementById("loginCodePanel")?.classList.toggle("hidden", _activeTab !== "code");
   document.getElementById("loginProfessionalPanel")?.classList.toggle("hidden", _activeTab !== "professional");
   document.getElementById("loginCompanyPanel")?.classList.toggle("hidden", _activeTab !== "company");
@@ -8516,14 +8517,20 @@ function showLogin() {
   document.getElementById("loginAdminPanel")?.classList.add("hidden");
 }
 
+// Abre el login mostrando directamente una pestaña concreta (ej: "client").
+function showLoginTab(tab) {
+  document.querySelectorAll("[data-login-tab]").forEach(b => b.classList.toggle("active", b.dataset.loginTab === tab));
+  showLogin();
+}
+
 // Muestra el login con SOLO el panel de administrador (sin pestañas de roles).
 // Se llega por el botón discreto del directorio o por la ruta privada del servidor.
 function showAdminLoginGate() {
   showLogin();
   document.querySelectorAll("[data-login-tab]").forEach(b => b.classList.remove("active"));
-  ["loginCodePanel", "loginProfessionalPanel", "loginCompanyPanel", "loginSellerPanel"].forEach(id =>
+  ["loginClientPanel", "loginCodePanel", "loginProfessionalPanel", "loginCompanyPanel", "loginSellerPanel"].forEach(id =>
     document.getElementById(id)?.classList.add("hidden"));
-  document.querySelector(".login-tabs")?.classList.add("hidden");
+  document.querySelectorAll(".login-tabs, .login-group-label").forEach(el => el.classList.add("hidden"));
   document.getElementById("loginAdminPanel")?.classList.remove("hidden");
 }
 document.getElementById("publicAdminLink")?.addEventListener("click", showAdminLoginGate);
@@ -8805,9 +8812,11 @@ document.getElementById("pf_submitRegisterBtn")?.addEventListener("click", async
     const res = await fetch("/api/professionals/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     const data = await res.json();
     if (!res.ok) { errEl.textContent = data.error || "No se pudo registrar."; errEl.classList.remove("hidden"); return; }
-    toast(`¡Listo! Tu código de acceso es ${data.accessCode} — guárdalo para entrar a tu panel.`);
+    const firstName = (name || "").split(" ")[0];
+    toast(`¡Registro enviado, ${firstName}! 🎉`);
+    alert(`¡Gracias por registrarte, ${firstName}!\n\nTu perfil profesional quedó EN REVISIÓN. Nuestro equipo lo revisará y, una vez aprobado, aparecerá en el directorio.\n\nTu código de acceso es:\n${data.accessCode}\n\nGuárdalo — con él y tu contraseña entras a tu panel desde "Iniciar sesión → Profesional".${payload.email ? "\n\nTambién te enviamos un correo de confirmación." : ""}`);
     document.getElementById("publicRegisterView").classList.add("hidden");
-    document.getElementById("publicDirectoryView").classList.remove("hidden");
+    showPublicDirectorio("inicio");
   } catch {
     errEl.textContent = "Sin conexión al servidor.";
     errEl.classList.remove("hidden");
@@ -8896,6 +8905,7 @@ function showConsumerGate(mode = "register", pending = null) {
   hideAllPublicSubviews();
   document.querySelectorAll("[data-public-nav]").forEach(b => b.classList.remove("active"));
   document.getElementById("consumerGateView")?.classList.remove("hidden");
+  document.querySelector("#consumerGateView .login-tabs")?.classList.remove("hidden"); // por si un éxito previo las ocultó
   document.querySelectorAll("[data-cg-tab]").forEach(b => b.classList.toggle("active", b.dataset.cgTab === mode));
   document.getElementById("cg_registerPanel")?.classList.toggle("hidden", mode !== "register");
   document.getElementById("cg_loginPanel")?.classList.toggle("hidden", mode !== "login");
@@ -9062,18 +9072,12 @@ document.getElementById("co_submitRegisterBtn")?.addEventListener("click", async
 });
 
 document.getElementById("co_registerSuccessBackBtn")?.addEventListener("click", () => {
-  document.getElementById("publicCompanyRegisterView").classList.add("hidden");
-  document.getElementById("publicCompaniesView").classList.remove("hidden");
+  // Limpiar el formulario y volver a la portada
   document.getElementById("co_registerForm").classList.remove("hidden");
   document.getElementById("co_registerSuccess").classList.add("hidden");
-  document.getElementById("co_regName").value = "";
-  document.getElementById("co_regPhone").value = "";
-  document.getElementById("co_regWhatsapp").value = "";
-  document.getElementById("co_regEmail").value = "";
-  document.getElementById("co_regProvince").value = "";
-  document.getElementById("co_regCity").value = "";
-  document.getElementById("co_regDescription").value = "";
-  document.getElementById("co_regSchedule").value = "";
+  ["co_regName","co_regPhone","co_regWhatsapp","co_regEmail","co_regProvince","co_regCity","co_regDescription","co_regSchedule"]
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
+  showPublicDirectorio("inicio");
 });
 
 // ── Compartir perfil — URL amigable + QR ─────────────────────────────────────
@@ -9441,6 +9445,7 @@ document.querySelectorAll("[data-login-tab]").forEach(btn => {
     document.querySelectorAll("[data-login-tab]").forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
     const tab = btn.dataset.loginTab;
+    document.getElementById("loginClientPanel")?.classList.toggle("hidden", tab !== "client");
     document.getElementById("loginCodePanel").classList.toggle("hidden", tab !== "code");
     document.getElementById("loginProfessionalPanel")?.classList.toggle("hidden", tab !== "professional");
     document.getElementById("loginCompanyPanel").classList.toggle("hidden", tab !== "company");
@@ -9467,6 +9472,31 @@ document.getElementById("loginSellerPasswordInput")?.addEventListener("keydown",
 });
 document.getElementById("loginPasswordInput")?.addEventListener("keydown", e => {
   if (e.key === "Enter") document.getElementById("loginAdminBtn").click();
+});
+
+// ── Login de CLIENTE (usuario gratuito) desde la pantalla de login unificada ──
+document.getElementById("loginClientBtn")?.addEventListener("click", async () => {
+  const errEl = document.getElementById("loginClientError");
+  errEl?.classList.add("hidden");
+  const code = document.getElementById("loginClientCode").value.trim();
+  const password = document.getElementById("loginClientPassword").value;
+  if (!code || !password) { if (errEl) { errEl.textContent = "Ingresa tu código y contraseña."; errEl.classList.remove("hidden"); } return; }
+  try {
+    const res = await fetch("/api/auth/free-user", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, password }) });
+    const data = await res.json();
+    if (!res.ok) { if (errEl) { errEl.textContent = data.error || "Código o contraseña incorrectos."; errEl.classList.remove("hidden"); } return; }
+    setPublicPostAuth(data.token, "usuario_gratuito");
+    toast(`¡Bienvenido de nuevo, ${data.user?.name || ""}!`);
+    showPublicDirectorio("profesionales");
+  } catch { if (errEl) { errEl.textContent = "Sin conexión al servidor."; errEl.classList.remove("hidden"); } }
+});
+document.getElementById("loginClientPassword")?.addEventListener("keydown", e => {
+  if (e.key === "Enter") document.getElementById("loginClientBtn").click();
+});
+// "Créala gratis" desde el login → portada + registro de cliente
+document.getElementById("loginClientToRegister")?.addEventListener("click", () => {
+  showPublicDirectorio("inicio");
+  showConsumerGate("register");
 });
 
 // ── Ebanista login with code (+ password, only when the tenant has one) ────
@@ -12597,8 +12627,13 @@ document.getElementById("cg_registerBtn")?.addEventListener("click", async () =>
     if (login?.token) setPublicPostAuth(login.token, "usuario_gratuito");
     document.getElementById("cg_registerPanel")?.classList.add("hidden");
     document.getElementById("cg_loginPanel")?.classList.add("hidden");
+    document.querySelector("#consumerGateView .login-tabs")?.classList.add("hidden");
+    const firstName = name.split(" ")[0];
+    const titleEl = document.getElementById("cg_successTitle");
+    if (titleEl) titleEl.textContent = `¡Bienvenido a PiLLA, ${firstName}!`;
     document.getElementById("cg_successCode").textContent = data.accessCode;
     document.getElementById("cg_success")?.classList.remove("hidden");
+    toast(`¡Cuenta creada, ${firstName}! 🎉`);
   } catch { _cgError("Sin conexión al servidor."); }
   finally { btn.disabled = false; }
 });
@@ -12639,7 +12674,8 @@ document.getElementById("cg_loginPassword")?.addEventListener("keydown", e => {
 // cualquier token viejo en el navegador, "Ya tengo cuenta" saltaba directo a
 // Profesionales y el usuario nunca veía el login — v52.2 lo corrige.)
 document.getElementById("homeConsumerRegisterBtn")?.addEventListener("click", () => showConsumerGate("register"));
-document.getElementById("homeConsumerLoginBtn")?.addEventListener("click", () => showConsumerGate("login"));
+// "Ya tengo cuenta" → login unificado (misma puerta que el botón del topbar)
+document.getElementById("homeConsumerLoginBtn")?.addEventListener("click", () => showLoginTab("client"));
 
 // Cross-links del gate de cliente hacia el registro de PROVEEDOR (separación
 // clara: la cuenta de cliente es solo para buscar; ofrecer servicios/vender
