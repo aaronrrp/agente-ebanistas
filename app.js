@@ -8768,17 +8768,13 @@ document.getElementById("publicDirectoryGrid")?.addEventListener("click", (e) =>
   const btn = e.target.closest("[data-contact-id]");
   if (!btn) return;
   fetch(`/api/professionals/${btn.dataset.contactId}/contact-click`, { method: "POST" }).catch(() => {});
-  const phone = btn.dataset.contactPhone;
-  if (phone) window.open(`https://wa.me/${phone.replace(/[^0-9]/g, "")}`, "_blank");
+  openWhatsApp(btn.dataset.contactPhone, "Hola, vi tu perfil en PiLLA y me gustaría contactarte.");
 });
 document.getElementById("publicDirectoryGrid")?.addEventListener("click", (e) => {
   const btn = e.target.closest("[data-quote-id]");
   if (!btn) return;
   fetch(`/api/professionals/${btn.dataset.quoteId}/contact-click`, { method: "POST" }).catch(() => {});
-  const phone = btn.dataset.contactPhone;
-  if (!phone) return;
-  const msg = `Hola ${btn.dataset.quoteName}, vi tu perfil en PiLLA y me gustaría solicitar una cotización.`;
-  window.open(`https://wa.me/${phone.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(msg)}`, "_blank");
+  openWhatsApp(btn.dataset.contactPhone, `Hola ${btn.dataset.quoteName}, vi tu perfil en PiLLA y me gustaría solicitar una cotización.`);
 });
 document.getElementById("publicDirectoryGrid")?.addEventListener("click", (e) => {
   const btn = e.target.closest("[data-view-profile]");
@@ -9021,8 +9017,7 @@ document.getElementById("publicCompaniesGrid")?.addEventListener("click", (e) =>
   const btn = e.target.closest("[data-company-contact-id]");
   if (!btn) return;
   fetch(`/api/companies/${btn.dataset.companyContactId}/contact-click`, { method: "POST" }).catch(() => {});
-  const phone = btn.dataset.contactPhone;
-  if (phone) window.open(`https://wa.me/${phone.replace(/[^0-9]/g, "")}`, "_blank");
+  openWhatsApp(btn.dataset.contactPhone, "Hola, vi su empresa en PiLLA y me gustaría más información.");
 });
 
 document.getElementById("publicShowCompanyRegisterBtn")?.addEventListener("click", () => {
@@ -9189,9 +9184,23 @@ document.getElementById("rz_applyFiltersBtn")?.addEventListener("click", loadPub
 document.getElementById("publicRetazosGrid")?.addEventListener("click", (e) => {
   const btn = e.target.closest("[data-retazo-contact-id]");
   if (!btn) return;
-  const phone = btn.dataset.contactPhone;
-  if (phone) window.open(`https://wa.me/${phone.replace(/[^0-9]/g, "")}`, "_blank");
+  openWhatsApp(btn.dataset.contactPhone, "Hola, vi tu retazo publicado en PiLLA y me interesa.");
 });
+
+// Abre WhatsApp normalizando el número: si son 7-8 dígitos (local de Panamá)
+// se antepone 507. Si el anuncio no dejó número, avisa en vez de fallar mudo.
+function openWhatsApp(rawPhone, message) {
+  const url = waLink(rawPhone, message);
+  if (!url) { toast("Este anuncio no dejó un número de contacto.", "error"); return; }
+  window.open(url, "_blank");
+}
+// Devuelve la URL de wa.me normalizada (507 para números locales de Panamá) o "".
+function waLink(rawPhone, message) {
+  let digits = String(rawPhone || "").replace(/[^0-9]/g, "");
+  if (!digits) return "";
+  if (digits.length === 7 || digits.length === 8) digits = "507" + digits;
+  return `https://wa.me/${digits}${message ? `?text=${encodeURIComponent(message)}` : ""}`;
+}
 
 document.getElementById("rz_showPublishBtn")?.addEventListener("click", () => {
   hideAllPublicSubviews();
@@ -10390,7 +10399,7 @@ async function openProProfileModal(professionalId) {
         ${p.schedule ? `<div><strong style="font-size:.8rem;color:var(--muted)">HORARIO</strong><p style="margin:2px 0;font-size:.9rem">${escapeHtml(p.schedule)}</p></div>` : ""}
         ${p.location?.city ? `<div><strong style="font-size:.8rem;color:var(--muted)">UBICACIÓN</strong><p style="margin:2px 0;font-size:.9rem">📍 ${escapeHtml(p.location.city)}${p.location.province ? ", " + escapeHtml(p.location.province) : ""}</p></div>` : ""}
       </div>
-      ${(p.whatsapp || p.phone) ? `<a class="primary-btn" href="https://wa.me/${(p.whatsapp||p.phone).replace(/[^0-9]/g,'')}" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none;margin-bottom:16px">📞 Contactar por WhatsApp</a>` : ""}
+      ${(p.whatsapp || p.phone) ? `<a class="primary-btn" href="${waLink(p.whatsapp||p.phone, `Hola ${p.name}, vi tu perfil en PiLLA y me gustaría contactarte.`)}" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none;margin-bottom:16px">📞 Contactar por WhatsApp</a>` : ""}
       <hr style="margin:12px 0;border:none;border-top:1px solid var(--line)">
       <h4 style="margin:0 0 10px">Reseñas (${ratings.length})</h4>
       <div id="proRatingsList">
