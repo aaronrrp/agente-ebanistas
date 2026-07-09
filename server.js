@@ -1880,59 +1880,87 @@ function handleTenantAccess(req, res, id) {
   });
 }
 
+// ── Cache-busting por build ────────────────────────────────────────────────
+// index.html referencia /app.js y /styles.css. Sin versión, un navegador que
+// cacheó esos assets en un deploy viejo los sigue usando aunque el HTML cambie.
+// BUILD_ID = mtime más reciente de los 3 archivos → cambia en cada deploy. Se
+// inyecta como ?v=BUILD_ID, forzando al navegador a bajar la versión nueva sin
+// que el usuario tenga que limpiar caché (Ctrl+Shift+R).
+function computeBuildId() {
+  let m = 0;
+  for (const f of ["app.js", "styles.css", "index.html"]) {
+    try { m = Math.max(m, fs.statSync(path.join(rootDir, f)).mtimeMs); } catch {}
+  }
+  return Math.floor(m).toString(36);
+}
+const BUILD_ID = computeBuildId();
+const _htmlCache = {}; // { normal:{raw,gz}, admin:{raw,gz} } — HTML versionado y gzip
+
+function serveIndexHtml(req, res, adminGate) {
+  try {
+    const key = adminGate ? "admin" : "normal";
+    let entry = _htmlCache[key];
+    if (!entry) {
+      let html = fs.readFileSync(path.join(rootDir, "index.html"), "utf-8")
+        .replace('href="/styles.css"', `href="/styles.css?v=${BUILD_ID}"`)
+        .replace('src="/app.js"', `src="/app.js?v=${BUILD_ID}"`);
+      if (adminGate) html = html.replace("</head>", "<script>window.__PILLA_ADMIN_GATE__=1</script></head>");
+      const raw = Buffer.from(html, "utf-8");
+      entry = { raw, gz: zlib.gzipSync(raw, { level: 6 }) };
+      _htmlCache[key] = entry;
+    }
+    const acceptsGzip = /\bgzip\b/.test(req.headers["accept-encoding"] || "");
+    const body = acceptsGzip ? entry.gz : entry.raw;
+    res.writeHead(200, {
+      "Content-Type": "text/html; charset=utf-8",
+      "Content-Length": body.length,
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY",
+      "Referrer-Policy": "strict-origin-when-cross-origin",
+      "Cache-Control": "no-cache",
+      "Vary": "Accept-Encoding",
+      ...(adminGate ? { "X-Robots-Tag": "noindex, nofollow" } : {}),
+      ...(acceptsGzip ? { "Content-Encoding": "gzip" } : {})
+    });
+    res.end(body);
+  } catch { res.writeHead(404); res.end("Not found"); }
+}
+
 async function serveStatic(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
-  // Ruta privada de acceso admin: sirve index.html con un flag inyectado que el
-  // cliente usa para mostrar SOLO el login de administrador. La ruta nunca aparece
-  // en el código del cliente — vive únicamente aquí (y en la env var).
-  if (url.pathname === ADMIN_ACCESS_PATH || url.pathname === ADMIN_ACCESS_PATH + "/") {
-    try {
-      const html = await readFile(path.join(rootDir, "index.html"), "utf-8");
-      res.writeHead(200, {
-        "Content-Type": "text/html; charset=utf-8",
-        "X-Content-Type-Options": "nosniff",
-        "X-Frame-Options": "DENY",
-        "Referrer-Policy": "strict-origin-when-cross-origin",
-        "X-Robots-Tag": "noindex, nofollow",
-        "Cache-Control": "no-store"
-      });
-      res.end(html.replace("</head>", "<script>window.__PILLA_ADMIN_GATE__=1</script></head>"));
-    } catch { res.writeHead(404); res.end("Not found"); }
+  const isAdminGate = url.pathname === ADMIN_ACCESS_PATH || url.pathname === ADMIN_ACCESS_PATH + "/";
+  // Friendly profile URLs — sirven index.html (el JS detecta el slug). El slug
+  // nunca lleva punto: así /c/app.js (un asset) NO cae aquí.
+  const isProfileUrl = /^\/(p|c)\/[^/.]+\/?$/.test(url.pathname);
+  // Toda página HTML pasa por serveIndexHtml (versión inyectada + admin gate)
+  if (isAdminGate || isProfileUrl || url.pathname === "/" || url.pathname === "/index.html") {
+    serveIndexHtml(req, res, isAdminGate);
     return;
   }
-  // Friendly profile URLs — serve index.html so JS can detect the slug and open the card.
-  // El slug nunca lleva punto: así /c/app.js (asset con ruta relativa) NO se reescribe.
-  const isProfileUrl = /^\/(p|c)\/[^/.]+\/?$/.test(url.pathname);
-  const pathname = (url.pathname === "/" || isProfileUrl) ? "/index.html" : url.pathname;
-  const filePath = path.normalize(path.join(rootDir, pathname));
+
+  const filePath = path.normalize(path.join(rootDir, url.pathname));
   if (!filePath.startsWith(rootDir)) { res.writeHead(403); res.end("Forbidden"); return; }
   try {
     const st = fs.statSync(filePath);
     if (!st.isFile()) { res.writeHead(404); res.end("Not found"); return; }
     const ext = path.extname(filePath);
-    const isHtml = ext === ".html";
     const lastMod = new Date(st.mtimeMs).toUTCString();
+    // Assets con ?v=BUILD_ID son inmutables (cambian de URL en cada deploy) →
+    // caché larga. Sin versión → revalidar siempre (no-cache).
+    const versioned = url.searchParams.has("v");
+    const cacheHeader = versioned ? "public, max-age=31536000, immutable" : "no-cache";
 
-    // Revalidación barata: el navegador manda If-Modified-Since y recibe 304 sin
-    // cuerpo. Cache-Control: no-cache = "guarda pero revalida siempre" — los
-    // deploys se ven al instante y las recargas no re-descargan 800KB.
-    if (req.headers["if-modified-since"] === lastMod) {
-      res.writeHead(304, { "Last-Modified": lastMod, "Cache-Control": "no-cache", "Vary": "Accept-Encoding" });
+    if (!versioned && req.headers["if-modified-since"] === lastMod) {
+      res.writeHead(304, { "Last-Modified": lastMod, "Cache-Control": cacheHeader, "Vary": "Accept-Encoding" });
       res.end();
       return;
     }
 
-    // Caché en memoria + gzip pre-comprimido por archivo, invalidado por mtime/size.
-    // app.js pasa de 630KB a ~138KB por request — la mejora de latencia más grande
-    // disponible sin dependencias (node:zlib es built-in).
     let entry = _staticCache.get(filePath);
     if (!entry || entry.mtimeMs !== st.mtimeMs || entry.size !== st.size) {
       const raw = await readFile(filePath);
       entry = { mtimeMs: st.mtimeMs, size: st.size, raw, gz: null };
-      if (COMPRESSIBLE_EXT.has(ext) && raw.length > 1024) {
-        entry.gz = zlib.gzipSync(raw, { level: 6 });
-      }
-      // Archivos enormes no se cachean en memoria (no hay ninguno hoy; defensa futura)
+      if (COMPRESSIBLE_EXT.has(ext) && raw.length > 1024) entry.gz = zlib.gzipSync(raw, { level: 6 });
       if (st.size <= 5_000_000) _staticCache.set(filePath, entry);
     }
 
@@ -1943,10 +1971,9 @@ async function serveStatic(req, res) {
       "Content-Length": body.length,
       "X-Content-Type-Options": "nosniff",
       "Last-Modified": lastMod,
-      "Cache-Control": "no-cache",
+      "Cache-Control": cacheHeader,
       "Vary": "Accept-Encoding",
-      ...(acceptsGzip && entry.gz ? { "Content-Encoding": "gzip" } : {}),
-      ...(isHtml ? { "X-Frame-Options": "DENY", "Referrer-Policy": "strict-origin-when-cross-origin" } : {})
+      ...(acceptsGzip && entry.gz ? { "Content-Encoding": "gzip" } : {})
     });
     res.end(body);
   } catch {
