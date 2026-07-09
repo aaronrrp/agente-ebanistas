@@ -2360,3 +2360,17 @@ input.hidden + .show-pw-toggle { display: none; }
   .home-account-bar { flex-direction: column; align-items: stretch; text-align: center; }
   .home-account-actions { justify-content: center; }
 }
+
+/* ── Portada compacta (v53.4): el encabezado no tapa las acciones ─────────── */
+.home-hero-compact { padding: 18px 0 14px; }
+.home-hero-compact h1 { font-size: 1.6rem; margin: 0 0 6px; }
+.home-hero-compact .public-hero-sub { margin: 0 auto; max-width: 520px; font-size: .95rem; }
+@media (max-width: 560px) {
+  .home-hero-compact { padding: 12px 0 10px; }
+  .home-hero-compact h1 { font-size: 1.35rem; }
+  .home-hero-compact .public-hero-sub { font-size: .88rem; }
+}
+/* Tarjetas de acción más grandes e invitadoras en la portada */
+#publicHomeView .home-card { padding: 30px 22px; }
+#publicHomeView .home-card .home-card-icon { font-size: 2.8rem; }
+#publicHomeView .home-card strong { font-size: 1.15rem; }
