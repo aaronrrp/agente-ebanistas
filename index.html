@@ -160,23 +160,29 @@
           </button>
         </div>
 
-        <!-- Barra de cuenta: crear (cliente) o iniciar sesión (todos) -->
-        <div class="home-account-bar">
-          <div>
-            <strong>¿Primera vez en PiLLA?</strong>
-            <span>Crea tu cuenta gratis para buscar y contactar.</span>
+        <!-- Dos caminos, mismo peso visual: cliente (busca) y proveedor (ofrece) -->
+        <div class="home-join-grid">
+          <!-- Cliente -->
+          <div class="home-join-card">
+            <div class="home-join-icon">🔎</div>
+            <strong>Quiero buscar</strong>
+            <span>Crea tu cuenta gratis para contactar profesionales y empresas.</span>
+            <div class="home-join-actions">
+              <button id="homeConsumerRegisterBtn" class="primary-btn" type="button">✨ Crear cuenta gratis</button>
+              <button id="homeConsumerLoginBtn" class="secondary-btn" type="button">Ya tengo cuenta</button>
+            </div>
           </div>
-          <div class="home-account-actions">
-            <button id="homeConsumerRegisterBtn" class="primary-btn" type="button">✨ Crear cuenta gratis</button>
-            <button id="homeConsumerLoginBtn" class="secondary-btn" type="button">Ya tengo cuenta</button>
+          <!-- Proveedor -->
+          <div class="home-join-card home-join-card--provider">
+            <div class="home-join-icon">🛠️</div>
+            <strong>Ofrezco servicios o vendo materiales</strong>
+            <span>Únete gratis y aparece en el directorio para que te encuentren.</span>
+            <div class="home-join-actions">
+              <button class="primary-btn" data-go-provider="pro" type="button">👷 Soy profesional</button>
+              <button class="primary-btn" data-go-provider="empresa" type="button">🏢 Soy empresa</button>
+            </div>
           </div>
         </div>
-
-        <!-- Proveedores -->
-        <p class="home-provider-line">¿Ofreces servicios o vendes materiales?
-          <button type="button" class="linklike" data-go-provider="pro">Regístrate como profesional</button> ·
-          <button type="button" class="linklike" data-go-provider="empresa">Registra tu empresa</button>
-        </p>
       </section>
 
       <!-- Vista: registro/login de CONSUMIDOR (gate de búsqueda) -->

@@ -2374,3 +2374,24 @@ input.hidden + .show-pw-toggle { display: none; }
 #publicHomeView .home-card { padding: 30px 22px; }
 #publicHomeView .home-card .home-card-icon { font-size: 2.8rem; }
 #publicHomeView .home-card strong { font-size: 1.15rem; }
+
+/* ── Dos caminos en la portada: buscar vs ofrecer (mismo peso) v53.5 ──────── */
+.home-join-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 18px;
+  max-width: 860px; margin: 2rem auto 0;
+}
+.home-join-card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+  padding: 22px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  box-shadow: 0 2px 10px rgba(26,19,70,.06);
+}
+.home-join-card--provider { border-color: var(--gold); background: linear-gradient(180deg, #fffdf5, var(--surface)); }
+.home-join-icon { font-size: 2rem; line-height: 1; }
+.home-join-card strong { font-size: 1.05rem; }
+.home-join-card > span { font-size: .85rem; color: var(--muted); line-height: 1.4; min-height: 2.4em; }
+.home-join-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 8px; width: 100%; }
+.home-join-actions .primary-btn, .home-join-actions .secondary-btn { flex: 1; min-width: 130px; }
+@media (max-width: 620px) {
+  .home-join-grid { grid-template-columns: 1fr; }
+  .home-join-card > span { min-height: 0; }
+}
