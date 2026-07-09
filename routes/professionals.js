@@ -133,6 +133,10 @@ async function handle(req, res, { method, p, parts }) {
     const body = await readBody(req);
     const data = body ? JSON.parse(body) : {};
     if (!data.name || !String(data.name).trim()) { sendJson(res, 400, { error: "Falta el nombre." }); return true; }
+    // v53.6: el correo es la identidad de acceso — requerido y único
+    const emailNorm = String(data.email || "").trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emailNorm)) { sendJson(res, 400, { error: "Ingresa un correo válido." }); return true; }
+    if (professionals.some(x => x.email && x.email.toLowerCase() === emailNorm)) { sendJson(res, 409, { error: "Ya existe una cuenta con ese correo." }); return true; }
     const passwordPlain = (data.password && String(data.password).trim()) || generatePassword();
     const { salt, hash } = hashPassword(passwordPlain);
     const id = crypto.randomUUID();
@@ -201,8 +205,10 @@ async function handle(req, res, { method, p, parts }) {
     }
     const body = await readBody(req);
     const { code, password } = body ? JSON.parse(body) : {};
-    const prof = professionals.find(x => x.accessCode === code);
-    if (!prof) { sendJson(res, 401, { error: "Código no válido." }); return true; }
+    // v53.6: se puede entrar con el CORREO o (por compatibilidad) el código
+    const q = String(code || "").trim().toLowerCase();
+    const prof = professionals.find(x => x.accessCode === code || (x.email && x.email.toLowerCase() === q));
+    if (!prof) { sendJson(res, 401, { error: "Correo o contraseña incorrectos." }); return true; }
     if (!verifyPassword(password, prof.passwordSalt, prof.passwordHash)) {
       logActivity({ actorType: "professional", actorId: prof.id, actorLabel: prof.name, action: "auth.login.failed", meta: { ip } });
       sendJson(res, 401, { error: "Contraseña incorrecta." }); return true;

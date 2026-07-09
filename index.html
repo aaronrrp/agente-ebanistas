@@ -40,10 +40,10 @@
 
       <!-- Tab: cliente (usuario gratuito) -->
       <div id="loginClientPanel" class="login-panel" role="tabpanel">
-        <p class="login-hint">Entra con el código de acceso y contraseña de tu cuenta de cliente.</p>
-        <input id="loginClientCode" class="login-input" type="text"
-               placeholder="Código de acceso (ej: maria-4f8a2c)"
-               autocomplete="off" autocapitalize="none" spellcheck="false">
+        <p class="login-hint">Entra con tu correo y contraseña.</p>
+        <input id="loginClientCode" class="login-input" type="email"
+               placeholder="Tu correo"
+               autocomplete="email" autocapitalize="none" spellcheck="false">
         <input id="loginClientPassword" class="login-input" type="password"
                placeholder="Contraseña" autocomplete="current-password">
         <button id="loginClientBtn" class="primary-btn login-btn" type="button">Entrar →</button>
@@ -64,10 +64,10 @@
 
       <!-- Tab: profesional -->
       <div id="loginProfessionalPanel" class="login-panel hidden" role="tabpanel">
-        <p class="login-hint">Accede con el código de acceso y contraseña de tu perfil profesional.</p>
-        <input id="loginProCode" class="login-input" type="text"
-               placeholder="Código de acceso (ej: juanperez-4f8a2c)"
-               autocomplete="off" autocapitalize="none" spellcheck="false">
+        <p class="login-hint">Accede con tu correo y contraseña.</p>
+        <input id="loginProCode" class="login-input" type="email"
+               placeholder="Tu correo"
+               autocomplete="email" autocapitalize="none" spellcheck="false">
         <input id="loginProPassword" class="login-input" type="password"
                placeholder="Contraseña" autocomplete="current-password">
         <button id="loginProBtn" class="primary-btn login-btn" type="button">Entrar →</button>
@@ -76,10 +76,10 @@
 
       <!-- Tab: empresa -->
       <div id="loginCompanyPanel" class="login-panel hidden" role="tabpanel">
-        <p class="login-hint">Accede con las credenciales que recibiste al activar tu cuenta de empresa.</p>
-        <input id="loginCompanyCode" class="login-input" type="text"
-               placeholder="Código de acceso (ej: ferreteria-abc123)"
-               autocomplete="off" autocapitalize="none" spellcheck="false">
+        <p class="login-hint">Accede con el correo de tu empresa y tu contraseña.</p>
+        <input id="loginCompanyCode" class="login-input" type="email"
+               placeholder="Correo de la empresa"
+               autocomplete="email" autocapitalize="none" spellcheck="false">
         <input id="loginCompanyPassword" class="login-input" type="password"
                placeholder="Contraseña" autocomplete="current-password">
         <button id="loginCompanyBtn" class="primary-btn login-btn" type="button">Entrar →</button>
@@ -201,6 +201,9 @@
               <label>Tu nombre*
                 <input id="cg_regName" type="text" autocomplete="name">
               </label>
+              <label>Correo* (con él inicias sesión)
+                <input id="cg_regEmail" type="email" autocomplete="email">
+              </label>
               <label>WhatsApp o teléfono (opcional)
                 <input id="cg_regPhone" type="text" autocomplete="tel">
               </label>
@@ -213,8 +216,8 @@
 
           <div id="cg_loginPanel" class="hidden" role="tabpanel">
             <div class="form-grid" style="grid-template-columns:1fr">
-              <label>Código de acceso
-                <input id="cg_loginCode" type="text" placeholder="Ej: maria-4f8a2c" autocapitalize="none" spellcheck="false">
+              <label>Correo
+                <input id="cg_loginCode" type="email" placeholder="tu@correo.com" autocapitalize="none" spellcheck="false">
               </label>
               <label>Contraseña
                 <input id="cg_loginPassword" type="password" autocomplete="current-password">
@@ -227,12 +230,7 @@
             <div style="font-size:3rem">🎉</div>
             <h3 id="cg_successTitle" style="margin:.5rem 0">¡Bienvenido a PiLLA!</h3>
             <p style="margin:0 0 12px">Tu cuenta ya está lista. Ya puedes buscar y contactar profesionales, empresas y retazos.</p>
-            <p style="margin:0 0 6px;font-size:.88rem;color:var(--muted)">Guarda tu código de acceso — lo necesitas para entrar la próxima vez:</p>
-            <div style="display:flex;gap:8px;justify-content:center;align-items:center;margin-bottom:6px">
-              <code id="cg_successCode" style="background:#fef9c3;border:1px solid #eab308;border-radius:8px;padding:8px 14px;font-size:1.05rem;font-weight:700"></code>
-              <button id="cg_copyCodeBtn" class="tiny-btn" type="button">Copiar</button>
-            </div>
-            <p class="login-hint" style="margin-bottom:14px">Con este código y tu contraseña inicias sesión desde "Cliente".</p>
+            <p class="login-hint" style="margin-bottom:14px">La próxima vez inicia sesión con <strong id="cg_successEmail" style="color:var(--accent)"></strong> y tu contraseña, desde "Iniciar sesión → Cliente".</p>
             <button id="cg_continueBtn" class="primary-btn" type="button" style="width:100%">Empezar a buscar →</button>
           </div>
 
@@ -335,8 +333,8 @@
             <label>WhatsApp
               <input id="pf_regWhatsapp" type="text">
             </label>
-            <label>Correo
-              <input id="pf_regEmail" type="email">
+            <label>Correo* (con él inicias sesión)
+              <input id="pf_regEmail" type="email" autocomplete="email">
             </label>
             <label>Provincia
               <select id="pf_regProvince"><option value="">Seleccionar…</option></select>
@@ -362,12 +360,7 @@
             <div style="font-size:3rem">🎉</div>
             <h3 id="pf_successTitle" style="margin:.5rem 0">¡Registro enviado!</h3>
             <p style="margin:0 0 12px">Tu perfil profesional quedó <strong>en revisión</strong>. Una vez aprobado, aparecerá en el directorio y los clientes podrán contactarte.</p>
-            <p style="margin:0 0 6px;font-size:.88rem;color:var(--muted)">Guarda tu código de acceso — lo necesitas para entrar a tu panel:</p>
-            <div style="display:flex;gap:8px;justify-content:center;align-items:center;margin-bottom:6px">
-              <code id="pf_successCode" style="background:#fef9c3;border:1px solid #eab308;border-radius:8px;padding:8px 14px;font-size:1.05rem;font-weight:700"></code>
-              <button id="pf_copyCodeBtn" class="tiny-btn" type="button">Copiar</button>
-            </div>
-            <p class="login-hint" style="margin-bottom:14px">Entra desde "Iniciar sesión → Profesional" con este código y tu contraseña.</p>
+            <p class="login-hint" style="margin-bottom:14px">Cuando esté aprobado, entra desde "Iniciar sesión → Profesional" con tu correo <strong id="pf_successEmail" style="color:var(--accent)"></strong> y tu contraseña.</p>
             <button id="pf_successContinueBtn" class="primary-btn" type="button" style="width:100%">Ir al inicio →</button>
           </div>
         </div>
@@ -432,8 +425,8 @@
               <label>WhatsApp
                 <input id="co_regWhatsapp" type="text">
               </label>
-              <label>Correo
-                <input id="co_regEmail" type="email">
+              <label>Correo* (acceso de la empresa)
+                <input id="co_regEmail" type="email" autocomplete="email">
               </label>
               <label>Provincia
                 <select id="co_regProvince"><option value="">Seleccionar…</option></select>

@@ -101,6 +101,10 @@ async function handle(req, res, { method, p, parts, getCallerIdentity }) {
     const body = await readBody(req);
     const data = body ? JSON.parse(body) : {};
     if (!data.name || !String(data.name).trim()) { sendJson(res, 400, { error: "Falta el nombre." }); return true; }
+    // v53.6: el correo es la identidad de acceso — requerido y único
+    const emailNorm = String(data.email || "").trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emailNorm)) { sendJson(res, 400, { error: "Ingresa un correo válido." }); return true; }
+    if (freeUsers.some(x => x.email && x.email.toLowerCase() === emailNorm)) { sendJson(res, 409, { error: "Ya existe una cuenta con ese correo." }); return true; }
     const passwordPlain = (data.password && String(data.password).trim()) || generatePassword();
     const { salt, hash } = hashPassword(passwordPlain);
     const user = {
@@ -124,8 +128,9 @@ async function handle(req, res, { method, p, parts, getCallerIdentity }) {
   if (method === "POST" && p === "/api/auth/free-user") {
     const body = await readBody(req);
     const { code, password } = body ? JSON.parse(body) : {};
-    const user = freeUsers.find(x => x.accessCode === code);
-    if (!user) { sendJson(res, 401, { error: "Código no válido." }); return true; }
+    const q = String(code || "").trim().toLowerCase();
+    const user = freeUsers.find(x => x.accessCode === code || (x.email && x.email.toLowerCase() === q));
+    if (!user) { sendJson(res, 401, { error: "Correo o contraseña incorrectos." }); return true; }
     if (!verifyPassword(password, user.passwordSalt, user.passwordHash)) { sendJson(res, 401, { error: "Contraseña incorrecta." }); return true; }
     // v52.3: una cuenta suspendida por el admin no puede iniciar sesión
     if (user.status && user.status !== "active") { sendJson(res, 401, { error: "Tu cuenta está suspendida. Contacta a PiLLA." }); return true; }

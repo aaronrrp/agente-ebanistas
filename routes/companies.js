@@ -115,6 +115,10 @@ async function handle(req, res, { method, p, parts }) {
     const body = await readBody(req);
     const data = body ? JSON.parse(body) : {};
     if (!data.name || !String(data.name).trim()) { sendJson(res, 400, { error: "Falta el nombre de la empresa." }); return true; }
+    // v53.6: el correo es la identidad de acceso — requerido y único
+    const emailNorm = String(data.email || "").trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emailNorm)) { sendJson(res, 400, { error: "Ingresa un correo válido." }); return true; }
+    if (companies.some(x => x.email && x.email.toLowerCase() === emailNorm)) { sendJson(res, 409, { error: "Ya existe una empresa con ese correo." }); return true; }
     const id = crypto.randomUUID();
     const company = {
       id,
@@ -155,8 +159,9 @@ async function handle(req, res, { method, p, parts }) {
   if (method === "POST" && p === "/api/auth/company") {
     const body = await readBody(req);
     const { code, password } = body ? JSON.parse(body) : {};
-    const company = companies.find(x => x.accessCode === code);
-    if (!company) { sendJson(res, 401, { error: "Código no válido." }); return true; }
+    const q = String(code || "").trim().toLowerCase();
+    const company = companies.find(x => x.accessCode === code || (x.email && x.email.toLowerCase() === q));
+    if (!company) { sendJson(res, 401, { error: "Correo o contraseña incorrectos." }); return true; }
     if (!verifyPassword(password, company.passwordSalt, company.passwordHash)) { sendJson(res, 401, { error: "Contraseña incorrecta." }); return true; }
     company.lastAccessAt = new Date().toISOString();
     saveCompanies(companies);

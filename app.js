@@ -8792,7 +8792,9 @@ document.getElementById("pf_submitRegisterBtn")?.addEventListener("click", async
   errEl.classList.add("hidden");
   const name = document.getElementById("pf_regName").value.trim();
   const password = document.getElementById("pf_regPassword").value;
+  const email = document.getElementById("pf_regEmail").value.trim();
   if (!name) { errEl.textContent = "Falta tu nombre."; errEl.classList.remove("hidden"); return; }
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { errEl.textContent = "Ingresa un correo válido (lo usarás para entrar)."; errEl.classList.remove("hidden"); return; }
   if (!password || password.length < 4) { errEl.textContent = "La contraseña necesita al menos 4 caracteres."; errEl.classList.remove("hidden"); return; }
   const payload = {
     name, password,
@@ -8816,16 +8818,13 @@ document.getElementById("pf_submitRegisterBtn")?.addEventListener("click", async
     document.getElementById("pf_registerForm")?.classList.add("hidden");
     const titleEl = document.getElementById("pf_successTitle");
     if (titleEl) titleEl.textContent = `¡Gracias por registrarte, ${firstName}!`;
-    document.getElementById("pf_successCode").textContent = data.accessCode;
+    const emEl = document.getElementById("pf_successEmail");
+    if (emEl) emEl.textContent = email;
     document.getElementById("pf_registerSuccess")?.classList.remove("hidden");
   } catch {
     errEl.textContent = "Sin conexión al servidor.";
     errEl.classList.remove("hidden");
   }
-});
-// Copiar código y continuar desde la pantalla de éxito del registro profesional
-document.getElementById("pf_copyCodeBtn")?.addEventListener("click", async () => {
-  try { await navigator.clipboard.writeText(document.getElementById("pf_successCode")?.textContent); toast("Código copiado ✓"); } catch {}
 });
 document.getElementById("pf_successContinueBtn")?.addEventListener("click", () => {
   // Restablecer el formulario para el próximo registro y volver al inicio
@@ -9057,6 +9056,8 @@ document.getElementById("co_submitRegisterBtn")?.addEventListener("click", async
   errEl.classList.add("hidden");
   const name = document.getElementById("co_regName").value.trim();
   if (!name) { errEl.textContent = "Falta el nombre de la empresa."; errEl.classList.remove("hidden"); return; }
+  const coEmail = document.getElementById("co_regEmail").value.trim();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(coEmail)) { errEl.textContent = "Ingresa un correo válido (será el acceso de la empresa)."; errEl.classList.remove("hidden"); return; }
   const catVal = document.getElementById("co_regCategory").value;
   const catOther = document.getElementById("co_regCategoryOther")?.value.trim() || "";
   if (catVal === "otra" && !catOther) { errEl.textContent = "Escribe tu rubro."; errEl.classList.remove("hidden"); return; }
@@ -10452,7 +10453,8 @@ async function openProProfileModal(professionalId) {
               <span class="star-row">${[1,2,3,4,5].map(i=>`<span class="star${i<=r.stars?" star-filled":""}">${i<=r.stars?"★":"☆"}</span>`).join("")}</span>
             </div>
             ${r.comment ? `<p style="font-size:.85rem;margin:0;color:var(--muted)">${escapeHtml(r.comment)}</p>` : ""}
-            <time style="font-size:.75rem;color:var(--muted)">${new Date(r.createdAt).toLocaleDateString()}</time>
+            ${(r.photoUrls && r.photoUrls.length) ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${r.photoUrls.map(u => `<a href="${escapeHtml(u)}" target="_blank" rel="noopener"><img src="${escapeHtml(u)}" alt="trabajo" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--line)"></a>`).join("")}</div>` : ""}
+            <time style="font-size:.75rem;color:var(--muted);display:block;margin-top:4px">${new Date(r.createdAt).toLocaleDateString()}</time>
           </div>`).join("") : '<p class="login-hint">Nadie ha dejado reseñas aún. ¡Sé el primero!</p>'}
       </div>
       <div id="proRatingForm" style="margin-top:14px;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--surface-soft)">
@@ -10470,6 +10472,15 @@ async function openProProfileModal(professionalId) {
         <div style="margin-bottom:10px">
           <span style="font-size:.85rem;color:var(--muted)">Comentario (opcional)</span>
           <textarea id="proRatingComment" rows="2" placeholder="Cuéntanos tu experiencia…" style="width:100%;margin-top:4px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:.88rem;box-sizing:border-box;resize:vertical"></textarea>
+        </div>
+        <div style="margin-bottom:10px">
+          <span style="font-size:.85rem;color:var(--muted)">Fotos del trabajo (opcional, hasta 5)</span>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap">
+            <label class="tiny-btn" style="cursor:pointer;margin:0">📷 Agregar fotos
+              <input id="proRatingPhotos" type="file" accept="image/*" multiple style="display:none">
+            </label>
+            <div id="proRatingPhotoPreview" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+          </div>
         </div>
         <button class="primary-btn" id="proRatingSubmitBtn" type="button" data-prof-id="${professionalId}">Enviar valoración</button>
         <p id="proRatingError" class="login-error hidden"></p>
@@ -10507,6 +10518,25 @@ function _attachRatingFormListeners() {
       });
     });
   }
+  // Fotos del trabajo — sube al elegirlas (smartUploadImage) y muestra miniaturas
+  _ratingPhotos = [];
+  document.getElementById("proRatingPhotos")?.addEventListener("change", async (e) => {
+    const files = Array.from(e.target.files || []);
+    const preview = document.getElementById("proRatingPhotoPreview");
+    for (const file of files) {
+      if (_ratingPhotos.length >= 5) { toast("Máximo 5 fotos.", "error"); break; }
+      try {
+        const url = await smartUploadImage(file, "ratings", currentBestAuthToken ? () => ({ Authorization: `Bearer ${currentBestAuthToken()}` }) : undefined);
+        _ratingPhotos.push(url);
+        const img = document.createElement("img");
+        img.src = url; img.alt = "trabajo";
+        img.style.cssText = "width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid var(--line)";
+        preview?.appendChild(img);
+      } catch { toast("No se pudo subir una foto.", "error"); }
+    }
+    e.target.value = "";
+  });
+
   document.getElementById("proRatingSubmitBtn")?.addEventListener("click", async () => {
     const profId = document.getElementById("proRatingSubmitBtn").dataset.profId;
     const stars = Number(document.getElementById("proRatingStars")?.dataset.selected || 0);
@@ -10524,7 +10554,8 @@ function _attachRatingFormListeners() {
         body: JSON.stringify({
           stars,
           raterName: document.getElementById("proRatingName")?.value.trim() || "",
-          comment: document.getElementById("proRatingComment")?.value.trim() || ""
+          comment: document.getElementById("proRatingComment")?.value.trim() || "",
+          photoUrls: _ratingPhotos.slice(0, 5)
         })
       });
       const data = await res.json();
@@ -10535,6 +10566,7 @@ function _attachRatingFormListeners() {
     } catch { errEl.textContent = "Sin conexión al servidor."; errEl.classList.remove("hidden"); }
   });
 }
+let _ratingPhotos = [];
 
 // ── Admin: Valoraciones ───────────────────────────────────────────────────
 async function loadAdminRatingsTab() {
@@ -12488,8 +12520,27 @@ function _admGenPassword() {
   return Array.from(bytes, b => alf[b % alf.length]).join("");
 }
 
+// Crea el modal de "Ver datos" si no existe en el DOM (defensa ante un
+// index.html desactualizado en caché — así el botón nunca queda muerto).
+function _ensureAdmEntityModal() {
+  let modal = document.getElementById("admEntityModal");
+  if (modal) return modal;
+  modal = document.createElement("div");
+  modal.id = "admEntityModal";
+  modal.className = "modal-overlay hidden";
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
+  modal.innerHTML = '<div class="modal-box" style="max-width:640px;max-height:86vh;overflow-y:auto">' +
+    '<button class="modal-close-btn" id="admEntityModalClose" type="button" aria-label="Cerrar">✕</button>' +
+    '<div id="admEntityModalContent"><p class="login-hint">Cargando…</p></div></div>';
+  document.body.appendChild(modal);
+  modal.querySelector("#admEntityModalClose").addEventListener("click", () => modal.classList.add("hidden"));
+  modal.addEventListener("click", (ev) => { if (ev.target === modal) modal.classList.add("hidden"); });
+  return modal;
+}
+
 async function openAdminEntityModal(kind, id) {
-  const modal = document.getElementById("admEntityModal");
+  const modal = _ensureAdmEntityModal();
   const box = document.getElementById("admEntityModalContent");
   if (!modal || !box) return;
   box.innerHTML = '<p class="login-hint">Cargando…</p>';
@@ -12618,23 +12669,25 @@ function _cgError(msg) {
 document.getElementById("cg_registerBtn")?.addEventListener("click", async () => {
   document.getElementById("cg_error")?.classList.add("hidden");
   const name = document.getElementById("cg_regName")?.value.trim();
+  const email = document.getElementById("cg_regEmail")?.value.trim() || "";
   const phone = document.getElementById("cg_regPhone")?.value.trim() || "";
   const password = document.getElementById("cg_regPassword")?.value || "";
   if (!name) { _cgError("Escribe tu nombre."); return; }
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { _cgError("Ingresa un correo válido."); return; }
   if (password.length < 4) { _cgError("La contraseña necesita al menos 4 caracteres."); return; }
   const btn = document.getElementById("cg_registerBtn");
   btn.disabled = true;
   try {
     const res = await fetch("/api/free-users/register", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, phone, password })
+      body: JSON.stringify({ name, email, phone, password })
     });
     const data = await res.json();
     if (!res.ok) { _cgError(data.error || "No se pudo crear la cuenta."); return; }
-    // Login automático para que no tenga que teclear nada de nuevo
+    // Login automático con el correo
     const login = await fetch("/api/auth/free-user", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: data.accessCode, password })
+      body: JSON.stringify({ code: email, password })
     }).then(r => r.ok ? r.json() : null);
     if (login?.token) setPublicPostAuth(login.token, "usuario_gratuito");
     document.getElementById("cg_registerPanel")?.classList.add("hidden");
@@ -12643,16 +12696,12 @@ document.getElementById("cg_registerBtn")?.addEventListener("click", async () =>
     const firstName = name.split(" ")[0];
     const titleEl = document.getElementById("cg_successTitle");
     if (titleEl) titleEl.textContent = `¡Bienvenido a PiLLA, ${firstName}!`;
-    document.getElementById("cg_successCode").textContent = data.accessCode;
+    const emailEl = document.getElementById("cg_successEmail");
+    if (emailEl) emailEl.textContent = email;
     document.getElementById("cg_success")?.classList.remove("hidden");
     toast(`¡Cuenta creada, ${firstName}! 🎉`);
   } catch { _cgError("Sin conexión al servidor."); }
   finally { btn.disabled = false; }
-});
-
-document.getElementById("cg_copyCodeBtn")?.addEventListener("click", async () => {
-  const code = document.getElementById("cg_successCode")?.textContent;
-  try { await navigator.clipboard.writeText(code); toast("Código copiado ✓"); } catch {}
 });
 
 document.getElementById("cg_continueBtn")?.addEventListener("click", () => {
