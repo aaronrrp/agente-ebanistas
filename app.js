@@ -8839,7 +8839,8 @@ document.getElementById("pf_successContinueBtn")?.addEventListener("click", () =
 const PUBLIC_SUBVIEW_IDS = [
   "publicHomeView", "consumerGateView",
   "publicDirectoryView", "publicRegisterView", "publicCompaniesView", "publicCompanyRegisterView",
-  "publicRetazosView", "rz_loginGateView", "rz_publishView"
+  "publicRetazosView", "rz_loginGateView", "rz_publishView",
+  "publicTrabajosView"
 ];
 function hideAllPublicSubviews() {
   PUBLIC_SUBVIEW_IDS.forEach(id => document.getElementById(id)?.classList.add("hidden"));
@@ -8863,6 +8864,9 @@ function publicNavGo(nav) {
     document.getElementById("publicRetazosView")?.classList.remove("hidden");
     loadPublicRetazos?.();
     loadPublicInspiration?.();
+  } else if (nav === "trabajos") {
+    document.getElementById("publicTrabajosView")?.classList.remove("hidden");
+    loadTrabajos();
   } else { // "inicio" y cualquier valor desconocido → portada
     document.getElementById("publicHomeView")?.classList.remove("hidden");
   }
@@ -8937,6 +8941,194 @@ function publicNavRequest(nav) {
 // Tarjetas de la portada y del hub Directorio
 document.querySelectorAll("[data-home-go]").forEach(btn => {
   btn.addEventListener("click", () => publicNavRequest(btn.dataset.homeGo));
+});
+
+// ── Trabajos (marketplace de solicitudes) — Ola 1 ────────────────────────────
+let _tjTab = "open";
+let _tjCatsLoaded = false;
+
+async function loadTrabajos() {
+  if (!_tjCatsLoaded) {
+    try {
+      const meta = await fetch("/api/jobs/meta").then(r => r.json());
+      const sel = document.getElementById("tj_category");
+      if (sel) sel.innerHTML = (meta.categories || []).map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+      _tjCatsLoaded = true;
+    } catch {}
+  }
+  const u = _publicPostAuth?.user;
+  if (u) {
+    const n = document.getElementById("tj_cname"); if (n && !n.value) n.value = u.name || "";
+    const p = document.getElementById("tj_cphone"); if (p && !p.value) p.value = u.phone || "";
+    const e = document.getElementById("tj_cemail"); if (e && !e.value) e.value = u.email || "";
+  }
+  tjSwitchTab(_tjTab);
+}
+
+function tjSwitchTab(tab) {
+  _tjTab = tab;
+  document.querySelectorAll("[data-tj-tab]").forEach(b => b.classList.toggle("active", b.dataset.tjTab === tab));
+  document.getElementById("tj_openList")?.classList.toggle("hidden", tab !== "open");
+  document.getElementById("tj_mineList")?.classList.toggle("hidden", tab !== "mine");
+  if (tab === "open") tjLoadOpen(); else tjLoadMine();
+}
+
+function tjTimeAgo(iso) {
+  const days = (Date.now() - new Date(iso).getTime()) / 86400000;
+  if (days < 1) return "hoy";
+  if (days < 2) return "ayer";
+  if (days < 30) return `hace ${Math.floor(days)} días`;
+  try { return new Date(iso).toLocaleDateString("es-PA"); } catch { return ""; }
+}
+
+function tjLoc(j) {
+  if (!j.location) return "";
+  const parts = [j.location.cityName, j.location.provinceName].filter(Boolean);
+  return parts.length ? `📍 ${escapeHtml(parts.join(", "))}` : "";
+}
+
+async function tjLoadOpen() {
+  const box = document.getElementById("tj_openList");
+  if (!box) return;
+  box.innerHTML = `<p class="tj-empty">Cargando…</p>`;
+  try {
+    const jobs = await fetch("/api/jobs").then(r => r.json());
+    if (!Array.isArray(jobs) || !jobs.length) { box.innerHTML = `<div class="tj-empty">Aún no hay solicitudes abiertas. ¡Publica la primera!</div>`; return; }
+    box.innerHTML = jobs.map(j => `
+      <div class="tj-card">
+        <div class="tj-card-head"><span class="tj-cat">${escapeHtml(j.category || "")}</span><span class="tj-time">${tjTimeAgo(j.createdAt)}</span></div>
+        <h4>${escapeHtml(j.title)}</h4>
+        ${j.description ? `<p class="tj-desc">${escapeHtml(j.description)}</p>` : ""}
+        <div class="tj-meta">${[tjLoc(j), j.budget ? `💰 B/. ${escapeHtml(String(j.budget))}` : ""].filter(Boolean).join(" · ")}</div>
+        <div class="tj-by">Solicitado por ${escapeHtml(j.clientName || "un cliente")}</div>
+      </div>`).join("");
+  } catch { box.innerHTML = `<p class="login-error">No se pudieron cargar las solicitudes.</p>`; }
+}
+
+async function tjLoadMine() {
+  const box = document.getElementById("tj_mineList");
+  if (!box) return;
+  if (!hasPublicSession()) { box.innerHTML = `<div class="tj-empty">Inicia sesión como cliente para ver tus solicitudes. <button class="linklike" type="button" onclick="showConsumerGate('login','trabajos')">Iniciar sesión</button></div>`; return; }
+  box.innerHTML = `<p class="tj-empty">Cargando…</p>`;
+  try {
+    const jobs = await fetch("/api/jobs/mine", { headers: publicAuthHeader() }).then(r => r.json());
+    if (!Array.isArray(jobs) || !jobs.length) { box.innerHTML = `<div class="tj-empty">Todavía no has publicado solicitudes. Toca “+ Publicar solicitud”.</div>`; return; }
+    box.innerHTML = jobs.map(tjMineCard).join("");
+  } catch { box.innerHTML = `<p class="login-error">No se pudieron cargar tus solicitudes.</p>`; }
+}
+
+const TJ_STATUS = { open: "Abierta", assigned: "Asignada", completed: "Completada", cancelled: "Cancelada" };
+function tjMineCard(j) {
+  const st = TJ_STATUS[j.status] || j.status;
+  const canCancel = j.status === "open" || j.status === "assigned";
+  return `<div class="tj-card tj-mine" data-job="${escapeHtml(j.id)}">
+    <div class="tj-card-head"><span class="tj-cat">${escapeHtml(j.category || "")}</span><span class="tj-badge tj-badge-${escapeHtml(j.status)}">${escapeHtml(st)}</span></div>
+    <h4>${escapeHtml(j.title)}</h4>
+    <div class="tj-meta">${escapeHtml(String(j.proposalsCount || 0))} propuesta(s) · ${tjTimeAgo(j.createdAt)}</div>
+    <div class="tj-mine-actions">
+      <button class="secondary-btn tj-sm" type="button" data-tj-act="proposals" data-job="${escapeHtml(j.id)}">Ver propuestas (${escapeHtml(String(j.proposalsCount || 0))})</button>
+      ${j.status === "assigned" ? `<button class="primary-btn tj-sm" type="button" data-tj-act="complete" data-job="${escapeHtml(j.id)}">Marcar completado</button>` : ""}
+      ${canCancel ? `<button class="linklike tj-sm" type="button" data-tj-act="cancel" data-job="${escapeHtml(j.id)}">Cancelar</button>` : ""}
+    </div>
+    <div class="tj-proposals hidden" id="tjprops_${escapeHtml(j.id)}"></div>
+  </div>`;
+}
+
+async function tjShowProposals(jobId) {
+  const box = document.getElementById("tjprops_" + jobId);
+  if (!box) return;
+  if (!box.classList.contains("hidden")) { box.classList.add("hidden"); return; }
+  box.classList.remove("hidden");
+  box.innerHTML = `<p class="tj-empty">Cargando propuestas…</p>`;
+  try {
+    const props = await fetch(`/api/jobs/${jobId}/proposals`, { headers: publicAuthHeader() }).then(r => r.json());
+    if (!Array.isArray(props) || !props.length) { box.innerHTML = `<p class="tj-empty">Aún no hay propuestas. Te avisaremos cuando lleguen.</p>`; return; }
+    box.innerHTML = props.map(pr => {
+      const rep = pr.reputation;
+      const badge = rep ? `<span class="tj-rep" style="background:${escapeHtml(rep.color)}">${escapeHtml(rep.levelLabel)}</span>` : "";
+      const stars = rep && rep.ratingCount ? `★ ${escapeHtml(String(rep.ratingAvg))} (${escapeHtml(String(rep.ratingCount))})` : "Sin reseñas aún";
+      const firstName = escapeHtml((pr.professionalName || "este").split(" ")[0]);
+      return `<div class="tj-prop">
+        <div class="tj-prop-head">
+          <strong>${escapeHtml(pr.professionalName || "Profesional")}</strong> ${badge}
+          <span class="tj-prop-price">${pr.price ? "B/. " + escapeHtml(String(pr.price)) : "A convenir"}</span>
+        </div>
+        <div class="tj-prop-meta">${stars}${pr.estimatedTime ? " · ⏱ " + escapeHtml(pr.estimatedTime) : ""}${rep ? " · ✔ " + escapeHtml(String(rep.completedJobs)) + " trabajos" : ""}</div>
+        <p class="tj-prop-msg">${escapeHtml(pr.message || "")}</p>
+        ${pr.status === "accepted"
+          ? `<span class="tj-badge tj-badge-assigned">✔ Seleccionado</span>`
+          : `<button class="primary-btn tj-sm" type="button" data-tj-act="select" data-job="${escapeHtml(jobId)}" data-prop="${escapeHtml(pr.id)}">Elegir a ${firstName}</button>`}
+      </div>`;
+    }).join("");
+  } catch { box.innerHTML = `<p class="login-error">No se pudieron cargar las propuestas.</p>`; }
+}
+
+async function tjAction(act, jobId, propId) {
+  try {
+    if (act === "proposals") return tjShowProposals(jobId);
+    if (act === "select") {
+      if (!confirm("¿Elegir a este profesional para el trabajo? Se le enviará tu contacto.")) return;
+      const r = await fetch(`/api/jobs/${jobId}/select`, { method: "POST", headers: { ...publicAuthHeader(), "Content-Type": "application/json" }, body: JSON.stringify({ proposalId: propId }) });
+      if (!r.ok) throw 0;
+      toast("¡Profesional seleccionado! Le enviamos tu contacto.");
+      tjLoadMine();
+    } else if (act === "complete") {
+      const r = await fetch(`/api/jobs/${jobId}/complete`, { method: "POST", headers: publicAuthHeader() });
+      if (!r.ok) throw 0;
+      toast("Trabajo marcado como completado. ¡Gracias!");
+      tjLoadMine();
+    } else if (act === "cancel") {
+      if (!confirm("¿Cancelar esta solicitud?")) return;
+      const r = await fetch(`/api/jobs/${jobId}/cancel`, { method: "POST", headers: publicAuthHeader() });
+      if (!r.ok) throw 0;
+      toast("Solicitud cancelada.");
+      tjLoadMine();
+    }
+  } catch { toast("No se pudo completar la acción.", "error"); }
+}
+
+async function tjSubmitJob() {
+  const err = document.getElementById("tj_formError");
+  const show = m => { if (err) { err.textContent = m; err.classList.remove("hidden"); } };
+  if (err) err.classList.add("hidden");
+  const title = document.getElementById("tj_title")?.value.trim();
+  const category = document.getElementById("tj_category")?.value;
+  const cname = document.getElementById("tj_cname")?.value.trim();
+  const cphone = document.getElementById("tj_cphone")?.value.trim();
+  if (!title) return show("Escribe qué necesitas.");
+  if (!cname || !cphone) return show("Incluye tu nombre y un teléfono de contacto.");
+  if (!hasPublicSession()) { showConsumerGate("register", "trabajos"); return; }
+  const body = {
+    title, category,
+    description: document.getElementById("tj_desc")?.value.trim() || "",
+    budget: document.getElementById("tj_budget")?.value || "",
+    contact: { name: cname, phone: cphone, email: document.getElementById("tj_cemail")?.value.trim() || "" }
+  };
+  try {
+    const r = await fetch("/api/jobs", { method: "POST", headers: { ...publicAuthHeader(), "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) return show(data.error || "No se pudo publicar.");
+    toast("¡Solicitud publicada! Los profesionales ya pueden proponer.");
+    document.getElementById("tj_form")?.classList.add("hidden");
+    ["tj_title", "tj_desc", "tj_budget"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
+    tjSwitchTab("mine");
+  } catch { show("No se pudo publicar. Intenta de nuevo."); }
+}
+
+// Wiring de Trabajos (los elementos son estáticos, así que se cablean al cargar)
+document.getElementById("tj_newBtn")?.addEventListener("click", () => {
+  if (!hasPublicSession()) { showConsumerGate("register", "trabajos"); return; }
+  const f = document.getElementById("tj_form");
+  f?.classList.toggle("hidden");
+  if (f && !f.classList.contains("hidden")) f.scrollIntoView({ behavior: "smooth", block: "nearest" });
+});
+document.getElementById("tj_cancelBtn")?.addEventListener("click", () => document.getElementById("tj_form")?.classList.add("hidden"));
+document.getElementById("tj_submitBtn")?.addEventListener("click", tjSubmitJob);
+document.querySelectorAll("[data-tj-tab]").forEach(b => b.addEventListener("click", () => tjSwitchTab(b.dataset.tjTab)));
+document.getElementById("publicTrabajosView")?.addEventListener("click", e => {
+  const btn = e.target.closest("[data-tj-act]");
+  if (!btn) return;
+  tjAction(btn.dataset.tjAct, btn.dataset.job, btn.dataset.prop);
 });
 
 // ── Directorio de Empresas (mismo patrón que el de profesionales) ───────────

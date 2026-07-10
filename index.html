@@ -126,6 +126,7 @@
            duplicaban esos accesos y se eliminaron a pedido. -->
       <nav class="public-nav-links" aria-label="Navegación pública">
         <button class="public-nav-link active" data-public-nav="inicio" type="button">🏠 Inicio</button>
+        <button class="public-nav-link" data-public-nav="trabajos" type="button">💼 Trabajos</button>
       </nav>
       <button id="publicLoginBtn" class="secondary-btn" type="button">Iniciar sesión</button>
     </header>
@@ -157,6 +158,11 @@
             <span class="home-card-icon">♻️</span>
             <strong>Centro Sostenible</strong>
             <span>Retazos de madera y melamina — compra, vende o regala sobrantes.</span>
+          </button>
+          <button class="home-card" type="button" data-home-go="trabajos">
+            <span class="home-card-icon">💼</span>
+            <strong>Publicar un trabajo</strong>
+            <span>Pide presupuesto para tu proyecto y recibe propuestas de profesionales.</span>
           </button>
         </div>
 
@@ -564,6 +570,94 @@
           </div>
           <button id="rz_submitPublishBtn" class="primary-btn" type="button">Publicar</button>
           <p id="rz_publishError" class="login-error hidden"></p>
+        </div>
+      </section>
+
+      <!-- Vista: TRABAJOS — marketplace de solicitudes (Ola 1) -->
+      <style>
+        .tj-wrap{max-width:960px;margin:0 auto;padding:0 4px}
+        .tj-topbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:1rem 0 .25rem}
+        .tj-topbar h2{margin:0;flex:1;font-size:1.4rem;color:var(--oscuro,#1A1346)}
+        .tj-intro{margin-top:0}
+        .tj-tabs{max-width:420px}
+        .tj-form{margin-top:1rem}
+        .tj-form h3{margin-top:0}
+        .tj-form-grid{grid-template-columns:1fr 1fr}
+        .tj-form-actions{display:flex;gap:8px;margin-top:12px}
+        .tj-list{margin-top:1rem;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+        .tj-card{background:#fff;border:1px solid #ece9f5;border-radius:14px;padding:16px;box-shadow:0 2px 10px rgba(26,19,70,.06)}
+        .tj-card h4{margin:.35rem 0;color:var(--oscuro,#1A1346);font-size:1.05rem}
+        .tj-card-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+        .tj-cat{background:#efeafd;color:#3B2D8F;font-size:.72rem;font-weight:700;padding:3px 9px;border-radius:999px;text-transform:capitalize}
+        .tj-time{color:#9ca3af;font-size:.78rem}
+        .tj-desc{color:#4b5563;font-size:.9rem;margin:.25rem 0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+        .tj-meta{color:#6B7280;font-size:.85rem;margin-top:.35rem}
+        .tj-by{color:#9ca3af;font-size:.8rem;margin-top:.5rem;border-top:1px solid #f3f1fa;padding-top:.5rem}
+        .tj-mine{grid-column:1/-1}
+        .tj-mine-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:.6rem}
+        .tj-sm{padding:7px 12px !important;font-size:.85rem !important}
+        .tj-badge{font-size:.72rem;font-weight:700;padding:3px 9px;border-radius:999px}
+        .tj-badge-open{background:#dcfce7;color:#166534}
+        .tj-badge-assigned{background:#dbeafe;color:#1e40af}
+        .tj-badge-completed{background:#e5e7eb;color:#374151}
+        .tj-badge-cancelled{background:#fee2e2;color:#991b1b}
+        .tj-proposals{margin-top:.75rem;border-top:1px dashed #e5e1f2;padding-top:.6rem;display:flex;flex-direction:column;gap:10px}
+        .tj-prop{background:#faf9ff;border:1px solid #ece9f5;border-radius:10px;padding:12px}
+        .tj-prop-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+        .tj-prop-price{margin-left:auto;font-weight:800;color:#3B2D8F}
+        .tj-rep{color:#fff;font-size:.68rem;font-weight:800;padding:2px 8px;border-radius:999px}
+        .tj-prop-meta{color:#6B7280;font-size:.8rem;margin:.35rem 0}
+        .tj-prop-msg{color:#374151;font-size:.9rem;margin:.35rem 0;white-space:pre-wrap}
+        .tj-empty{grid-column:1/-1;text-align:center;color:#6B7280;background:#faf9ff;border:1px dashed #e5e1f2;border-radius:12px;padding:2rem 1rem}
+      </style>
+      <section id="publicTrabajosView" class="hidden">
+        <div class="tj-wrap">
+          <div class="tj-topbar">
+            <button class="secondary-btn" type="button" data-public-nav="inicio">← Inicio</button>
+            <h2>💼 Trabajos</h2>
+            <button id="tj_newBtn" class="primary-btn" type="button">+ Publicar solicitud</button>
+          </div>
+          <p class="public-hero-sub tj-intro">Publica lo que necesitas y recibe propuestas de profesionales. O explora lo que otros están pidiendo.</p>
+
+          <div class="login-tabs tj-tabs" role="tablist">
+            <button class="login-tab active" data-tj-tab="open" type="button" role="tab">Solicitudes abiertas</button>
+            <button class="login-tab" data-tj-tab="mine" type="button" role="tab">Mis solicitudes</button>
+          </div>
+
+          <div id="tj_form" class="subsection tj-form hidden">
+            <h3>Publicar una solicitud</h3>
+            <div class="form-grid tj-form-grid">
+              <label class="span-2">¿Qué necesitas?*
+                <input id="tj_title" type="text" placeholder="Ej: Necesito fabricar una cocina en L" maxlength="120">
+              </label>
+              <label>Categoría*
+                <select id="tj_category"></select>
+              </label>
+              <label>Presupuesto aprox. (opcional)
+                <input id="tj_budget" type="number" min="0" placeholder="B/.">
+              </label>
+              <label class="span-2">Describe el trabajo
+                <textarea id="tj_desc" rows="3" placeholder="Materiales, medidas, ubicación, detalles..."></textarea>
+              </label>
+              <label>Tu nombre*
+                <input id="tj_cname" type="text" autocomplete="name">
+              </label>
+              <label>Teléfono de contacto*
+                <input id="tj_cphone" type="text" placeholder="6000-0000" autocomplete="tel">
+              </label>
+              <label class="span-2">Correo (opcional — para avisarte de nuevas propuestas)
+                <input id="tj_cemail" type="email" autocomplete="email">
+              </label>
+            </div>
+            <p id="tj_formError" class="login-error hidden"></p>
+            <div class="tj-form-actions">
+              <button id="tj_submitBtn" class="primary-btn" type="button">Publicar solicitud</button>
+              <button id="tj_cancelBtn" class="secondary-btn" type="button">Cancelar</button>
+            </div>
+          </div>
+
+          <div id="tj_openList" class="tj-list"></div>
+          <div id="tj_mineList" class="tj-list hidden"></div>
         </div>
       </section>
     </main>
