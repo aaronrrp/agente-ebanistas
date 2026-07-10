@@ -12073,7 +12073,7 @@ function _loginAsProfessional(pro, token) {
 
 const PRO_VIEW_TITLES = {
   proMiPerfil: "Mi Perfil", proPortfolio: "Portfolio",
-  proEstadisticas: "Estadísticas", proResenas: "Reseñas", proPassword: "Contraseña"
+  proEstadisticas: "Estadísticas", proResenas: "Reseñas", proTrabajos: "Trabajos", proPassword: "Contraseña"
 };
 
 function proShowView(viewId) {
@@ -12089,10 +12089,100 @@ function proShowView(viewId) {
   else if (viewId === "proPortfolio") renderProPortfolio();
   else if (viewId === "proEstadisticas") renderProEstadisticas();
   else if (viewId === "proResenas") renderProResenas();
+  else if (viewId === "proTrabajos") renderProTrabajos();
 }
 
 document.querySelectorAll(".co-nav-item[data-pro-view]").forEach(btn => {
   btn.addEventListener("click", () => proShowView(btn.dataset.proView));
+});
+
+// ── Trabajos (lado profesional) — Ola 1 ──────────────────────────────────────
+let _ptjTab = "open";
+function proAuthHeader() { return AUTH.proToken ? { Authorization: `Bearer ${AUTH.proToken}` } : {}; }
+
+function renderProTrabajos() { ptjSwitchTab(_ptjTab); }
+
+function ptjSwitchTab(tab) {
+  _ptjTab = tab;
+  document.querySelectorAll("[data-ptj-tab]").forEach(b => b.classList.toggle("active", b.dataset.ptjTab === tab));
+  document.getElementById("ptj_openList")?.classList.toggle("hidden", tab !== "open");
+  document.getElementById("ptj_mineList")?.classList.toggle("hidden", tab !== "mine");
+  if (tab === "open") ptjLoadOpen(); else ptjLoadMine();
+}
+
+async function ptjLoadOpen() {
+  const box = document.getElementById("ptj_openList");
+  if (!box) return;
+  box.innerHTML = `<p class="tj-empty">Cargando…</p>`;
+  try {
+    const jobs = await fetch("/api/jobs").then(r => r.json());
+    if (!Array.isArray(jobs) || !jobs.length) { box.innerHTML = `<div class="tj-empty">No hay solicitudes abiertas ahora mismo. Vuelve pronto.</div>`; return; }
+    box.innerHTML = jobs.map(j => {
+      const id = escapeHtml(j.id);
+      return `<div class="tj-card" data-job="${id}">
+        <div class="tj-card-head"><span class="tj-cat">${escapeHtml(j.category || "")}</span><span class="tj-time">${tjTimeAgo(j.createdAt)}</span></div>
+        <h4>${escapeHtml(j.title)}</h4>
+        ${j.description ? `<p class="tj-desc">${escapeHtml(j.description)}</p>` : ""}
+        <div class="tj-meta">${[tjLoc(j), j.budget ? `💰 B/. ${escapeHtml(String(j.budget))}` : ""].filter(Boolean).join(" · ")}</div>
+        <div class="tj-by">Solicitado por ${escapeHtml(j.clientName || "un cliente")}</div>
+        <div class="tj-mine-actions"><button class="primary-btn tj-sm" type="button" data-ptj-act="show-form" data-job="${id}">Enviar propuesta</button></div>
+        <div class="tj-proposals hidden" id="ptjform_${id}">
+          <div class="form-grid" style="grid-template-columns:1fr 1fr">
+            <label>Precio (B/.)<input type="number" min="0" id="ptjprice_${id}" placeholder="A convenir"></label>
+            <label>Tiempo estimado<input type="text" id="ptjtime_${id}" placeholder="Ej: 2 semanas"></label>
+            <label class="span-2">Mensaje al cliente*<textarea id="ptjmsg_${id}" rows="2" placeholder="Cuéntale por qué eres la mejor opción…"></textarea></label>
+          </div>
+          <div class="tj-form-actions"><button class="primary-btn tj-sm" type="button" data-ptj-act="send" data-job="${id}">Enviar</button><button class="secondary-btn tj-sm" type="button" data-ptj-act="hide-form" data-job="${id}">Cancelar</button></div>
+        </div>
+      </div>`;
+    }).join("");
+  } catch { box.innerHTML = `<p class="login-error">No se pudieron cargar las solicitudes.</p>`; }
+}
+
+async function ptjLoadMine() {
+  const box = document.getElementById("ptj_mineList");
+  if (!box) return;
+  box.innerHTML = `<p class="tj-empty">Cargando…</p>`;
+  try {
+    const props = await fetch("/api/proposals/mine", { headers: proAuthHeader() }).then(r => r.json());
+    if (!Array.isArray(props) || !props.length) { box.innerHTML = `<div class="tj-empty">Aún no has enviado propuestas. Explora “Solicitudes abiertas”.</div>`; return; }
+    const L = { sent: "Enviada", accepted: "✔ Aceptada", rejected: "No elegida", withdrawn: "Retirada" };
+    const cls = s => s === "accepted" ? "assigned" : s === "rejected" ? "cancelled" : "open";
+    box.innerHTML = props.map(pr => `
+      <div class="tj-card">
+        <div class="tj-card-head"><span class="tj-cat">${escapeHtml(pr.jobTitle || "Solicitud")}</span><span class="tj-badge tj-badge-${cls(pr.status)}">${escapeHtml(L[pr.status] || pr.status)}</span></div>
+        <div class="tj-prop-meta">${pr.price ? "B/. " + escapeHtml(String(pr.price)) : "A convenir"}${pr.estimatedTime ? " · ⏱ " + escapeHtml(pr.estimatedTime) : ""}</div>
+        <p class="tj-prop-msg">${escapeHtml(pr.message || "")}</p>
+      </div>`).join("");
+  } catch { box.innerHTML = `<p class="login-error">No se pudieron cargar tus propuestas.</p>`; }
+}
+
+async function ptjSend(jobId) {
+  const msg = document.getElementById("ptjmsg_" + jobId)?.value.trim();
+  if (!msg) { toast("Escribe un mensaje para el cliente.", "error"); return; }
+  const body = {
+    message: msg,
+    price: document.getElementById("ptjprice_" + jobId)?.value || "",
+    estimatedTime: document.getElementById("ptjtime_" + jobId)?.value.trim() || ""
+  };
+  try {
+    const r = await fetch(`/api/jobs/${jobId}/proposals`, { method: "POST", headers: { ...proAuthHeader(), "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(data.error || "No se pudo enviar la propuesta.", "error"); return; }
+    toast("¡Propuesta enviada! El cliente fue notificado.");
+    document.getElementById("ptjform_" + jobId)?.classList.add("hidden");
+    if (_ptjTab === "mine") ptjLoadMine();
+  } catch { toast("No se pudo enviar la propuesta.", "error"); }
+}
+
+document.querySelectorAll("[data-ptj-tab]").forEach(b => b.addEventListener("click", () => ptjSwitchTab(b.dataset.ptjTab)));
+document.getElementById("proTrabajos")?.addEventListener("click", e => {
+  const btn = e.target.closest("[data-ptj-act]");
+  if (!btn) return;
+  const jobId = btn.dataset.job, act = btn.dataset.ptjAct;
+  if (act === "show-form") document.getElementById("ptjform_" + jobId)?.classList.remove("hidden");
+  else if (act === "hide-form") document.getElementById("ptjform_" + jobId)?.classList.add("hidden");
+  else if (act === "send") ptjSend(jobId);
 });
 
 document.getElementById("proMenuBtn")?.addEventListener("click", () => {

@@ -1056,6 +1056,7 @@
         <button class="co-nav-item" data-pro-view="proPortfolio">🖼️ <span>Portfolio</span></button>
         <button class="co-nav-item" data-pro-view="proEstadisticas">📈 <span>Estadísticas</span></button>
         <button class="co-nav-item" data-pro-view="proResenas">⭐ <span>Reseñas</span></button>
+        <button class="co-nav-item" data-pro-view="proTrabajos">💼 <span>Trabajos</span></button>
         <button class="co-nav-item" data-pro-view="proPassword">🔑 <span>Contraseña</span></button>
       </nav>
       <div class="co-sidebar-footer">
@@ -1107,6 +1108,19 @@
             <div><h2>Reseñas</h2><p class="login-hint">Lo que tus clientes dicen de ti.</p></div>
           </div>
           <div id="proResenasContent"><p class="login-hint">Cargando…</p></div>
+        </div>
+
+        <!-- ── Trabajos (marketplace, lado profesional) ── -->
+        <div id="proTrabajos" class="co-view hidden">
+          <div class="co-page-header">
+            <div><h2>Trabajos</h2><p class="login-hint">Solicitudes de clientes: envía tu propuesta y consigue el trabajo.</p></div>
+          </div>
+          <div class="login-tabs tj-tabs" role="tablist">
+            <button class="login-tab active" data-ptj-tab="open" type="button" role="tab">Solicitudes abiertas</button>
+            <button class="login-tab" data-ptj-tab="mine" type="button" role="tab">Mis propuestas</button>
+          </div>
+          <div id="ptj_openList" class="tj-list"></div>
+          <div id="ptj_mineList" class="tj-list hidden"></div>
         </div>
 
         <!-- ── Contraseña ── -->
