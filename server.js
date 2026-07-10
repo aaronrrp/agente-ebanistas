@@ -2082,7 +2082,8 @@ const routeModules = [
   require("./routes/ads.js"),
   require("./routes/ratings.js"),
   require("./routes/catalog.js"),
-  require("./routes/locations.js")
+  require("./routes/locations.js"),
+  require("./routes/platform.js")
 ];
 
 // ── Main router ─────────────────────────────────────────────────────────────

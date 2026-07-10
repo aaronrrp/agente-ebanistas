@@ -1,0 +1,13 @@
+{
+  "modules": {
+    "jobs": true,
+    "marketplace": true,
+    "academy": true,
+    "inspiration": true,
+    "calculators": true,
+    "vacancies": true,
+    "referrals": true,
+    "bookings": true,
+    "notifications": true
+  }
+}
