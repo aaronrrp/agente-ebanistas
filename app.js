@@ -8840,7 +8840,8 @@ const PUBLIC_SUBVIEW_IDS = [
   "publicHomeView", "consumerGateView",
   "publicDirectoryView", "publicRegisterView", "publicCompaniesView", "publicCompanyRegisterView",
   "publicRetazosView", "rz_loginGateView", "rz_publishView",
-  "publicTrabajosView", "publicMaterialesView", "publicCalculadorasView"
+  "publicTrabajosView", "publicMaterialesView", "publicCalculadorasView",
+  "publicAcademiaView", "publicInspiracionView"
 ];
 function hideAllPublicSubviews() {
   PUBLIC_SUBVIEW_IDS.forEach(id => document.getElementById(id)?.classList.add("hidden"));
@@ -8873,6 +8874,12 @@ function publicNavGo(nav) {
   } else if (nav === "calculadoras") {
     document.getElementById("publicCalculadorasView")?.classList.remove("hidden");
     loadCalculadoras();
+  } else if (nav === "academia") {
+    document.getElementById("publicAcademiaView")?.classList.remove("hidden");
+    loadAcademia();
+  } else if (nav === "inspiracion") {
+    document.getElementById("publicInspiracionView")?.classList.remove("hidden");
+    loadInspiracion();
   } else { // "inicio" y cualquier valor desconocido → portada
     document.getElementById("publicHomeView")?.classList.remove("hidden");
   }
@@ -9225,6 +9232,55 @@ function calcCompute(card) {
 document.getElementById("publicCalculadorasView")?.addEventListener("input", e => {
   const card = e.target.closest(".calc-card");
   if (card) calcCompute(card);
+});
+
+// ── Academia (#8) e Inspiración (#9) — Ola 3 ─────────────────────────────────
+async function loadAcademia() {
+  const box = document.getElementById("ac_list");
+  if (!box) return;
+  box.innerHTML = `<p class="tj-empty">Cargando…</p>`;
+  try {
+    const list = await fetch("/api/courses").then(r => r.json());
+    if (!Array.isArray(list) || !list.length) { box.innerHTML = `<div class="tj-empty">Pronto habrá cursos disponibles. ¡Vuelve pronto!</div>`; return; }
+    box.innerHTML = list.map(c => {
+      const link = c.videoUrl || c.pdfUrl;
+      return `<div class="tj-card ac-card">
+        ${c.thumbnailUrl ? `<div class="ac-thumb" style="background-image:url('${escapeHtml(c.thumbnailUrl)}')"></div>` : ""}
+        <div class="tj-card-head"><span class="tj-cat">${escapeHtml(c.category || "")}</span>${c.level ? `<span class="ac-level">${escapeHtml(c.level)}</span>` : ""}</div>
+        <h4>${escapeHtml(c.title)}</h4>
+        ${c.description ? `<p class="tj-desc">${escapeHtml(c.description)}</p>` : ""}
+        ${link ? `<a class="primary-btn tj-sm" href="${escapeHtml(link)}" target="_blank" rel="noopener">${c.videoUrl ? "▶ Ver curso" : "📄 Ver material"}</a>` : ""}
+      </div>`;
+    }).join("");
+  } catch { box.innerHTML = `<p class="login-error">No se pudo cargar la Academia.</p>`; }
+}
+
+let _inspCat = "";
+async function loadInspiracion() {
+  const grid = document.getElementById("insp_grid");
+  if (!grid) return;
+  const chips = document.getElementById("insp_chips");
+  if (chips && !chips.dataset.done) {
+    const cats = ["", "cocina", "closet", "baño", "oficina", "dormitorio", "sala", "comercial"];
+    chips.innerHTML = cats.map(c => `<button class="mk-chip ${c === _inspCat ? "active" : ""}" type="button" data-insp-cat="${escapeHtml(c)}">${c ? escapeHtml(c) : "Todos"}</button>`).join("");
+    chips.dataset.done = "1";
+  }
+  grid.innerHTML = `<p class="insp-empty">Cargando…</p>`;
+  try {
+    const url = "/api/inspiration" + (_inspCat ? `?category=${encodeURIComponent(_inspCat)}` : "");
+    const list = await fetch(url).then(r => r.json());
+    if (!Array.isArray(list) || !list.length) { grid.innerHTML = `<div class="insp-empty">Aún no hay diseños publicados en esta categoría.</div>`; return; }
+    grid.innerHTML = list.map(i => `<div class="insp-tile" style="background-image:url('${escapeHtml(i.photoUrl)}')" title="${escapeHtml(i.title)}">
+      <div class="insp-info"><strong>${escapeHtml(i.title)}</strong><span>${escapeHtml(i.category || "")}${i.author ? " · " + escapeHtml(i.author) : ""}</span></div>
+    </div>`).join("");
+  } catch { grid.innerHTML = `<p class="login-error">No se pudo cargar Inspiración.</p>`; }
+}
+document.getElementById("insp_chips")?.addEventListener("click", e => {
+  const c = e.target.closest("[data-insp-cat]");
+  if (!c) return;
+  _inspCat = c.dataset.inspCat;
+  document.querySelectorAll("#insp_chips .mk-chip").forEach(x => x.classList.toggle("active", x === c));
+  loadInspiracion();
 });
 
 // ── Directorio de Empresas (mismo patrón que el de profesionales) ───────────
