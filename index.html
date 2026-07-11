@@ -127,6 +127,7 @@
       <nav class="public-nav-links" aria-label="Navegación pública">
         <button class="public-nav-link active" data-public-nav="inicio" type="button">🏠 Inicio</button>
         <button class="public-nav-link" data-public-nav="trabajos" type="button">💼 Trabajos</button>
+        <button class="public-nav-link" data-public-nav="materiales" type="button">🧱 Materiales</button>
       </nav>
       <button id="publicLoginBtn" class="secondary-btn" type="button">Iniciar sesión</button>
     </header>
@@ -163,6 +164,11 @@
             <span class="home-card-icon">💼</span>
             <strong>Publicar un trabajo</strong>
             <span>Pide presupuesto para tu proyecto y recibe propuestas de profesionales.</span>
+          </button>
+          <button class="home-card" type="button" data-home-go="materiales">
+            <span class="home-card-icon">🧱</span>
+            <strong>Comparar materiales</strong>
+            <span>Busca melamina, MDF, herrajes y más — compara precios entre empresas.</span>
           </button>
         </div>
 
@@ -658,6 +664,53 @@
 
           <div id="tj_openList" class="tj-list"></div>
           <div id="tj_mineList" class="tj-list hidden"></div>
+        </div>
+      </section>
+
+      <!-- Vista: MATERIALES — comparador de precios entre empresas (Ola 2) -->
+      <style>
+        .mk-wrap{max-width:960px;margin:0 auto;padding:0 4px}
+        .mk-topbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:1rem 0 .25rem}
+        .mk-topbar h2{margin:0;font-size:1.4rem;color:var(--oscuro,#1A1346)}
+        .mk-search{display:flex;gap:8px;margin:.75rem 0}
+        .mk-search input{flex:1;padding:12px 14px;border:1px solid #d9d4ec;border-radius:12px;font-size:1rem}
+        .mk-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:.5rem}
+        .mk-chip{background:#efeafd;color:#3B2D8F;border:none;border-radius:999px;padding:6px 12px;font-size:.85rem;font-weight:600;cursor:pointer}
+        .mk-chip:hover{background:#e0d8fb}
+        .mk-chip span{opacity:.6;font-weight:800}
+        .mk-sort{color:#6B7280;font-size:.85rem;margin:.25rem 0 .75rem;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+        .mk-sort-btn{background:none;border:1px solid #e5e1f2;border-radius:999px;padding:5px 12px;font-size:.82rem;cursor:pointer;color:#4b5563}
+        .mk-sort-btn.active{background:#3B2D8F;color:#fff;border-color:#3B2D8F}
+        .mk-card h4{display:flex;flex-wrap:wrap;gap:4px;align-items:baseline}
+        .mk-brand{color:#6B7280;font-weight:600;font-size:.9rem}
+        .mk-specs{color:#6B7280;font-size:.85rem;margin:.15rem 0}
+        .mk-price{font-size:1.35rem;font-weight:900;color:#3B2D8F;margin:.35rem 0}
+        .mk-old{color:#9ca3af;text-decoration:line-through;font-size:.95rem;font-weight:600;margin-right:6px}
+        .mk-co{border-top:1px solid #f3f1fa;padding-top:.5rem;margin-top:.35rem;font-size:.85rem;color:#374151;display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px}
+        .mk-rating{color:#F5B400;font-weight:700}
+        .mk-stock{font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:999px}
+        .mk-stock-in_stock{background:#dcfce7;color:#166534}
+        .mk-stock-on_order{background:#fef9c3;color:#854d0e}
+        .mk-stock-out_of_stock{background:#fee2e2;color:#991b1b}
+        .mk-wa{display:inline-block;margin-top:.6rem;text-decoration:none;text-align:center}
+      </style>
+      <section id="publicMaterialesView" class="hidden">
+        <div class="mk-wrap">
+          <div class="mk-topbar">
+            <button class="secondary-btn" type="button" data-public-nav="inicio">← Inicio</button>
+            <h2>🧱 Materiales</h2>
+          </div>
+          <p class="public-hero-sub" style="margin-top:0">Compara precios de materiales entre empresas. Busca lo que necesitas y encuentra la mejor opción cerca de ti.</p>
+          <div class="mk-search">
+            <input id="mk_q" type="search" placeholder="Ej: melamina, MDF, bisagras, pintura…" autocapitalize="none">
+            <button id="mk_searchBtn" class="primary-btn" type="button">Buscar</button>
+          </div>
+          <div id="mk_chips" class="mk-chips"></div>
+          <div class="mk-sort">Ordenar:
+            <button class="mk-sort-btn active" type="button" data-mk-sort="price">Menor precio</button>
+            <button class="mk-sort-btn" type="button" data-mk-sort="rating">Mejor calificadas</button>
+          </div>
+          <div id="mk_results" class="tj-list"></div>
         </div>
       </section>
     </main>

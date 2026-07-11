@@ -8840,7 +8840,7 @@ const PUBLIC_SUBVIEW_IDS = [
   "publicHomeView", "consumerGateView",
   "publicDirectoryView", "publicRegisterView", "publicCompaniesView", "publicCompanyRegisterView",
   "publicRetazosView", "rz_loginGateView", "rz_publishView",
-  "publicTrabajosView"
+  "publicTrabajosView", "publicMaterialesView"
 ];
 function hideAllPublicSubviews() {
   PUBLIC_SUBVIEW_IDS.forEach(id => document.getElementById(id)?.classList.add("hidden"));
@@ -8867,6 +8867,9 @@ function publicNavGo(nav) {
   } else if (nav === "trabajos") {
     document.getElementById("publicTrabajosView")?.classList.remove("hidden");
     loadTrabajos();
+  } else if (nav === "materiales") {
+    document.getElementById("publicMaterialesView")?.classList.remove("hidden");
+    loadMateriales();
   } else { // "inicio" y cualquier valor desconocido → portada
     document.getElementById("publicHomeView")?.classList.remove("hidden");
   }
@@ -9130,6 +9133,71 @@ document.getElementById("publicTrabajosView")?.addEventListener("click", e => {
   if (!btn) return;
   tjAction(btn.dataset.tjAct, btn.dataset.job, btn.dataset.prop);
 });
+
+// ── Materiales (comparador de precios entre empresas) — Ola 2 ─────────────────
+let _mkSort = "price";
+let _mkLastQ = "";
+
+async function loadMateriales() {
+  try {
+    const mats = await fetch("/api/marketplace/materials").then(r => r.json());
+    const chips = document.getElementById("mk_chips");
+    if (chips) chips.innerHTML = (mats || []).slice(0, 12).map(m => `<button class="mk-chip" type="button" data-mk-chip="${escapeHtml(m.name)}">${escapeHtml(m.name)} <span>${escapeHtml(String(m.count))}</span></button>`).join("");
+  } catch {}
+  mkSearch(_mkLastQ);
+}
+
+async function mkSearch(q) {
+  _mkLastQ = q || "";
+  const box = document.getElementById("mk_results");
+  if (!box) return;
+  box.innerHTML = `<p class="tj-empty">Buscando…</p>`;
+  try {
+    const url = `/api/marketplace/search?sort=${_mkSort}${q ? `&q=${encodeURIComponent(q)}` : ""}`;
+    const list = await fetch(url).then(r => r.json());
+    if (!Array.isArray(list) || !list.length) {
+      box.innerHTML = `<div class="tj-empty">${q ? `No encontramos “${escapeHtml(q)}”. Prueba con otro término.` : "Aún no hay materiales publicados por las empresas."}</div>`;
+      return;
+    }
+    box.innerHTML = list.map(mkCard).join("");
+  } catch { box.innerHTML = `<p class="login-error">No se pudo buscar. Intenta de nuevo.</p>`; }
+}
+
+function mkCard(x) {
+  const co = x.company || {};
+  const loc = [co.city, co.province].filter(Boolean).join(", ");
+  let wa = co.whatsapp ? String(co.whatsapp).replace(/\D/g, "") : "";
+  if (wa && wa.length <= 8) wa = "507" + wa;
+  const price = (x.salePrice && x.salePrice < x.price)
+    ? `<span class="mk-old">B/. ${escapeHtml(String(x.price))}</span>B/. ${escapeHtml(String(x.salePrice))}`
+    : (x.price ? `B/. ${escapeHtml(String(x.price))}` : "Consultar");
+  const stock = { in_stock: "En stock", on_order: "Por pedido", out_of_stock: "Agotado" }[x.availability] || "";
+  const specs = [x.thickness ? `${escapeHtml(String(x.thickness))}mm` : "", x.color, x.presentation].filter(Boolean).map(escapeHtml).join(" · ");
+  const rating = co.ratingCount ? `★ ${Math.round((co.ratingAvg || 0) * 10) / 10} (${escapeHtml(String(co.ratingCount))})` : "Sin reseñas";
+  const waLink = wa ? `<a class="primary-btn tj-sm mk-wa" href="https://wa.me/${wa}?text=${encodeURIComponent("Hola, vi " + x.name + " en PiLLA. ¿Está disponible?")}" target="_blank" rel="noopener">💬 Contactar</a>` : "";
+  return `<div class="tj-card mk-card">
+    <div class="tj-card-head"><span class="tj-cat">${escapeHtml(x.category || x.material || "Material")}</span>${stock ? `<span class="mk-stock mk-stock-${escapeHtml(x.availability)}">${escapeHtml(stock)}</span>` : ""}</div>
+    <h4>${escapeHtml(x.name)}${x.brand ? ` <span class="mk-brand">· ${escapeHtml(x.brand)}</span>` : ""}</h4>
+    ${specs ? `<div class="mk-specs">${specs}</div>` : ""}
+    <div class="mk-price">${price}</div>
+    <div class="mk-co"><span>🏢 <strong>${escapeHtml(co.name || "")}</strong>${loc ? ` · ${escapeHtml(loc)}` : ""}</span><span class="mk-rating">${rating}</span></div>
+    ${waLink}
+  </div>`;
+}
+
+document.getElementById("mk_searchBtn")?.addEventListener("click", () => mkSearch(document.getElementById("mk_q")?.value.trim()));
+document.getElementById("mk_q")?.addEventListener("keydown", e => { if (e.key === "Enter") mkSearch(e.target.value.trim()); });
+document.getElementById("mk_chips")?.addEventListener("click", e => {
+  const c = e.target.closest("[data-mk-chip]");
+  if (!c) return;
+  const inp = document.getElementById("mk_q"); if (inp) inp.value = c.dataset.mkChip;
+  mkSearch(c.dataset.mkChip);
+});
+document.querySelectorAll("[data-mk-sort]").forEach(b => b.addEventListener("click", () => {
+  _mkSort = b.dataset.mkSort;
+  document.querySelectorAll("[data-mk-sort]").forEach(x => x.classList.toggle("active", x === b));
+  mkSearch(_mkLastQ);
+}));
 
 // ── Directorio de Empresas (mismo patrón que el de profesionales) ───────────
 // Tipos de empresa / rubro. Los valores viejos (melamina, mdf, madera...) se
