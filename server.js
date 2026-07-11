@@ -2085,7 +2085,9 @@ const routeModules = [
   require("./routes/locations.js"),
   require("./routes/platform.js"),
   require("./routes/jobs.js"),
-  require("./routes/marketplace.js")
+  require("./routes/marketplace.js"),
+  require("./routes/academy.js"),
+  require("./routes/inspiration.js")
 ];
 
 // ── Main router ─────────────────────────────────────────────────────────────
