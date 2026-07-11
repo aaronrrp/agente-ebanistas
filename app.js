@@ -11402,6 +11402,7 @@ const CO_VIEW_TITLES = {
   coVendedores: "Vendedores",
   coProductos: "Productos", coCategorias: "Categorías", coPromociones: "Promociones",
   coPublicidad: "Publicidad", coPedidos: "Pedidos", coSolicitudes: "Solicitudes de Cotización",
+  coVacantes: "Bolsa de Empleo",
   coClientes: "Clientes", coEstadisticas: "Estadísticas", coPerfil: "Perfil Público",
   coConfiguracion: "Configuración"
 };
@@ -11426,6 +11427,7 @@ function coShowView(viewId) {
   else if (viewId === "coPromociones") renderCoPromociones();
   else if (viewId === "coPublicidad") renderCoPublicidad();
   else if (viewId === "coSolicitudes") renderCoSolicitudes();
+  else if (viewId === "coVacantes") renderCoVacantes();
   else if (viewId === "coEstadisticas") renderCoEstadisticas();
   else if (viewId === "coPerfil") renderCoPerfil();
   else if (viewId === "coConfiguracion") renderCoConfiguracion();
@@ -11435,6 +11437,86 @@ function coShowView(viewId) {
 document.querySelectorAll(".co-nav-item[data-co-view]").forEach(btn => {
   btn.addEventListener("click", () => coShowView(btn.dataset.coView));
 });
+
+// ── Bolsa de Empleo — panel de empresa (Ola 4, #7) ───────────────────────────
+function coAuthHeader() { return AUTH.coToken ? { Authorization: `Bearer ${AUTH.coToken}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" }; }
+
+async function renderCoVacantes() {
+  const box = document.getElementById("coVacantesContent");
+  if (!box) return;
+  const nb = document.getElementById("coVac_newBtn");
+  if (nb && !nb.dataset.wired) {
+    nb.dataset.wired = "1";
+    nb.addEventListener("click", () => document.getElementById("coVac_form")?.classList.toggle("hidden"));
+    document.getElementById("coVac_cancel")?.addEventListener("click", () => document.getElementById("coVac_form")?.classList.add("hidden"));
+    document.getElementById("coVac_submit")?.addEventListener("click", coVacSubmit);
+    box.addEventListener("click", e => {
+      const btn = e.target.closest("[data-covac-act]");
+      if (!btn) return;
+      if (btn.dataset.covacAct === "apps") coVacToggleApps(btn.dataset.vid);
+      else if (btn.dataset.covacAct === "close") coVacClose(btn.dataset.vid);
+    });
+  }
+  box.innerHTML = `<p class="login-hint">Cargando…</p>`;
+  try {
+    const list = await fetch("/api/vacancies/mine", { headers: coAuthHeader() }).then(r => r.json());
+    if (!Array.isArray(list) || !list.length) { box.innerHTML = `<div class="tj-empty">Aún no has publicado vacantes. Toca “+ Publicar vacante”.</div>`; return; }
+    box.innerHTML = list.map(v => `<div class="tj-card tj-mine" style="grid-column:1/-1">
+      <div class="tj-card-head"><span class="tj-cat">${escapeHtml(v.type || "")}</span><span class="tj-badge tj-badge-${v.status === "open" ? "open" : "completed"}">${v.status === "open" ? "Abierta" : "Cerrada"}</span></div>
+      <h4>${escapeHtml(v.title)}</h4>
+      ${v.salary ? `<div class="tj-meta">💰 ${escapeHtml(v.salary)}</div>` : ""}
+      <div class="tj-mine-actions">
+        <button class="secondary-btn tj-sm" type="button" data-covac-act="apps" data-vid="${escapeHtml(v.id)}">Ver postulantes (${escapeHtml(String(v.applicantsCount || 0))})</button>
+        ${v.status === "open" ? `<button class="linklike tj-sm" type="button" data-covac-act="close" data-vid="${escapeHtml(v.id)}">Cerrar</button>` : ""}
+      </div>
+      <div class="tj-proposals hidden" id="covacapps_${escapeHtml(v.id)}"></div>
+    </div>`).join("");
+  } catch { box.innerHTML = `<p class="login-error">No se pudieron cargar tus vacantes.</p>`; }
+}
+
+async function coVacSubmit() {
+  const title = document.getElementById("coVac_title")?.value.trim();
+  if (!title) { toast("Escribe el puesto.", "error"); return; }
+  const body = {
+    title,
+    type: document.getElementById("coVac_type")?.value,
+    salary: document.getElementById("coVac_salary")?.value.trim() || "",
+    description: document.getElementById("coVac_desc")?.value.trim() || ""
+  };
+  try {
+    const r = await fetch("/api/vacancies", { method: "POST", headers: coAuthHeader(), body: JSON.stringify(body) });
+    if (!r.ok) { const d = await r.json().catch(() => ({})); toast(d.error || "No se pudo publicar.", "error"); return; }
+    toast("¡Vacante publicada!");
+    document.getElementById("coVac_form")?.classList.add("hidden");
+    ["coVac_title", "coVac_salary", "coVac_desc"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
+    renderCoVacantes();
+  } catch { toast("No se pudo publicar.", "error"); }
+}
+
+async function coVacToggleApps(vid) {
+  const box = document.getElementById("covacapps_" + vid);
+  if (!box) return;
+  if (!box.classList.contains("hidden")) { box.classList.add("hidden"); return; }
+  box.classList.remove("hidden");
+  box.innerHTML = `<p class="login-hint">Cargando…</p>`;
+  try {
+    const apps = await fetch(`/api/vacancies/${vid}/applications`, { headers: coAuthHeader() }).then(r => r.json());
+    if (!Array.isArray(apps) || !apps.length) { box.innerHTML = `<p class="tj-empty">Aún no hay postulantes.</p>`; return; }
+    box.innerHTML = apps.map(a => `<div class="tj-prop">
+      <div class="tj-prop-head"><strong>${escapeHtml(a.professionalName || "")}</strong>${a.professionalCategory ? `<span class="tj-cat">${escapeHtml(a.professionalCategory)}</span>` : ""}${a.phone ? `<span class="tj-prop-price">${escapeHtml(a.phone)}</span>` : ""}</div>
+      <p class="tj-prop-msg">${escapeHtml(a.message || "(sin mensaje)")}</p>
+    </div>`).join("");
+  } catch { box.innerHTML = `<p class="login-error">No se pudieron cargar.</p>`; }
+}
+
+async function coVacClose(vid) {
+  if (!confirm("¿Cerrar esta vacante? Dejará de recibir postulaciones.")) return;
+  try {
+    await fetch(`/api/vacancies/${vid}/close`, { method: "POST", headers: coAuthHeader() });
+    toast("Vacante cerrada.");
+    renderCoVacantes();
+  } catch { toast("No se pudo cerrar.", "error"); }
+}
 
 // ── Mobile sidebar toggle ─────────────────────────────────────────────────────
 document.getElementById("coMenuBtn")?.addEventListener("click", () => {
@@ -12333,7 +12415,7 @@ function _loginAsProfessional(pro, token) {
 
 const PRO_VIEW_TITLES = {
   proMiPerfil: "Mi Perfil", proPortfolio: "Portfolio",
-  proEstadisticas: "Estadísticas", proResenas: "Reseñas", proTrabajos: "Trabajos", proPassword: "Contraseña"
+  proEstadisticas: "Estadísticas", proResenas: "Reseñas", proTrabajos: "Trabajos y Empleos", proPassword: "Contraseña"
 };
 
 function proShowView(viewId) {
@@ -12367,7 +12449,12 @@ function ptjSwitchTab(tab) {
   document.querySelectorAll("[data-ptj-tab]").forEach(b => b.classList.toggle("active", b.dataset.ptjTab === tab));
   document.getElementById("ptj_openList")?.classList.toggle("hidden", tab !== "open");
   document.getElementById("ptj_mineList")?.classList.toggle("hidden", tab !== "mine");
-  if (tab === "open") ptjLoadOpen(); else ptjLoadMine();
+  document.getElementById("ptj_empleosList")?.classList.toggle("hidden", tab !== "empleos");
+  document.getElementById("ptj_appliedList")?.classList.toggle("hidden", tab !== "applied");
+  if (tab === "open") ptjLoadOpen();
+  else if (tab === "mine") ptjLoadMine();
+  else if (tab === "empleos") ptjLoadEmpleos();
+  else if (tab === "applied") ptjLoadApplied();
 }
 
 async function ptjLoadOpen() {
@@ -12439,11 +12526,68 @@ document.querySelectorAll("[data-ptj-tab]").forEach(b => b.addEventListener("cli
 document.getElementById("proTrabajos")?.addEventListener("click", e => {
   const btn = e.target.closest("[data-ptj-act]");
   if (!btn) return;
-  const jobId = btn.dataset.job, act = btn.dataset.ptjAct;
+  const jobId = btn.dataset.job, vid = btn.dataset.vid, act = btn.dataset.ptjAct;
   if (act === "show-form") document.getElementById("ptjform_" + jobId)?.classList.remove("hidden");
   else if (act === "hide-form") document.getElementById("ptjform_" + jobId)?.classList.add("hidden");
   else if (act === "send") ptjSend(jobId);
+  else if (act === "vac-show") document.getElementById("ptjvac_" + vid)?.classList.remove("hidden");
+  else if (act === "vac-hide") document.getElementById("ptjvac_" + vid)?.classList.add("hidden");
+  else if (act === "vac-apply") ptjApply(vid);
 });
+
+// ── Bolsa de Empleo — lado profesional (Ola 4, #7) ───────────────────────────
+async function ptjLoadEmpleos() {
+  const box = document.getElementById("ptj_empleosList");
+  if (!box) return;
+  box.innerHTML = `<p class="tj-empty">Cargando…</p>`;
+  try {
+    const list = await fetch("/api/vacancies").then(r => r.json());
+    if (!Array.isArray(list) || !list.length) { box.innerHTML = `<div class="tj-empty">No hay vacantes abiertas ahora mismo. Vuelve pronto.</div>`; return; }
+    box.innerHTML = list.map(v => {
+      const id = escapeHtml(v.id);
+      return `<div class="tj-card">
+        <div class="tj-card-head"><span class="tj-cat">${escapeHtml(v.type || "")}</span><span class="tj-time">${tjTimeAgo(v.createdAt)}</span></div>
+        <h4>${escapeHtml(v.title)}</h4>
+        <div class="tj-by">🏢 ${escapeHtml(v.companyName || "")}</div>
+        ${v.description ? `<p class="tj-desc">${escapeHtml(v.description)}</p>` : ""}
+        <div class="tj-meta">${[v.salary ? `💰 ${escapeHtml(v.salary)}` : "", v.location ? `📍 ${escapeHtml(v.location)}` : ""].filter(Boolean).join(" · ")}</div>
+        <div class="tj-mine-actions"><button class="primary-btn tj-sm" type="button" data-ptj-act="vac-show" data-vid="${id}">Postularme</button></div>
+        <div class="tj-proposals hidden" id="ptjvac_${id}">
+          <label style="font-size:.85rem;display:block">Mensaje a la empresa*<textarea id="ptjvacmsg_${id}" rows="2" placeholder="Cuéntales por qué eres buen candidato…" style="width:100%"></textarea></label>
+          <div class="tj-form-actions"><button class="primary-btn tj-sm" type="button" data-ptj-act="vac-apply" data-vid="${id}">Enviar postulación</button><button class="secondary-btn tj-sm" type="button" data-ptj-act="vac-hide" data-vid="${id}">Cancelar</button></div>
+        </div>
+      </div>`;
+    }).join("");
+  } catch { box.innerHTML = `<p class="login-error">No se pudieron cargar las vacantes.</p>`; }
+}
+
+async function ptjLoadApplied() {
+  const box = document.getElementById("ptj_appliedList");
+  if (!box) return;
+  box.innerHTML = `<p class="tj-empty">Cargando…</p>`;
+  try {
+    const list = await fetch("/api/applications/mine", { headers: proAuthHeader() }).then(r => r.json());
+    if (!Array.isArray(list) || !list.length) { box.innerHTML = `<div class="tj-empty">Aún no te has postulado a vacantes. Explora "Empleos".</div>`; return; }
+    const L = { sent: "Enviada", reviewed: "Revisada", accepted: "Aceptada", rejected: "No elegida" };
+    box.innerHTML = list.map(a => `<div class="tj-card">
+      <div class="tj-card-head"><span class="tj-cat">${escapeHtml(a.companyName || "")}</span><span class="tj-badge tj-badge-open">${escapeHtml(L[a.status] || a.status)}</span></div>
+      <h4>${escapeHtml(a.vacancyTitle || "")}</h4>
+      <p class="tj-prop-msg">${escapeHtml(a.message || "")}</p>
+    </div>`).join("");
+  } catch { box.innerHTML = `<p class="login-error">No se pudieron cargar tus postulaciones.</p>`; }
+}
+
+async function ptjApply(vid) {
+  const msg = document.getElementById("ptjvacmsg_" + vid)?.value.trim();
+  if (!msg) { toast("Escribe un mensaje para la empresa.", "error"); return; }
+  try {
+    const r = await fetch(`/api/vacancies/${vid}/apply`, { method: "POST", headers: { ...proAuthHeader(), "Content-Type": "application/json" }, body: JSON.stringify({ message: msg }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(d.error || "No se pudo postular.", "error"); return; }
+    toast("¡Postulación enviada! La empresa fue notificada.");
+    document.getElementById("ptjvac_" + vid)?.classList.add("hidden");
+  } catch { toast("No se pudo postular.", "error"); }
+}
 
 document.getElementById("proMenuBtn")?.addEventListener("click", () => {
   document.getElementById("professionalShell")?.classList.toggle("co-open");

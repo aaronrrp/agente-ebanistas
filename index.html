@@ -892,6 +892,7 @@
         <button class="co-nav-item" data-co-view="coPublicidad">📣 <span>Publicidad</span></button>
         <button class="co-nav-item" data-co-view="coPedidos">🛒 <span>Pedidos</span></button>
         <button class="co-nav-item" data-co-view="coSolicitudes">📋 <span>Solicitudes</span></button>
+        <button class="co-nav-item" data-co-view="coVacantes">💼 <span>Bolsa de Empleo</span></button>
         <button class="co-nav-item" data-co-view="coClientes">👥 <span>Clientes</span></button>
         <button class="co-nav-item" data-co-view="coEstadisticas">📈 <span>Estadísticas</span></button>
         <button class="co-nav-item" data-co-view="coPerfil">👤 <span>Perfil</span></button>
@@ -1002,6 +1003,27 @@
             <div><h2>Solicitudes de Cotización</h2><p class="login-hint">Solicitudes de clientes dirigidas a tu empresa.</p></div>
           </div>
           <div id="coSolicitudesContent"><p class="login-hint">Cargando…</p></div>
+        </div>
+
+        <!-- ── Bolsa de Empleo (Ola 4, #7) ── -->
+        <div id="coVacantes" class="co-view hidden">
+          <div class="co-page-header">
+            <div><h2>Bolsa de Empleo</h2><p class="login-hint">Publica vacantes y recibe postulaciones de profesionales.</p></div>
+            <button id="coVac_newBtn" class="primary-btn" type="button">+ Publicar vacante</button>
+          </div>
+          <div id="coVac_form" class="subsection hidden" style="margin-bottom:1rem">
+            <div class="form-grid" style="grid-template-columns:1fr 1fr">
+              <label class="span-2">Puesto*<input id="coVac_title" type="text" placeholder="Ej: Ebanista con experiencia"></label>
+              <label>Tipo<select id="coVac_type"><option>tiempo completo</option><option>medio tiempo</option><option>por proyecto</option><option>temporal</option></select></label>
+              <label>Salario (opcional)<input id="coVac_salary" type="text" placeholder="B/. 800"></label>
+              <label class="span-2">Descripción<textarea id="coVac_desc" rows="3" placeholder="Requisitos, funciones, horario…"></textarea></label>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button id="coVac_submit" class="primary-btn" type="button">Publicar</button>
+              <button id="coVac_cancel" class="secondary-btn" type="button">Cancelar</button>
+            </div>
+          </div>
+          <div id="coVacantesContent"><p class="login-hint">Cargando…</p></div>
         </div>
 
         <!-- ── Clientes ─────────────────────────────────────── -->
@@ -1315,12 +1337,16 @@
           <div class="co-page-header">
             <div><h2>Trabajos</h2><p class="login-hint">Solicitudes de clientes: envía tu propuesta y consigue el trabajo.</p></div>
           </div>
-          <div class="login-tabs tj-tabs" role="tablist">
-            <button class="login-tab active" data-ptj-tab="open" type="button" role="tab">Solicitudes abiertas</button>
+          <div class="login-tabs tj-tabs" role="tablist" style="flex-wrap:wrap">
+            <button class="login-tab active" data-ptj-tab="open" type="button" role="tab">Solicitudes</button>
             <button class="login-tab" data-ptj-tab="mine" type="button" role="tab">Mis propuestas</button>
+            <button class="login-tab" data-ptj-tab="empleos" type="button" role="tab">Empleos</button>
+            <button class="login-tab" data-ptj-tab="applied" type="button" role="tab">Mis postulaciones</button>
           </div>
           <div id="ptj_openList" class="tj-list"></div>
           <div id="ptj_mineList" class="tj-list hidden"></div>
+          <div id="ptj_empleosList" class="tj-list hidden"></div>
+          <div id="ptj_appliedList" class="tj-list hidden"></div>
         </div>
 
         <!-- ── Contraseña ── -->
