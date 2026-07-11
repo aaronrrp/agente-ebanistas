@@ -186,6 +186,11 @@
             <strong>Inspiración</strong>
             <span>Diseños reales de cocinas, closets, baños y más para inspirar tu proyecto.</span>
           </button>
+          <button class="home-card" type="button" data-home-go="referidos">
+            <span class="home-card-icon">🎁</span>
+            <strong>Invita y gana</strong>
+            <span>Comparte tu código: cada persona que se une con él te suma créditos.</span>
+          </button>
         </div>
 
         <!-- Dos caminos, mismo peso visual: cliente (busca) y proveedor (ofrece) -->
@@ -829,6 +834,30 @@
           <p class="public-hero-sub" style="margin-top:0">Ideas y diseños reales: cocinas, closets, baños, oficinas y más.</p>
           <div id="insp_chips" class="mk-chips"></div>
           <div id="insp_grid" class="insp-grid"></div>
+        </div>
+      </section>
+
+      <!-- Vista: REFERIDOS (Ola 4, #11) -->
+      <style>
+        .ref-card{background:linear-gradient(135deg,#3B2D8F,#1A1346);color:#fff;border-radius:16px;padding:22px;text-align:center;max-width:420px;margin:1rem auto}
+        .ref-label{font-size:.8rem;opacity:.8}
+        .ref-code{font-size:2rem;font-weight:900;letter-spacing:2px;margin:.3rem 0}
+        .ref-actions{display:flex;gap:8px;justify-content:center;margin:.75rem 0;flex-wrap:wrap}
+        .ref-stats{display:flex;gap:24px;justify-content:center;border-top:1px solid rgba(255,255,255,.2);padding-top:.75rem;margin-top:.5rem}
+        .ref-stats strong{font-size:1.3rem;display:block}
+        .ref-redeem{max-width:420px;margin:1rem auto;background:#faf9ff;border:1px solid #ece9f5;border-radius:12px;padding:16px}
+        .ref-redeem label{font-size:.85rem;color:#4b5563;display:block;margin-bottom:6px}
+        .ref-redeem-row{display:flex;gap:8px}
+        .ref-redeem-row input{flex:1;padding:9px 11px;border:1px solid #d9d4ec;border-radius:8px;text-transform:uppercase}
+      </style>
+      <section id="publicReferidosView" class="hidden">
+        <div class="ac-wrap">
+          <div class="ac-topbar">
+            <button class="secondary-btn" type="button" data-public-nav="inicio">← Inicio</button>
+            <h2>🎁 Invita y gana</h2>
+          </div>
+          <p class="public-hero-sub" style="margin-top:0">Comparte tu código. Cada persona que se una con él te suma un crédito.</p>
+          <div id="ref_content"><p class="tj-empty">Cargando…</p></div>
         </div>
       </section>
     </main>

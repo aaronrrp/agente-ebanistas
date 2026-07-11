@@ -8841,7 +8841,7 @@ const PUBLIC_SUBVIEW_IDS = [
   "publicDirectoryView", "publicRegisterView", "publicCompaniesView", "publicCompanyRegisterView",
   "publicRetazosView", "rz_loginGateView", "rz_publishView",
   "publicTrabajosView", "publicMaterialesView", "publicCalculadorasView",
-  "publicAcademiaView", "publicInspiracionView"
+  "publicAcademiaView", "publicInspiracionView", "publicReferidosView"
 ];
 function hideAllPublicSubviews() {
   PUBLIC_SUBVIEW_IDS.forEach(id => document.getElementById(id)?.classList.add("hidden"));
@@ -8880,6 +8880,9 @@ function publicNavGo(nav) {
   } else if (nav === "inspiracion") {
     document.getElementById("publicInspiracionView")?.classList.remove("hidden");
     loadInspiracion();
+  } else if (nav === "referidos") {
+    document.getElementById("publicReferidosView")?.classList.remove("hidden");
+    loadReferidos();
   } else { // "inicio" y cualquier valor desconocido → portada
     document.getElementById("publicHomeView")?.classList.remove("hidden");
   }
@@ -9344,6 +9347,49 @@ document.addEventListener("click", e => {
 });
 updateNotifBadge();
 setInterval(updateNotifBadge, 45000);
+
+// ── Referidos (Ola 4, #11) ───────────────────────────────────────────────────
+async function loadReferidos() {
+  const box = document.getElementById("ref_content");
+  if (!box) return;
+  if (!hasPublicSession()) {
+    box.innerHTML = `<div class="tj-empty">Inicia sesión o crea tu cuenta para obtener tu código de invitación. <button class="linklike" type="button" onclick="showConsumerGate('register')">Crear cuenta gratis</button></div>`;
+    return;
+  }
+  box.innerHTML = `<p class="tj-empty">Cargando…</p>`;
+  try {
+    const d = await fetch("/api/referrals/me", { headers: publicAuthHeader() }).then(r => r.json());
+    if (d.disabled) { box.innerHTML = `<div class="tj-empty">El programa de referidos no está disponible por ahora.</div>`; return; }
+    const waText = encodeURIComponent(`¡Únete a PiLLA! Usa mi código ${d.code} al registrarte. ${location.origin}`);
+    box.innerHTML = `
+      <div class="ref-card">
+        <div class="ref-label">Tu código de invitación</div>
+        <div class="ref-code">${escapeHtml(d.code)}</div>
+        <div class="ref-actions">
+          <button class="secondary-btn tj-sm" id="ref_copy" type="button">Copiar código</button>
+          <a class="primary-btn tj-sm" href="https://wa.me/?text=${waText}" target="_blank" rel="noopener">Compartir por WhatsApp</a>
+        </div>
+        <div class="ref-stats"><span><strong>${escapeHtml(String(d.invitedCount))}</strong>invitados</span><span><strong>${escapeHtml(String(d.credits))}</strong>créditos</span></div>
+      </div>
+      ${d.referredBy
+        ? `<p class="tj-empty">Ya registraste el código <strong>${escapeHtml(d.referredBy)}</strong>. ¡Gracias por unirte!</p>`
+        : `<div class="ref-redeem">
+            <label>¿Te invitaron? Ingresa el código de quien te invitó:</label>
+            <div class="ref-redeem-row"><input id="ref_input" type="text" placeholder="PILLAXXXX" autocapitalize="characters" spellcheck="false"><button class="primary-btn tj-sm" id="ref_apply" type="button">Aplicar</button></div>
+          </div>`}`;
+    document.getElementById("ref_copy")?.addEventListener("click", () => { try { navigator.clipboard.writeText(d.code); } catch {} toast("Código copiado"); });
+    document.getElementById("ref_apply")?.addEventListener("click", async () => {
+      const code = document.getElementById("ref_input")?.value.trim();
+      if (!code) return;
+      try {
+        const r = await fetch("/api/referrals/track", { method: "POST", headers: { ...publicAuthHeader(), "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
+        const res = await r.json().catch(() => ({}));
+        if (r.ok) { toast(res.message || "¡Código aplicado!"); loadReferidos(); }
+        else toast(res.error || "No se pudo aplicar el código.", "error");
+      } catch { toast("No se pudo aplicar el código.", "error"); }
+    });
+  } catch { box.innerHTML = `<p class="login-error">No se pudo cargar tus referidos.</p>`; }
+}
 
 // ── Directorio de Empresas (mismo patrón que el de profesionales) ───────────
 // Tipos de empresa / rubro. Los valores viejos (melamina, mdf, madera...) se
