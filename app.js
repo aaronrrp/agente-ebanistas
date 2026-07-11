@@ -8841,7 +8841,7 @@ const PUBLIC_SUBVIEW_IDS = [
   "publicDirectoryView", "publicRegisterView", "publicCompaniesView", "publicCompanyRegisterView",
   "publicRetazosView", "rz_loginGateView", "rz_publishView",
   "publicTrabajosView", "publicMaterialesView", "publicCalculadorasView",
-  "publicAcademiaView", "publicInspiracionView", "publicReferidosView"
+  "publicAcademiaView", "publicInspiracionView", "publicReferidosView", "publicReservasView"
 ];
 function hideAllPublicSubviews() {
   PUBLIC_SUBVIEW_IDS.forEach(id => document.getElementById(id)?.classList.add("hidden"));
@@ -8883,6 +8883,9 @@ function publicNavGo(nav) {
   } else if (nav === "referidos") {
     document.getElementById("publicReferidosView")?.classList.remove("hidden");
     loadReferidos();
+  } else if (nav === "reservas") {
+    document.getElementById("publicReservasView")?.classList.remove("hidden");
+    loadReservas();
   } else { // "inicio" y cualquier valor desconocido → portada
     document.getElementById("publicHomeView")?.classList.remove("hidden");
   }
@@ -9389,6 +9392,82 @@ async function loadReferidos() {
       } catch { toast("No se pudo aplicar el código.", "error"); }
     });
   } catch { box.innerHTML = `<p class="login-error">No se pudo cargar tus referidos.</p>`; }
+}
+
+// ── Reservas — lado cliente (Ola 4, #2) ──────────────────────────────────────
+const RV_ES = { requested: "Solicitada", confirmed: "Confirmada", declined: "Rechazada", cancelled: "Cancelada" };
+const RV_CLS = { requested: "open", confirmed: "assigned", declined: "cancelled", cancelled: "cancelled" };
+
+async function loadReservas() {
+  const box = document.getElementById("rv_content");
+  if (!box) return;
+  if (!hasPublicSession()) {
+    box.innerHTML = `<div class="tj-empty">Inicia sesión o crea tu cuenta para reservar. <button class="linklike" type="button" onclick="showConsumerGate('register')">Crear cuenta gratis</button></div>`;
+    return;
+  }
+  box.innerHTML = `<p class="tj-empty">Cargando…</p>`;
+  try {
+    const [pros, mine] = await Promise.all([
+      fetch("/api/professionals").then(r => r.json()),
+      fetch("/api/bookings/mine", { headers: publicAuthHeader() }).then(r => r.json())
+    ]);
+    const proList = Array.isArray(pros) ? pros : (pros.items || []);
+    const opts = proList.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}${p.category ? " — " + escapeHtml(p.category) : ""}</option>`).join("");
+    const u = _publicPostAuth?.user || {};
+    box.innerHTML = `
+      <div class="subsection" style="max-width:520px;margin:0 auto 1rem">
+        <h3 style="margin-top:0">Nueva cita</h3>
+        <div class="form-grid" style="grid-template-columns:1fr 1fr">
+          <label class="span-2">Profesional*<select id="rv_pro">${opts || '<option value="">(sin profesionales)</option>'}</select></label>
+          <label>Fecha*<input id="rv_date" type="date"></label>
+          <label>Hora<input id="rv_time" type="time"></label>
+          <label class="span-2">¿Qué necesitas?<textarea id="rv_note" rows="2" placeholder="Describe brevemente lo que necesitas…"></textarea></label>
+          <label>Tu nombre*<input id="rv_name" type="text" value="${escapeHtml(u.name || "")}"></label>
+          <label>Teléfono*<input id="rv_phone" type="text" value="${escapeHtml(u.phone || "")}"></label>
+        </div>
+        <button id="rv_submit" class="primary-btn" type="button" style="width:100%;margin-top:10px">Solicitar cita</button>
+      </div>
+      <h3 style="max-width:520px;margin:1rem auto .5rem">Mis reservas</h3>
+      <div id="rv_list" class="tj-list"></div>`;
+    document.getElementById("rv_submit")?.addEventListener("click", rvSubmit);
+    rvRenderList(mine);
+  } catch { box.innerHTML = `<p class="login-error">No se pudo cargar.</p>`; }
+}
+
+function rvRenderList(list) {
+  const box = document.getElementById("rv_list");
+  if (!box) return;
+  if (!Array.isArray(list) || !list.length) { box.innerHTML = `<div class="tj-empty">Aún no tienes reservas.</div>`; return; }
+  box.innerHTML = list.map(b => `<div class="tj-card">
+    <div class="tj-card-head"><span class="tj-cat">${escapeHtml(b.professionalName || "")}</span><span class="tj-badge tj-badge-${RV_CLS[b.status] || "open"}">${escapeHtml(RV_ES[b.status] || b.status)}</span></div>
+    <h4>📅 ${escapeHtml(b.date)}${b.time ? " · " + escapeHtml(b.time) : ""}</h4>
+    ${b.note ? `<p class="tj-desc">${escapeHtml(b.note)}</p>` : ""}
+    ${(b.status === "requested" || b.status === "confirmed") ? `<div class="tj-mine-actions"><button class="linklike tj-sm" type="button" data-rv-cancel="${escapeHtml(b.id)}">Cancelar</button></div>` : ""}
+  </div>`).join("");
+  box.querySelectorAll("[data-rv-cancel]").forEach(btn => btn.addEventListener("click", () => rvCancel(btn.dataset.rvCancel)));
+}
+
+async function rvSubmit() {
+  const professionalId = document.getElementById("rv_pro")?.value;
+  const date = document.getElementById("rv_date")?.value;
+  const name = document.getElementById("rv_name")?.value.trim();
+  const phone = document.getElementById("rv_phone")?.value.trim();
+  if (!professionalId || !date) { toast("Elige el profesional y la fecha.", "error"); return; }
+  if (!name || !phone) { toast("Incluye tu nombre y teléfono.", "error"); return; }
+  const body = { professionalId, date, time: document.getElementById("rv_time")?.value || "", note: document.getElementById("rv_note")?.value.trim() || "", contact: { name, phone } };
+  try {
+    const r = await fetch("/api/bookings", { method: "POST", headers: { ...publicAuthHeader(), "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(d.error || "No se pudo reservar.", "error"); return; }
+    toast("¡Cita solicitada! El profesional la confirmará.");
+    loadReservas();
+  } catch { toast("No se pudo reservar.", "error"); }
+}
+
+async function rvCancel(id) {
+  if (!confirm("¿Cancelar esta reserva?")) return;
+  try { await fetch(`/api/bookings/${id}/cancel`, { method: "POST", headers: publicAuthHeader() }); toast("Reserva cancelada."); loadReservas(); }
+  catch { toast("No se pudo cancelar.", "error"); }
 }
 
 // ── Directorio de Empresas (mismo patrón que el de profesionales) ───────────
@@ -12415,7 +12494,7 @@ function _loginAsProfessional(pro, token) {
 
 const PRO_VIEW_TITLES = {
   proMiPerfil: "Mi Perfil", proPortfolio: "Portfolio",
-  proEstadisticas: "Estadísticas", proResenas: "Reseñas", proTrabajos: "Trabajos y Empleos", proPassword: "Contraseña"
+  proEstadisticas: "Estadísticas", proResenas: "Reseñas", proTrabajos: "Trabajos y Empleos", proReservas: "Reservas", proPassword: "Contraseña"
 };
 
 function proShowView(viewId) {
@@ -12432,6 +12511,37 @@ function proShowView(viewId) {
   else if (viewId === "proEstadisticas") renderProEstadisticas();
   else if (viewId === "proResenas") renderProResenas();
   else if (viewId === "proTrabajos") renderProTrabajos();
+  else if (viewId === "proReservas") renderProReservas();
+}
+
+// ── Reservas — panel del profesional (Ola 4, #2) ─────────────────────────────
+async function renderProReservas() {
+  const box = document.getElementById("proReservasContent");
+  if (!box) return;
+  if (!box.dataset.wired) {
+    box.dataset.wired = "1";
+    box.addEventListener("click", e => { const btn = e.target.closest("[data-rvpro]"); if (btn) rvProAction(btn.dataset.rvpro, btn.dataset.id); });
+  }
+  box.innerHTML = `<p class="login-hint">Cargando…</p>`;
+  try {
+    const list = await fetch("/api/bookings/received", { headers: proAuthHeader() }).then(r => r.json());
+    if (!Array.isArray(list) || !list.length) { box.innerHTML = `<div class="tj-empty">Aún no tienes solicitudes de cita.</div>`; return; }
+    box.innerHTML = list.map(b => `<div class="tj-card" style="grid-column:1/-1">
+      <div class="tj-card-head"><span class="tj-cat">${escapeHtml((b.contact && b.contact.name) || "Cliente")}</span><span class="tj-badge tj-badge-${RV_CLS[b.status] || "open"}">${escapeHtml(RV_ES[b.status] || b.status)}</span></div>
+      <h4>📅 ${escapeHtml(b.date)}${b.time ? " · " + escapeHtml(b.time) : ""}</h4>
+      ${b.note ? `<p class="tj-desc">${escapeHtml(b.note)}</p>` : ""}
+      ${(b.contact && b.contact.phone) ? `<div class="tj-meta">📞 ${escapeHtml(b.contact.phone)}</div>` : ""}
+      ${b.status === "requested" ? `<div class="tj-mine-actions"><button class="primary-btn tj-sm" type="button" data-rvpro="confirm" data-id="${escapeHtml(b.id)}">Confirmar</button><button class="secondary-btn tj-sm" type="button" data-rvpro="decline" data-id="${escapeHtml(b.id)}">Rechazar</button></div>` : ""}
+    </div>`).join("");
+  } catch { box.innerHTML = `<p class="login-error">No se pudieron cargar las reservas.</p>`; }
+}
+
+async function rvProAction(act, id) {
+  try {
+    await fetch(`/api/bookings/${id}/${act}`, { method: "POST", headers: proAuthHeader() });
+    toast(act === "confirm" ? "Cita confirmada" : "Cita rechazada");
+    renderProReservas();
+  } catch { toast("No se pudo completar la acción.", "error"); }
 }
 
 document.querySelectorAll(".co-nav-item[data-pro-view]").forEach(btn => {

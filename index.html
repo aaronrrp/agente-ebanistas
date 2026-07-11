@@ -191,6 +191,11 @@
             <strong>Invita y gana</strong>
             <span>Comparte tu código: cada persona que se une con él te suma créditos.</span>
           </button>
+          <button class="home-card" type="button" data-home-go="reservas">
+            <span class="home-card-icon">📅</span>
+            <strong>Reservar cita</strong>
+            <span>Agenda una visita o cita con el profesional que elijas.</span>
+          </button>
         </div>
 
         <!-- Dos caminos, mismo peso visual: cliente (busca) y proveedor (ofrece) -->
@@ -860,6 +865,18 @@
           <div id="ref_content"><p class="tj-empty">Cargando…</p></div>
         </div>
       </section>
+
+      <!-- Vista: RESERVAS (Ola 4, #2) -->
+      <section id="publicReservasView" class="hidden">
+        <div class="ac-wrap">
+          <div class="ac-topbar">
+            <button class="secondary-btn" type="button" data-public-nav="inicio">← Inicio</button>
+            <h2>📅 Reservar una cita</h2>
+          </div>
+          <p class="public-hero-sub" style="margin-top:0">Pide una cita al profesional que elijas. Él la confirma y te avisamos.</p>
+          <div id="rv_content"><p class="tj-empty">Cargando…</p></div>
+        </div>
+      </section>
     </main>
 
     <!-- Acceso administrativo discreto: fijo abajo a la derecha, casi invisible
@@ -1279,6 +1296,7 @@
         <button class="co-nav-item" data-pro-view="proEstadisticas">📈 <span>Estadísticas</span></button>
         <button class="co-nav-item" data-pro-view="proResenas">⭐ <span>Reseñas</span></button>
         <button class="co-nav-item" data-pro-view="proTrabajos">💼 <span>Trabajos</span></button>
+        <button class="co-nav-item" data-pro-view="proReservas">📅 <span>Reservas</span></button>
         <button class="co-nav-item" data-pro-view="proPassword">🔑 <span>Contraseña</span></button>
       </nav>
       <div class="co-sidebar-footer">
@@ -1347,6 +1365,14 @@
           <div id="ptj_mineList" class="tj-list hidden"></div>
           <div id="ptj_empleosList" class="tj-list hidden"></div>
           <div id="ptj_appliedList" class="tj-list hidden"></div>
+        </div>
+
+        <!-- ── Reservas (Ola 4, #2) ── -->
+        <div id="proReservas" class="co-view hidden">
+          <div class="co-page-header">
+            <div><h2>Reservas</h2><p class="login-hint">Solicitudes de cita de tus clientes: confírmalas o recházalas.</p></div>
+          </div>
+          <div id="proReservasContent"><p class="login-hint">Cargando…</p></div>
         </div>
 
         <!-- ── Contraseña ── -->
