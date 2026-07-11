@@ -661,7 +661,8 @@ const ADMIN_TAB_LOADERS = {
   catalogo: loadAdminCatalogTab,
   ubicaciones: loadAdminLocationsTab,
   consumoia: loadAdminAiUsageTab,
-  consumidores: loadAdminConsumersTab
+  consumidores: loadAdminConsumersTab,
+  contenido: loadAdminContenido
 };
 
 function showAdminTab(tabId) {
@@ -672,6 +673,61 @@ function showAdminTab(tabId) {
 document.querySelectorAll("[data-admin-tab]").forEach(btn => {
   btn.addEventListener("click", () => showAdminTab(btn.dataset.adminTab));
 });
+
+// ── Admin: gestión de Contenido (Academia + Inspiración) — #14 ───────────────
+function admContentHeaders() { return { ...adminAuthHeaderAdmin(), "Content-Type": "application/json" }; }
+
+async function loadAdminContenido() {
+  loadAdmCourses(); loadAdmInsp();
+  const cb = document.getElementById("adm_addCourseBtn");
+  if (cb && !cb.dataset.wired) {
+    cb.dataset.wired = "1";
+    cb.addEventListener("click", admAddCourse);
+    document.getElementById("adm_addInspBtn")?.addEventListener("click", admAddInsp);
+    document.getElementById("adm_coursesList")?.addEventListener("click", e => { const b = e.target.closest("[data-del-course]"); if (b) admDelContent("courses", b.dataset.delCourse, loadAdmCourses); });
+    document.getElementById("adm_inspList")?.addEventListener("click", e => { const b = e.target.closest("[data-del-insp]"); if (b) admDelContent("inspiration", b.dataset.delInsp, loadAdmInsp); });
+  }
+}
+async function loadAdmCourses() {
+  const el = document.getElementById("adm_coursesList");
+  if (!el) return;
+  try {
+    const list = await fetch("/api/admin/courses", { headers: adminAuthHeaderAdmin() }).then(r => r.json());
+    el.innerHTML = (!Array.isArray(list) || !list.length) ? '<p class="login-hint">Aún no hay cursos.</p>'
+      : list.map(c => `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)"><span>${escapeHtml(c.title)} <small style="opacity:.6">${escapeHtml(c.category || "")}</small></span><button class="linklike" type="button" data-del-course="${escapeHtml(c.id)}">Eliminar</button></div>`).join("");
+  } catch {}
+}
+async function loadAdmInsp() {
+  const el = document.getElementById("adm_inspList");
+  if (!el) return;
+  try {
+    const list = await fetch("/api/admin/inspiration", { headers: adminAuthHeaderAdmin() }).then(r => r.json());
+    el.innerHTML = (!Array.isArray(list) || !list.length) ? '<p class="login-hint">Aún no hay diseños.</p>'
+      : list.map(i => `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)"><span>${escapeHtml(i.title)} <small style="opacity:.6">${escapeHtml(i.category || "")}</small></span><button class="linklike" type="button" data-del-insp="${escapeHtml(i.id)}">Eliminar</button></div>`).join("");
+  } catch {}
+}
+async function admAddCourse() {
+  const title = document.getElementById("adm_courseTitle")?.value.trim();
+  if (!title) { toast("Falta el título del curso.", "error"); return; }
+  const body = { title, category: document.getElementById("adm_courseCat")?.value.trim() || "General", videoUrl: document.getElementById("adm_courseVideo")?.value.trim() || "", thumbnailUrl: document.getElementById("adm_courseThumb")?.value.trim() || "", description: document.getElementById("adm_courseDesc")?.value.trim() || "" };
+  const r = await fetch("/api/admin/courses", { method: "POST", headers: admContentHeaders(), body: JSON.stringify(body) });
+  if (r.ok) { toast("Curso publicado."); ["adm_courseTitle", "adm_courseCat", "adm_courseVideo", "adm_courseThumb", "adm_courseDesc"].forEach(id => { const e = document.getElementById(id); if (e) e.value = ""; }); loadAdmCourses(); }
+  else toast("No se pudo publicar.", "error");
+}
+async function admAddInsp() {
+  const title = document.getElementById("adm_inspTitle")?.value.trim();
+  const photoUrl = document.getElementById("adm_inspPhoto")?.value.trim();
+  if (!title || !photoUrl) { toast("Falta el título o la foto.", "error"); return; }
+  const body = { title, photoUrl, category: document.getElementById("adm_inspCat")?.value, author: document.getElementById("adm_inspAuthor")?.value.trim() || "", materials: document.getElementById("adm_inspMaterials")?.value.trim() || "" };
+  const r = await fetch("/api/admin/inspiration", { method: "POST", headers: admContentHeaders(), body: JSON.stringify(body) });
+  if (r.ok) { toast("Diseño publicado."); ["adm_inspTitle", "adm_inspPhoto", "adm_inspAuthor", "adm_inspMaterials"].forEach(id => { const e = document.getElementById(id); if (e) e.value = ""; }); loadAdmInsp(); }
+  else toast("No se pudo publicar.", "error");
+}
+async function admDelContent(base, id, reload) {
+  if (!confirm("¿Eliminar este elemento?")) return;
+  await fetch(`/api/admin/${base}/${id}`, { method: "DELETE", headers: adminAuthHeaderAdmin() });
+  reload();
+}
 
 function statusBadgeHtml(status) {
   const labels = { pending: "Pendiente", approved: "Aprobado", rejected: "Rechazado", suspended: "Suspendido", changes_requested: "Cambios solicitados", active: "Activo", removed: "Eliminado" };

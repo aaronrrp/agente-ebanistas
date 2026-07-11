@@ -1459,6 +1459,7 @@
           <button class="admin-subtab" data-admin-tab="seguridad" type="button">Seguridad</button>
           <button class="admin-subtab" data-admin-tab="ebanistas" type="button">Ebanistas</button>
           <button class="admin-subtab" data-admin-tab="valoraciones" type="button">Valoraciones</button>
+          <button class="admin-subtab" data-admin-tab="contenido" type="button">Contenido</button>
           <button class="admin-subtab" data-admin-tab="catalogo" type="button">Catálogo</button>
           <button class="admin-subtab" data-admin-tab="consumidores" type="button">Consumidores</button>
           <button class="admin-subtab" data-admin-tab="ubicaciones" type="button">Ubicaciones</button>
@@ -1830,6 +1831,33 @@
         </div>
 
         <!-- ── Catálogo global de categorías + productos por empresa ──────── -->
+        <div class="admin-subpanel hidden" data-admin-panel="contenido">
+          <section class="panel" style="margin-bottom:1rem">
+            <h3 style="margin-top:0">🎓 Academia — Cursos</h3>
+            <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:8px">
+              <input id="adm_courseTitle" placeholder="Título del curso*">
+              <input id="adm_courseCat" placeholder="Categoría (ej: Ebanistería)">
+              <input id="adm_courseVideo" placeholder="URL de video (YouTube…)">
+              <input id="adm_courseThumb" placeholder="URL de miniatura (opcional)">
+              <input id="adm_courseDesc" placeholder="Descripción breve" style="grid-column:1/-1">
+            </div>
+            <button class="primary-btn" id="adm_addCourseBtn" type="button" style="margin-top:8px">+ Publicar curso</button>
+            <div id="adm_coursesList" style="margin-top:12px"></div>
+          </section>
+          <section class="panel">
+            <h3 style="margin-top:0">✨ Inspiración — Diseños</h3>
+            <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:8px">
+              <input id="adm_inspTitle" placeholder="Título*">
+              <select id="adm_inspCat"><option value="cocina">Cocina</option><option value="closet">Closet</option><option value="baño">Baño</option><option value="oficina">Oficina</option><option value="dormitorio">Dormitorio</option><option value="sala">Sala</option><option value="comercial">Comercial</option><option value="otro">Otro</option></select>
+              <input id="adm_inspPhoto" placeholder="URL de foto principal*" style="grid-column:1/-1">
+              <input id="adm_inspAuthor" placeholder="Autor / taller">
+              <input id="adm_inspMaterials" placeholder="Materiales usados">
+            </div>
+            <button class="primary-btn" id="adm_addInspBtn" type="button" style="margin-top:8px">+ Publicar diseño</button>
+            <div id="adm_inspList" style="margin-top:12px"></div>
+          </section>
+        </div>
+
         <div class="admin-subpanel hidden" data-admin-panel="catalogo">
           <!-- Selector de empresa — controla categorías Y productos -->
           <section class="panel" style="margin-bottom:1rem;padding:.75rem 1rem">
