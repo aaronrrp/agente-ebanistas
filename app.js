@@ -8840,7 +8840,7 @@ const PUBLIC_SUBVIEW_IDS = [
   "publicHomeView", "consumerGateView",
   "publicDirectoryView", "publicRegisterView", "publicCompaniesView", "publicCompanyRegisterView",
   "publicRetazosView", "rz_loginGateView", "rz_publishView",
-  "publicTrabajosView", "publicMaterialesView"
+  "publicTrabajosView", "publicMaterialesView", "publicCalculadorasView"
 ];
 function hideAllPublicSubviews() {
   PUBLIC_SUBVIEW_IDS.forEach(id => document.getElementById(id)?.classList.add("hidden"));
@@ -8870,6 +8870,9 @@ function publicNavGo(nav) {
   } else if (nav === "materiales") {
     document.getElementById("publicMaterialesView")?.classList.remove("hidden");
     loadMateriales();
+  } else if (nav === "calculadoras") {
+    document.getElementById("publicCalculadorasView")?.classList.remove("hidden");
+    loadCalculadoras();
   } else { // "inicio" y cualquier valor desconocido → portada
     document.getElementById("publicHomeView")?.classList.remove("hidden");
   }
@@ -9198,6 +9201,31 @@ document.querySelectorAll("[data-mk-sort]").forEach(b => b.addEventListener("cli
   document.querySelectorAll("[data-mk-sort]").forEach(x => x.classList.toggle("active", x === b));
   mkSearch(_mkLastQ);
 }));
+
+// ── Calculadoras (Ola 3) — 100% cliente ──────────────────────────────────────
+function loadCalculadoras() {
+  document.querySelectorAll("#publicCalculadorasView .calc-card").forEach(calcCompute);
+}
+function calcCompute(card) {
+  const val = k => parseFloat(card.querySelector(`[data-calc-in="${k}"]`)?.value) || 0;
+  const out = card.querySelector("[data-calc-out]");
+  if (!out) return;
+  const ceil = Math.ceil;
+  let txt = "—";
+  switch (card.dataset.calc) {
+    case "laminas": { const a = val("area"), s = val("sheet") || 2.98; if (a > 0) txt = `${ceil(a * 1.15 / s)} lámina(s)`; break; }
+    case "pintura": { const a = val("area"), c = val("coats") || 1; if (a > 0) txt = `${ceil(a * c / 35)} galón(es)`; break; }
+    case "piso":    { const a = val("area"), b = val("box") || 2.2; if (a > 0) txt = `${ceil(a * 1.1 / b)} caja(s)`; break; }
+    case "drywall": { const a = val("area"); if (a > 0) txt = `${ceil(a * 1.1 / 2.98)} plancha(s)`; break; }
+    case "canto":   { const m = val("ml"), r = val("roll") || 50; if (m > 0) txt = `${ceil(m / r)} rollo(s)`; break; }
+    case "herrajes":{ const d = val("doors"); if (d > 0) txt = `${d * 2} bisagras · ${d * 2 * 8} tornillos`; break; }
+  }
+  out.textContent = txt;
+}
+document.getElementById("publicCalculadorasView")?.addEventListener("input", e => {
+  const card = e.target.closest(".calc-card");
+  if (card) calcCompute(card);
+});
 
 // ── Directorio de Empresas (mismo patrón que el de profesionales) ───────────
 // Tipos de empresa / rubro. Los valores viejos (melamina, mdf, madera...) se
