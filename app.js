@@ -9283,6 +9283,68 @@ document.getElementById("insp_chips")?.addEventListener("click", e => {
   loadInspiracion();
 });
 
+// ── Centro de notificaciones (Ola 4, #13) ────────────────────────────────────
+function notifAuthHeader() { return (typeof publicAuthHeader === "function") ? publicAuthHeader() : {}; }
+function notifHasSession() { return (typeof hasPublicSession === "function") && hasPublicSession(); }
+
+async function updateNotifBadge() {
+  const bell = document.getElementById("notifBell");
+  if (!bell) return;
+  if (!notifHasSession()) { bell.classList.remove("show"); return; }
+  bell.classList.add("show");
+  try {
+    const { count } = await fetch("/api/notifications/unread-count", { headers: notifAuthHeader() }).then(r => r.json());
+    const badge = document.getElementById("notifBadge");
+    if (badge) {
+      if (count > 0) { badge.textContent = count > 99 ? "99+" : count; badge.classList.add("show"); }
+      else badge.classList.remove("show");
+    }
+  } catch {}
+}
+
+function notifTimeAgo(iso) {
+  const m = (Date.now() - new Date(iso).getTime()) / 60000;
+  if (m < 1) return "ahora";
+  if (m < 60) return `hace ${Math.floor(m)} min`;
+  if (m < 1440) return `hace ${Math.floor(m / 60)} h`;
+  try { return new Date(iso).toLocaleDateString("es-PA"); } catch { return ""; }
+}
+
+async function openNotifPanel() {
+  const panel = document.getElementById("notifPanel");
+  const list = document.getElementById("notifList");
+  if (!panel || !list) return;
+  if (!panel.classList.toggle("show")) return; // se cerró
+  list.innerHTML = `<p class="notif-empty">Cargando…</p>`;
+  try {
+    const items = await fetch("/api/notifications", { headers: notifAuthHeader() }).then(r => r.json());
+    list.innerHTML = (!Array.isArray(items) || !items.length)
+      ? `<p class="notif-empty">No tienes notificaciones todavía.</p>`
+      : items.map(n => `<div class="notif-item ${n.read ? "read" : "unread"}">
+          <div class="notif-dot"></div>
+          <div class="notif-body"><strong>${escapeHtml(n.title || "")}</strong><span>${escapeHtml(n.body || "")}</span><span class="notif-time">${notifTimeAgo(n.createdAt)}</span></div>
+        </div>`).join("");
+    await fetch("/api/notifications/read-all", { method: "POST", headers: notifAuthHeader() }).catch(() => {});
+    updateNotifBadge();
+  } catch { list.innerHTML = `<p class="notif-empty">No se pudieron cargar.</p>`; }
+}
+
+document.getElementById("notifBell")?.addEventListener("click", openNotifPanel);
+document.getElementById("notifMarkAll")?.addEventListener("click", async () => {
+  await fetch("/api/notifications/read-all", { method: "POST", headers: notifAuthHeader() }).catch(() => {});
+  document.querySelectorAll("#notifList .notif-item").forEach(i => { i.classList.remove("unread"); i.classList.add("read"); });
+  updateNotifBadge();
+});
+document.addEventListener("click", e => {
+  const panel = document.getElementById("notifPanel");
+  const bell = document.getElementById("notifBell");
+  if (panel && panel.classList.contains("show") && !panel.contains(e.target) && bell && !bell.contains(e.target)) {
+    panel.classList.remove("show");
+  }
+});
+updateNotifBadge();
+setInterval(updateNotifBadge, 45000);
+
 // ── Directorio de Empresas (mismo patrón que el de profesionales) ───────────
 // Tipos de empresa / rubro. Los valores viejos (melamina, mdf, madera...) se
 // conservan para no romper las empresas ya registradas; se añaden tipos de
