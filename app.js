@@ -3274,13 +3274,28 @@ async function sendToAI() {
 
   try {
     if (hasImage) {
-      const { ok, status, data } = await postAi("/api/analyze-space", {
-        message: message || "Analiza este espacio y propón muebles de melamina.",
-        imageData: imgDataForRequest
-      });
-      if (!ok) { pending.textContent = describeAiError(status, data); return; }
-      pending.textContent = data.assistantText || "Propuesta generada.";
-      renderAssistantContentBlocks(pending, data, message);
+      // Con una imagen adjunta hay DOS intenciones muy distintas que el sistema NO puede
+      // adivinar: (a) es el BOCETO/foto de un MUEBLE → hay que renderizarlo usando la imagen
+      // como base (enhance-sketch, que sí mira tu dibujo); (b) es la foto de un CUARTO vacío →
+      // analizarlo y proponer muebles (analyze-space). Antes se asumía SIEMPRE (b) — por eso un
+      // boceto de mueble terminaba en un render inventado de la nada (la "hamburguesa").
+      // Ahora preguntamos y el usuario elige el camino correcto.
+      els.sendChatBtn.disabled = false;
+      pending.textContent = "¿Qué es esta imagen?";
+      const choices = document.createElement("div");
+      choices.style.cssText = "display:flex;gap:8px;flex-wrap:wrap;margin-top:10px";
+      const bRender = document.createElement("button");
+      bRender.className = "chat-quote-btn"; bRender.type = "button";
+      bRender.textContent = "🪑 El boceto/foto de un mueble — renderízalo";
+      bRender.onclick = () => runEnhanceSketchInline(pending, imgDataForRequest, message);
+      const bSpace = document.createElement("button");
+      bSpace.className = "chat-quote-btn"; bSpace.type = "button";
+      bSpace.textContent = "🏠 La foto de un cuarto — analízalo";
+      bSpace.onclick = () => runAnalyzeSpaceInline(pending, imgDataForRequest, message);
+      choices.appendChild(bRender);
+      choices.appendChild(bSpace);
+      pending.appendChild(choices);
+      els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
       return;
     }
 
@@ -3794,6 +3809,46 @@ async function enhanceSketchUpload() {
   }
 }
 document.getElementById("enhanceSketchBtn")?.addEventListener("click", enhanceSketchUpload);
+
+// Al adjuntar una imagen y elegir "es un mueble": se renderiza usando la imagen REAL como
+// base (enhance-sketch). Nunca cae a texto→imagen, que ignoraría el dibujo. Si tu cuenta de
+// OpenAI no tiene verificada la organización, gpt-image-1 devuelve un 403 claro (no una imagen
+// inventada) — ese mensaje ya lo traduce describeSketchError.
+async function runEnhanceSketchInline(pending, imageData, message) {
+  els.sendChatBtn.disabled = true;
+  pending.textContent = "✏️ Convirtiendo tu boceto en render profesional… 15–30 seg";
+  const dots = document.createElement("span"); dots.className = "loading-dots"; dots.innerHTML = "<span></span><span></span><span></span>"; pending.appendChild(dots);
+  try {
+    const { ok, status, data } = await postAi("/api/enhance-sketch", { imageData, message });
+    if (!ok) { pending.textContent = describeSketchError(status, data); return; }
+    pending.textContent = data.assistantText || "Render generado a partir de tu boceto.";
+    if (data.imageB64 || data.imageUrl) {
+      renderImageBlock(pending, data.imageB64 ? `data:image/png;base64,${data.imageB64}` : data.imageUrl);
+    }
+  } catch (e) {
+    pending.textContent = e.name === "AbortError" ? "⏱ Tiempo agotado. Intenta con una imagen más liviana." : `❌ Error: ${e.message}`;
+  } finally {
+    els.sendChatBtn.disabled = false;
+    els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+  }
+}
+
+async function runAnalyzeSpaceInline(pending, imageData, message) {
+  els.sendChatBtn.disabled = true;
+  pending.textContent = "🔍 Analizando el espacio… 15–30 seg";
+  const dots = document.createElement("span"); dots.className = "loading-dots"; dots.innerHTML = "<span></span><span></span><span></span>"; pending.appendChild(dots);
+  try {
+    const { ok, status, data } = await postAi("/api/analyze-space", { message: message || "Analiza este espacio y propón muebles de melamina.", imageData });
+    if (!ok) { pending.textContent = describeAiError(status, data); return; }
+    pending.textContent = data.assistantText || "Propuesta generada.";
+    renderAssistantContentBlocks(pending, data, message);
+  } catch (e) {
+    pending.textContent = `❌ Error: ${e.message}`;
+  } finally {
+    els.sendChatBtn.disabled = false;
+    els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+  }
+}
 
 async function downloadRender(url) {
   try {
