@@ -189,7 +189,7 @@
           <button class="home-card" type="button" data-home-go="referidos">
             <span class="home-card-icon">🎁</span>
             <strong>Invita y gana</strong>
-            <span>Comparte tu código: cada persona que se une con él te suma créditos.</span>
+            <span>Por cada persona que se une con tu código, baja 10% de tu mensualidad.</span>
           </button>
           <button class="home-card" type="button" data-home-go="reservas">
             <span class="home-card-icon">📅</span>
@@ -764,9 +764,12 @@
             <div class="calc-card" data-calc="laminas">
               <h4>🪵 Láminas (melamina / MDF)</h4>
               <label>Área a cubrir (m²)<input type="number" data-calc-in="area" min="0" placeholder="0"></label>
-              <label>Tamaño de lámina (m²)<input type="number" data-calc-in="sheet" value="2.98" step="0.01"></label>
+              <label>Tamaño de lámina<select data-calc-in="preset">
+                <option value="std">Estándar 2.44×1.22 m (2.98 m²)</option>
+                <option value="lg">Grande 2.75×1.83 m (5.03 m²)</option>
+              </select></label>
               <div class="calc-out" data-calc-out>—</div>
-              <div class="calc-note">Incluye 15% de desperdicio. Lámina estándar 2.44×1.22 m.</div>
+              <div class="calc-note">Incluye 15% de desperdicio. Costo estimado con los precios de PiLLA.</div>
             </div>
             <div class="calc-card" data-calc="pintura">
               <h4>🎨 Pintura</h4>
@@ -861,7 +864,7 @@
             <button class="secondary-btn" type="button" data-public-nav="inicio">← Inicio</button>
             <h2>🎁 Invita y gana</h2>
           </div>
-          <p class="public-hero-sub" style="margin-top:0">Comparte tu código. Cada persona que se una con él te suma un crédito.</p>
+          <p class="public-hero-sub" style="margin-top:0">Comparte tu código. Por cada persona que se una con él, se te baja un <strong>10% de tu mensualidad</strong> (hasta llegar gratis).</p>
           <div id="ref_content"><p class="tj-empty">Cargando…</p></div>
         </div>
       </section>

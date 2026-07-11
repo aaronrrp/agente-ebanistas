@@ -9327,22 +9327,34 @@ document.querySelectorAll("[data-mk-sort]").forEach(b => b.addEventListener("cli
 }));
 
 // ── Calculadoras (Ola 3) — 100% cliente ──────────────────────────────────────
-function loadCalculadoras() {
+let _calcPrices = {};
+async function loadCalculadoras() {
+  if (!Object.keys(_calcPrices).length) {
+    try { _calcPrices = (await fetch("/api/prices").then(r => r.json())) || {}; } catch { _calcPrices = {}; }
+  }
   document.querySelectorAll("#publicCalculadorasView .calc-card").forEach(calcCompute);
 }
 function calcCompute(card) {
   const val = k => parseFloat(card.querySelector(`[data-calc-in="${k}"]`)?.value) || 0;
+  const raw = k => card.querySelector(`[data-calc-in="${k}"]`)?.value || "";
   const out = card.querySelector("[data-calc-out]");
   if (!out) return;
   const ceil = Math.ceil;
+  const P = _calcPrices || {};
+  const money = n => `~B/. ${Number(n).toFixed(2)}`;
   let txt = "—";
   switch (card.dataset.calc) {
-    case "laminas": { const a = val("area"), s = val("sheet") || 2.98; if (a > 0) txt = `${ceil(a * 1.15 / s)} lámina(s)`; break; }
+    case "laminas": {
+      const a = val("area"), lg = raw("preset") === "lg";
+      const sheetM2 = lg ? 5.03 : 2.98, unit = lg ? P.melamina_lg : P.melamina_std;
+      if (a > 0) { const n = ceil(a * 1.15 / sheetM2); txt = `${n} lámina(s)` + (unit ? ` · ${money(n * unit)}` : ""); }
+      break;
+    }
     case "pintura": { const a = val("area"), c = val("coats") || 1; if (a > 0) txt = `${ceil(a * c / 35)} galón(es)`; break; }
     case "piso":    { const a = val("area"), b = val("box") || 2.2; if (a > 0) txt = `${ceil(a * 1.1 / b)} caja(s)`; break; }
     case "drywall": { const a = val("area"); if (a > 0) txt = `${ceil(a * 1.1 / 2.98)} plancha(s)`; break; }
-    case "canto":   { const m = val("ml"), r = val("roll") || 50; if (m > 0) txt = `${ceil(m / r)} rollo(s)`; break; }
-    case "herrajes":{ const d = val("doors"); if (d > 0) txt = `${d * 2} bisagras · ${d * 2 * 8} tornillos`; break; }
+    case "canto":   { const m = val("ml"), r = val("roll") || 50; if (m > 0) txt = `${ceil(m / r)} rollo(s)` + (P.canto_pvc ? ` · ${money(m * P.canto_pvc)}` : ""); break; }
+    case "herrajes":{ const d = val("doors"); if (d > 0) { const bis = d * 2; txt = `${bis} bisagras · ${d * 2 * 8} tornillos` + (P.bisagra_std ? ` · bisagras ${money(bis * P.bisagra_std)}` : ""); } break; }
   }
   out.textContent = txt;
 }
@@ -9483,7 +9495,8 @@ async function loadReferidos() {
           <button class="secondary-btn tj-sm" id="ref_copy" type="button">Copiar código</button>
           <a class="primary-btn tj-sm" href="https://wa.me/?text=${waText}" target="_blank" rel="noopener">Compartir por WhatsApp</a>
         </div>
-        <div class="ref-stats"><span><strong>${escapeHtml(String(d.invitedCount))}</strong>invitados</span><span><strong>${escapeHtml(String(d.credits))}</strong>créditos</span></div>
+        <div class="ref-stats"><span><strong>${escapeHtml(String(d.invitedCount))}</strong>invitados</span><span><strong>${d.discountPercent >= 100 ? "GRATIS 🎉" : escapeHtml(String(d.discountPercent)) + "%"}</strong>de descuento</span></div>
+        <div style="font-size:.8rem;opacity:.9;margin-top:.7rem;border-top:1px solid rgba(255,255,255,.22);padding-top:.6rem">Por cada persona que se una con tu código, bajas <strong>10% de tu mensualidad</strong> (hasta 100% = gratis).</div>
       </div>
       ${d.referredBy
         ? `<p class="tj-empty">Ya registraste el código <strong>${escapeHtml(d.referredBy)}</strong>. ¡Gracias por unirte!</p>`

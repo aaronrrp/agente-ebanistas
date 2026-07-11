@@ -39,10 +39,17 @@ async function handle(req, res, ctx) {
   const c = caller(getCallerIdentity, req);
   if (!c || !c.id) { sendJson(res, 401, { error: "Inicia sesión para ver tus referidos." }); return true; }
 
-  // GET /api/referrals/me → código propio + estadísticas
+  // GET /api/referrals/me → código propio + estadísticas.
+  // Cada persona referida = 10% de descuento en la mensualidad del referidor (tope 100% = gratis).
   if (method === "GET" && parts[2] === "me") {
     const rec = recordFor(c.role, c.id);
-    sendJson(res, 200, { code: rec.code, credits: rec.credits || 0, invitedCount: rec.invitedCount || 0, referredBy: rec.referredBy || "" });
+    const invitedCount = rec.invitedCount || 0;
+    sendJson(res, 200, {
+      code: rec.code,
+      invitedCount,
+      discountPercent: Math.min(invitedCount * 10, 100),
+      referredBy: rec.referredBy || ""
+    });
     return true;
   }
 
@@ -59,7 +66,7 @@ async function handle(req, res, ctx) {
     store.update(mine.id, { referredBy: useCode });
     store.update(owner.id, { credits: (owner.credits || 0) + 1, invitedCount: (owner.invitedCount || 0) + 1 });
     events.emit("referral.redeemed", { code: useCode, byRole: c.role });
-    sendJson(res, 200, { ok: true, message: "¡Código aplicado! Tu referidor ganó un crédito." });
+    sendJson(res, 200, { ok: true, message: "¡Código aplicado! Tu referidor baja 10% de su mensualidad." });
     return true;
   }
 
