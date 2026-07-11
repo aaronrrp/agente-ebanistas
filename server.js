@@ -2090,7 +2090,8 @@ const routeModules = [
   require("./routes/inspiration.js"),
   require("./routes/referrals.js"),
   require("./routes/vacancies.js"),
-  require("./routes/bookings.js")
+  require("./routes/bookings.js"),
+  require("./routes/analytics.js")
 ];
 
 // ── Main router ─────────────────────────────────────────────────────────────
