@@ -783,6 +783,20 @@ function detectImageIntent(message) {
   return imageIntentWords.some(w => text.includes(w));
 }
 
+// ¿El mensaje es una PREGUNTA o saludo (conversación), no un pedido imperativo de
+// generar una imagen? Ej: "¿puedes hacerlo render?", "hola", "qué materiales me
+// recomiendas?". Estos NUNCA deben disparar generación automática de imagen — se
+// responden en texto (chat normal). Un pedido real es imperativo: "hazme un render
+// de...", "dibuja un logo", "muéstrame una cocina en L".
+function isConversationalMessage(message) {
+  const t = String(message || "").toLowerCase().trim();
+  if (!t) return false;
+  return t.endsWith("?")
+    || /^[¿]/.test(t)
+    || /^(hola|buenas|buenos d[ií]as|buenas (tardes|noches)|hey|qu[eé] tal|c[oó]mo est[aá]s|gracias|ok|vale)\b/.test(t)
+    || /\b(puedes|puede|podr[ií]as|podr[ií]a|se\s+puede|eres\s+capaz|sabes|sab[eé]s|sirves?\s+para|qu[eé]\s+(puedes|haces|eres|sabes)|c[oó]mo\s+(funciona|te\s+us|se\s+us|trabaj))\b/.test(t);
+}
+
 // Extrae "200 cm de largo, 60 cm de profundidad y 240 cm de altura" (y variantes de orden/
 // sinónimo) del mensaje, para no depender de que la IA convierta cm→mm por su cuenta — eso fue
 // lo que dio piezas de "24 metros" en un clóset de 2.4m (doble conversión por parte del modelo).
@@ -958,8 +972,14 @@ async function handleAi(req, res) {
   let imageDecision = "none";
   const semantic = scoreImageSignals(payload.message);
   const keywordHit = detectImageIntent(payload.message);
+  const conversational = isConversationalMessage(payload.message);
   if (!payload.imageData && !payload.skipImageRouter) {
-    if (semantic.count >= 2) imageDecision = "auto";
+    if (conversational) {
+      // Una PREGUNTA o saludo NUNCA dispara una imagen automática (este era el bug:
+      // "¿puedes hacerlo render?" intentaba generar una imagen y fallaba). Se responde
+      // en texto; si además describe una pieza concreta, se ofrece el botón "Generar imagen".
+      imageDecision = semantic.count >= 1 ? "button" : "none";
+    } else if (semantic.count >= 2) imageDecision = "auto";
     else if (semantic.count === 1) imageDecision = "button";
     else if (keywordHit) imageDecision = "keyword";
   }
@@ -1005,7 +1025,8 @@ async function handleAi(req, res) {
       sendJson(res, 200, imageOnlyResponse(result));
     } else {
       console.error(`[intent] generación de imagen (keyword) falló: ${result.error}`);
-      sendJson(res, result.status || 500, { error: result.error || "No se pudo generar la imagen." });
+      // Nunca dejamos que el error crudo de OpenAI llegue al usuario: respondemos en texto.
+      sendJson(res, 200, { assistantText: `No pude generar la imagen en este momento (${result.error || "error temporal"}). Puedo describírtelo con detalle o lo intentamos de nuevo — dime cómo prefieres.` });
     }
     return;
   }
