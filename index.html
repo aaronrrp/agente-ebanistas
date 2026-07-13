@@ -2118,6 +2118,13 @@
                     <p class="span-2" style="margin:0;font-size:.82rem;color:#6B7280">Precio unitario: <strong id="materialPriceDisplay">—</strong> (tomado de precios del mercado)</p>
                     <button id="addMaterialBtn" class="secondary-btn span-2" type="button">＋ Agregar material</button>
                   </div>
+                  <div class="form-grid compact-grid" style="border-top:1px dashed var(--line);margin-top:10px;padding-top:12px">
+                    <p class="span-2" style="margin:0 0 2px;font-size:.82rem;color:#6B7280">O agrega un <strong>producto / mueble completo</strong> para cotizar al cliente (ej: "Librero a medida"):</p>
+                    <label class="span-2">Producto / mueble<input id="productName" type="text" placeholder="Ej: Librero a medida, Clóset 2 puertas, Cocina en L…"></label>
+                    <label>Cantidad<input id="productQty" type="number" min="1" step="1" value="1"></label>
+                    <label>Precio unitario ($)<input id="productPrice" type="number" min="0" step="0.01" placeholder="0.00"></label>
+                    <button id="addProductBtn" class="secondary-btn span-2" type="button">＋ Agregar producto</button>
+                  </div>
                   <p class="form-help" style="margin-top:8px">¿No está en la lista? Agrégalo primero en Precios del mercado. También puedes pedírselo a la IA en el chat de Diseñar IA: "agrega 6 bisagras de cierre suave".</p>
                 </div>
               </div>

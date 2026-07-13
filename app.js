@@ -7952,6 +7952,21 @@ document.getElementById("addMaterialBtn")?.addEventListener("click", () => {
   toast("Material agregado ✓");
 });
 
+// Agregar un PRODUCTO/MUEBLE completo (nombre + precio libres) — para cotizaciones a
+// clientes, que piensan en "un librero", no en piezas sueltas de melamina.
+document.getElementById("addProductBtn")?.addEventListener("click", () => {
+  const name = document.getElementById("productName")?.value.trim();
+  const price = Number(document.getElementById("productPrice")?.value) || 0;
+  const qty = Number(document.getElementById("productQty")?.value) || 1;
+  if (!name) { toast("Escribe el nombre del producto o mueble.", "error"); return; }
+  state.materialCartItems.push({ id: crypto.randomUUID(), description: name, qty, unit: "Unidades", unitPrice: price });
+  document.getElementById("productName").value = "";
+  document.getElementById("productPrice").value = "";
+  document.getElementById("productQty").value = "1";
+  renderDraftItems();
+  toast("Producto agregado ✓");
+});
+
 els.quoteItemsList.addEventListener("click", (event) => {
   const removeId = event.target.dataset.removeItem;
   if (!removeId) return;
