@@ -3288,11 +3288,16 @@ async function sendToAI() {
       bRender.className = "chat-quote-btn"; bRender.type = "button";
       bRender.textContent = "🪑 El boceto/foto de un mueble — renderízalo";
       bRender.onclick = () => runEnhanceSketchInline(pending, imgDataForRequest, message);
+      const bPlan = document.createElement("button");
+      bPlan.className = "chat-quote-btn"; bPlan.type = "button";
+      bPlan.textContent = "📐 Un plano con medidas — léelas y hazme el despiece";
+      bPlan.onclick = () => runAnalyzePlanInline(pending, imgDataForRequest, message);
       const bSpace = document.createElement("button");
       bSpace.className = "chat-quote-btn"; bSpace.type = "button";
       bSpace.textContent = "🏠 La foto de un cuarto — analízalo";
       bSpace.onclick = () => runAnalyzeSpaceInline(pending, imgDataForRequest, message);
       choices.appendChild(bRender);
+      choices.appendChild(bPlan);
       choices.appendChild(bSpace);
       pending.appendChild(choices);
       els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
@@ -3851,6 +3856,27 @@ async function runAnalyzeSpaceInline(pending, imageData, message) {
     renderAssistantContentBlocks(pending, data, message);
   } catch (e) {
     pending.textContent = `❌ Error: ${e.message}`;
+  } finally {
+    els.sendChatBtn.disabled = false;
+    els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+  }
+}
+
+// Plano/render con medidas rotuladas → el modelo de VISIÓN lee las medidas de la
+// imagen y arma el despiece, con defaults de fabricación para no interrogar al usuario.
+async function runAnalyzePlanInline(pending, imageData, message) {
+  els.sendChatBtn.disabled = true;
+  pending.textContent = "📐 Leyendo las medidas del plano y armando el despiece… 20–40 seg";
+  const dots = document.createElement("span"); dots.className = "loading-dots"; dots.innerHTML = "<span></span><span></span><span></span>"; pending.appendChild(dots);
+  const promptMsg = (message ? message + ". " : "") + "Este es un PLANO/RENDER TECNICO de un mueble con las medidas rotuladas en la imagen. LEE todas las medidas visibles (exteriores y de cada compartimiento) y genera el DESPIECE COMPLETO en melamina de 18 mm: cada pieza con su NOMBRE, medidas exactas en mm, CANTIDAD y CANTEADO. Usa valores estandar de fabricacion (fondo embutido, puertas sobrepuestas, correderas telescopicas) SIN pedir confirmaciones: asume esos defaults. Si una medida no aparece en la imagen, usa estandar (profundidad 350mm arriba / 600mm abajo) y anotalo. IMPORTANTE: incluye el array 'pieces' con TODAS las piezas (nombre, largo_mm, ancho_mm, cantidad, canteado) ademas del breakdown, para poder enviarlas a Cortes con un clic.";
+  try {
+    const { ok, status, data } = await postAi("/api/ebanista-ai", { message: promptMsg, imageData, currentItem: state.lastDesignItems[0] || null, history: state.chatHistory, skipImageRouter: true });
+    if (!ok) { pending.textContent = describeAiError(status, data); return; }
+    pending.textContent = data.assistantText || "Despiece generado a partir del plano.";
+    renderAssistantContentBlocks(pending, data, promptMsg);
+    if (data.item) state.lastDesignItems = [data.item];
+  } catch (e) {
+    pending.textContent = e.name === "AbortError" ? "⏱ Tiempo agotado. Intenta con una imagen más liviana o menos detallada." : `❌ Error: ${e.message}`;
   } finally {
     els.sendChatBtn.disabled = false;
     els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
