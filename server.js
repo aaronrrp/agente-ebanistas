@@ -797,6 +797,29 @@ function isConversationalMessage(message) {
     || /\b(puedes|puede|podr[ií]as|podr[ií]a|se\s+puede|eres\s+capaz|sabes|sab[eé]s|sirves?\s+para|qu[eé]\s+(puedes|haces|eres|sabes)|c[oó]mo\s+(funciona|te\s+us|se\s+us|trabaj))\b/.test(t);
 }
 
+// ── Optimización de costo: ¿el cambio afecta el ASPECTO del render, o es solo
+// comercial/técnico? Un cambio comercial (precio, material, canto, herraje,
+// cotización, desglose, cortes, proveedor, notas) NO necesita una imagen nueva.
+// Uno visual (color, patas, gavetas, puertas, repisas, estilo, dimensiones
+// visibles) sí conviene reflejarlo — editando el render anterior, no de cero.
+const NON_VISUAL_RE = /\b(precio|precios|cotiz|desglos|despiec|corte|cortes|cantear|espesor|canto|cantos|herraj|bisagra|corredera|jalador|proveedor|observ|nota|notas|impuesto|itbms|iva|margen|descuento|garant[ií]a|material(es)?|melamina|mdf|triplay|contrachapado)\b/i;
+const VISUAL_RE = /\b(color|colores|negr[oa]|blanc[oa]|gris|caf[eé]|roj[oa]|azul|verde|amarill[oa]|beige|madera (clara|oscura|natural)|pata|patas|gaveta|gavetas|caj[oó]n|cajones|puerta|puertas|repisa|repisas|entrepa[ñn]o|estilo|moderno|minimalista|r[uú]stico|cl[aá]sico|m[aá]s\s+(alt|baj|anch|angost|grand|peque|delgad|grues|larg|cort)|redonde|curv|recto)\b/i;
+
+// Solo comercial/técnico si menciona algo NO-visual y NADA visual.
+function isNonVisualEdit(message) {
+  const t = String(message || "");
+  return NON_VISUAL_RE.test(t) && !VISUAL_RE.test(t);
+}
+function isVisualEdit(message) {
+  return VISUAL_RE.test(String(message || ""));
+}
+
+// Prompt corto para EDITAR el render anterior aplicando solo el cambio pedido —
+// conserva el resto del diseño en vez de reconstruirlo desde cero.
+function buildEditPrompt(message) {
+  return `Modifica esta imagen de un mueble aplicando SOLO este cambio: ${String(message || "").slice(0, 160)}. Conserva EXACTAMENTE el resto del diseño, la forma, el encuadre y el estilo (render fotorrealista de mueble de melamina).`.replace(/\s+/g, " ").trim();
+}
+
 // Extrae "200 cm de largo, 60 cm de profundidad y 240 cm de altura" (y variantes de orden/
 // sinónimo) del mensaje, para no depender de que la IA convierta cm→mm por su cuenta — eso fue
 // lo que dio piezas de "24 metros" en un clóset de 2.4m (doble conversión por parte del modelo).
@@ -990,7 +1013,45 @@ async function handleAi(req, res) {
   if (imageDecision === "auto" && payload.currentItem && !explicitImageRequest) {
     imageDecision = "button";
   }
-  console.log(`[intent] msg="${String(payload.message || "").slice(0, 90)}" semantic=${JSON.stringify(semantic.signals)} count=${semantic.count} keywordHit=${keywordHit} skipImageRouter=${Boolean(payload.skipImageRouter)} decision=${imageDecision}`);
+  // ── Optimización de costo (spec IA #2/#3/#4): decisiones sobre un DISEÑO ACTIVO ──
+  let decisionReason = imageDecision === "none" ? "sin-senales" : "senales-tecnicas";
+  if (payload.currentItem && !payload.imageData && !payload.skipImageRouter) {
+    if (isNonVisualEdit(payload.message) && !explicitImageRequest) {
+      // Solo cambió algo comercial/técnico (precio, material, canto, cotización…) → CERO imagen.
+      imageDecision = "none";
+      decisionReason = "cambio-no-visual (ahorro: sin imagen)";
+    } else if (payload.baseImage && isVisualEdit(payload.message)) {
+      // Cambio visual sobre un render existente → EDITAR esa imagen, no crear una de cero.
+      imageDecision = "edit";
+      decisionReason = "edicion-sobre-render-previo";
+    }
+  }
+  console.log(`[intent] msg="${String(payload.message || "").slice(0, 80)}" count=${semantic.count} keywordHit=${keywordHit} skipRouter=${Boolean(payload.skipImageRouter)} baseImg=${Boolean(payload.baseImage)} decision=${imageDecision} motivo="${decisionReason}"`);
+
+  // ── EDIT: modifica el render anterior con el cambio pedido, conservando el diseño (evita
+  // "empezar de cero"). Si la edición falla, respaldo generando una imagen nueva. ──
+  if (imageDecision === "edit") {
+    const editPrompt = buildEditPrompt(payload.message);
+    const t0 = Date.now();
+    const result = await editImageWithReference(payload.baseImage, editPrompt, "high");
+    console.log(`[intent] EDIT sobre render previo — ${Date.now() - t0}ms — ${result.ok ? "ok" : "fallo: " + result.error}`);
+    if (result.ok) {
+      sendJson(res, 200, {
+        assistantText: "🎨 Actualicé el render con tu cambio — preparando el desglose técnico…",
+        imageB64: result.imageB64 || null, imageUrl: result.imageUrl || null, imageSource: result.source,
+        needsFollowup: true
+      });
+      return;
+    }
+    console.log(`[intent] edit falló → respaldo: generar imagen nueva`);
+    const gen = await generateImageWithRetry(payload.message);
+    if (gen.ok) {
+      sendJson(res, 200, { ...imageOnlyResponse(gen), assistantText: "🎨 Aquí está el render — preparando el desglose técnico…", needsFollowup: true });
+    } else {
+      sendJson(res, 200, { ...imageOnlyResponse({}), assistantText: `⚠️ No pude actualizar la imagen (${gen.error || result.error || "error"}). Preparando la propuesta técnica…`, imageError: gen.error || result.error, needsFollowup: true });
+    }
+    return;
+  }
 
   // Imagen primero, SIEMPRE en su propia respuesta — nunca junto al JSON de mueble/desglose
   // (eso fue la causa del timeout: una llamada que esperaba ambas cosas a la vez). El cliente

@@ -3303,7 +3303,11 @@ async function sendToAI() {
     // el servidor es quien decide cuánto usar tal cual (últimos 5) y cuánto resumir — así el
     // resumen compacto de lo viejo tiene algo real que resumir en vez de quedar sin efecto.
     const recentHistory = state.chatHistory;
-    const baseBody = { message, tenant: currentTenant(), currentItem: state.lastDesignItems[0] || null, history: recentHistory, customPrices: tenantPrices().customItems || [] };
+    // baseImage: se manda SOLO cuando el mensaje parece un cambio VISUAL y hay un render
+    // guardado — así el servidor EDITA esa imagen (spec IA #4) en vez de regenerarla, sin
+    // enviar el base64 pesado en cada mensaje de texto.
+    const _visualEdit = state.lastRender && /\b(color|negr[oa]|blanc[oa]|gris|caf[eé]|roj[oa]|azul|verde|amarill[oa]|pata|patas|gaveta|caj[oó]n|puerta|repisa|entrepa[ñn]o|estilo|moderno|minimalista|m[aá]s\s+(alt|baj|anch|grand|peque|grues|delgad|larg|cort)|redonde|curv)\b/i.test(message);
+    const baseBody = { message, tenant: currentTenant(), currentItem: state.lastDesignItems[0] || null, history: recentHistory, customPrices: tenantPrices().customItems || [], baseImage: _visualEdit ? state.lastRender.imageData : null };
 
     const first = await postAi("/api/ebanista-ai", baseBody);
     if (!first.ok) { pending.textContent = describeAiError(first.status, first.data); return; }
@@ -3346,6 +3350,9 @@ async function sendToAI() {
 }
 
 function renderImageBlock(container, src) {
+  // Memoria del último render (spec IA #1): queda como base para EDITAR en vez de
+  // regenerar (#4). Solo guardamos data-URLs (las que se pueden editar).
+  if (typeof src === "string" && src.startsWith("data:")) state.lastRender = { imageData: src, timestamp: Date.now() };
   container.appendChild(document.createElement("br"));
   const wrap = document.createElement("div");
   wrap.className = "chat-render";
