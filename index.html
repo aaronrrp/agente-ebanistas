@@ -2408,6 +2408,9 @@
         <label>Teléfono / WhatsApp
           <input id="em_phone" placeholder="+507 6000-0000">
         </label>
+        <label class="span-2">Correo del ebanista* <span style="font-size:.75rem;font-weight:400;color:#6B7280">(será su USUARIO para iniciar sesión)</span>
+          <input id="em_email" type="email" placeholder="ebanista@correo.com" autocomplete="off" autocapitalize="none" spellcheck="false">
+        </label>
         <label>Tarifa mensual USD
           <input id="em_fee" type="number" min="0" step="1" placeholder="Ej: 30">
         </label>
@@ -2500,20 +2503,31 @@
       </details>
 
       <div id="em_result" class="hidden" style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:1rem;margin-top:1rem">
-        <p style="font-weight:600;color:#166534;margin:0 0 .75rem">✅ Guardado. Comparte estos datos por WhatsApp:</p>
+        <p style="font-weight:600;color:#166534;margin:0 0 .5rem">✅ Guardado. El ebanista inicia sesión con su <strong>correo + contraseña</strong>:</p>
+        <p style="margin:.2rem 0 .15rem;font-size:.8rem;color:#166534;font-weight:600">Usuario (correo)</p>
         <div class="link-box">
-          <input id="em_link" class="link-input" type="text" readonly>
-          <button id="em_copyBtn" class="secondary-btn" type="button">Copiar</button>
+          <input id="em_userDisplay" class="link-input" type="text" readonly>
+          <button id="em_copyUserBtn" class="secondary-btn" type="button">Copiar</button>
         </div>
-        <div id="em_passwordRow" class="link-box hidden" style="margin-top:.5rem">
-          <input id="em_passwordDisplay" class="link-input" type="text" readonly>
-          <button id="em_copyPasswordBtn" class="secondary-btn" type="button">Copiar</button>
+        <div id="em_passwordRow" class="hidden" style="margin-top:.5rem">
+          <p style="margin:.2rem 0 .15rem;font-size:.8rem;color:#166534;font-weight:600">Contraseña</p>
+          <div class="link-box">
+            <input id="em_passwordDisplay" class="link-input" type="text" readonly>
+            <button id="em_copyPasswordBtn" class="secondary-btn" type="button">Copiar</button>
+          </div>
         </div>
-        <p class="link-hint">El ebanista abre el link; si tiene contraseña asignada, la pide una vez por sesión. Esta contraseña no se volverá a mostrar — guárdala ahora.</p>
+        <p class="link-hint">Esta contraseña no se volverá a mostrar — guárdala ahora y compártela con el ebanista.</p>
+        <details style="margin-top:.6rem">
+          <summary style="cursor:pointer;font-size:.82rem;color:#166534">Link de acceso rápido (opcional)</summary>
+          <div class="link-box" style="margin-top:.4rem">
+            <input id="em_link" class="link-input" type="text" readonly>
+            <button id="em_copyBtn" class="secondary-btn" type="button">Copiar</button>
+          </div>
+        </details>
       </div>
       <div class="form-actions" id="em_actions">
         <button id="cancelEbanistaModalBtn" class="secondary-btn" type="button">Cancelar</button>
-        <button id="saveEbanistaModalBtn" class="primary-btn" type="button">Guardar y ver link →</button>
+        <button id="saveEbanistaModalBtn" class="primary-btn" type="button">Guardar ebanista →</button>
       </div>
     </div>
   </div>

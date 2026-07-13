@@ -1481,6 +1481,7 @@ function openEbanistaModal(editId) {
   const t = editId ? state.tenants.find(t => t.id === editId) : null;
   document.getElementById("ebanistaModalTitle").textContent = editId ? "Editar ebanista" : "Nuevo ebanista";
   document.getElementById("em_company").value = t?.companyName || "";
+  document.getElementById("em_email").value = t?.email || "";
   document.getElementById("em_contact").value = t?.contactName || "";
   document.getElementById("em_phone").value = t?.phone || "";
   document.getElementById("em_fee").value = t?.monthlyFee || "";
@@ -1538,6 +1539,12 @@ async function saveEbanistaFromModal() {
     document.getElementById("em_company").focus();
     return;
   }
+  const email = document.getElementById("em_email").value.trim();
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    toast("Ingresa un correo válido — es el usuario con el que el ebanista inicia sesión.", "error");
+    document.getElementById("em_email").focus();
+    return;
+  }
   const btn = document.getElementById("saveEbanistaModalBtn");
   btn.textContent = "Guardando…"; btn.disabled = true;
 
@@ -1551,7 +1558,7 @@ async function saveEbanistaFromModal() {
     companyName: company,
     contactName: document.getElementById("em_contact").value.trim() || "Contacto",
     phone: document.getElementById("em_phone").value.trim() || "+507",
-    email: existing?.email || "",
+    email: email,
     monthlyFee: Number(document.getElementById("em_fee").value || 0),
     status: existing?.status || "active",
     expiresAt: document.getElementById("em_expires").value || addDays(30),
@@ -1600,6 +1607,7 @@ async function saveEbanistaFromModal() {
 
   const link = getTenantLink(tenantData);
   document.getElementById("em_link").value = link;
+  const userEl = document.getElementById("em_userDisplay"); if (userEl) userEl.value = email;
   const pwRow = document.getElementById("em_passwordRow");
   if (pwRow) {
     const shown = passwordPlain || _lastShownPasswords[id] || "";
@@ -4226,6 +4234,7 @@ els.tenantList.addEventListener("click", async (event) => {
     if (t) {
       const link = getTenantLink(t);
       document.getElementById("em_link").value = link;
+      const uEl = document.getElementById("em_userDisplay"); if (uEl) uEl.value = t.email || "";
       document.getElementById("em_result").classList.remove("hidden");
       document.getElementById("em_actions").style.display = "none";
       document.getElementById("saveEbanistaModalBtn").textContent = "Guardado ✓";
@@ -4935,6 +4944,19 @@ document.getElementById("em_copyPasswordBtn")?.addEventListener("click", () => {
     const inp = document.getElementById("em_passwordDisplay");
     inp.select(); document.execCommand("copy");
     toast("Contraseña copiada ✓");
+  });
+});
+document.getElementById("em_copyUserBtn")?.addEventListener("click", () => {
+  const val = document.getElementById("em_userDisplay").value;
+  navigator.clipboard.writeText(val).then(() => {
+    toast("Correo copiado ✓");
+    const btn = document.getElementById("em_copyUserBtn");
+    btn.textContent = "¡Copiado!";
+    setTimeout(() => { btn.textContent = "Copiar"; }, 2000);
+  }).catch(() => {
+    const inp = document.getElementById("em_userDisplay");
+    inp.select(); document.execCommand("copy");
+    toast("Correo copiado ✓");
   });
 });
 document.getElementById("em_company")?.addEventListener("keydown", e => {
