@@ -10533,6 +10533,15 @@ async function tryAutoLogin() {
       if (res.ok) {
         const data = await res.json();
         if (data.requiresPassword) {
+          // El acceso por LINK trae el snapshot del tenant en ?d=. Si el tenant está activo, lo
+          // tratamos como ENLACE MÁGICO: entra directo, sin pedir contraseña (el link ES la
+          // credencial). La contraseña se sigue exigiendo solo al escribir el código a mano.
+          const snap = _urlFallback();
+          if (data.active && snap) {
+            hideConnectingScreen();
+            _loginAsEbanista(snap);
+            return;
+          }
           hideConnectingScreen();
           showLogin();
           _prefillCodeTab(urlCode);

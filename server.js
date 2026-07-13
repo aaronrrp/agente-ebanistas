@@ -1517,8 +1517,10 @@ async function handleAuthEbanista(req, res) {
   }
   const body = await readBody(req);
   const { code, password } = safeJson(body, {});
-  const tenant = tenants.find(t => t.accessCode === code);
-  if (!tenant) { sendJson(res, 401, { error: "Código no válido." }); return; }
+  // El "usuario" del ebanista puede ser su CORREO o su código de acceso (compatibilidad).
+  const q = String(code || "").trim().toLowerCase();
+  const tenant = tenants.find(t => t.accessCode === code || (t.email && t.email.toLowerCase() === q));
+  if (!tenant) { sendJson(res, 401, { error: "Correo o código no válido." }); return; }
   if (tenant.passwordHash && !verifyPassword(password, tenant.passwordSalt, tenant.passwordHash)) {
     logActivity({ actorType: "ebanista", actorId: tenant.id, actorLabel: tenant.companyName, action: "auth.login.failed", meta: { ip } });
     sendJson(res, 401, { error: "Contraseña incorrecta." });
