@@ -9022,7 +9022,8 @@ const PUBLIC_SUBVIEW_IDS = [
   "publicDirectoryView", "publicRegisterView", "publicCompaniesView", "publicCompanyRegisterView",
   "publicRetazosView", "rz_loginGateView", "rz_publishView",
   "publicTrabajosView", "publicMaterialesView", "publicCalculadorasView",
-  "publicAcademiaView", "publicInspiracionView", "publicReferidosView", "publicReservasView"
+  "publicAcademiaView", "publicInspiracionView", "publicReferidosView", "publicReservasView",
+  "publicEbanistaRegisterView"
 ];
 function hideAllPublicSubviews() {
   PUBLIC_SUBVIEW_IDS.forEach(id => document.getElementById(id)?.classList.add("hidden"));
@@ -13746,10 +13747,43 @@ document.querySelectorAll("[data-go-provider]").forEach(btn => {
     if (btn.dataset.goProvider === "empresa") {
       ensureCompanyCategoryOptions();
       document.getElementById("publicCompanyRegisterView")?.classList.remove("hidden");
+    } else if (btn.dataset.goProvider === "ebanista") {
+      document.getElementById("publicEbanistaRegisterView")?.classList.remove("hidden");
     } else {
       document.getElementById("publicRegisterView")?.classList.remove("hidden");
     }
   });
+});
+
+// Auto-registro de ebanista desde la portada — crea el tenant en estado "pending"
+// (el admin lo aprueba con "Activar"). Luego entra con su correo + contraseña.
+document.getElementById("ebreg_submitBtn")?.addEventListener("click", async () => {
+  const msg = document.getElementById("ebreg_msg");
+  const show = (t, ok) => { if (msg) { msg.textContent = t; msg.style.display = "block"; msg.style.color = ok ? "#166534" : "#b91c1c"; } };
+  const company = document.getElementById("ebreg_company")?.value.trim();
+  const email = document.getElementById("ebreg_email")?.value.trim();
+  const password = document.getElementById("ebreg_password")?.value;
+  if (!company) return show("Escribe el nombre de tu taller.", false);
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return show("Ingresa un correo válido.", false);
+  if (!password || password.length < 4) return show("La contraseña debe tener al menos 4 caracteres.", false);
+  const btn = document.getElementById("ebreg_submitBtn");
+  btn.disabled = true; btn.textContent = "Enviando…";
+  try {
+    const r = await fetch("/api/ebanistas/register", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        companyName: company,
+        contactName: document.getElementById("ebreg_contact")?.value.trim() || "",
+        phone: document.getElementById("ebreg_phone")?.value.trim() || "",
+        email, password
+      })
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { show(d.error || "No se pudo registrar.", false); btn.disabled = false; btn.textContent = "Crear mi cuenta de ebanista"; return; }
+    show("✅ " + (d.message || "Registro recibido. Tu cuenta queda en revisión."), true);
+    ["ebreg_company", "ebreg_contact", "ebreg_phone", "ebreg_email", "ebreg_password"].forEach(id => { const e = document.getElementById(id); if (e) e.value = ""; });
+    btn.textContent = "Enviado ✓";
+  } catch { show("No se pudo registrar. Intenta de nuevo.", false); btn.disabled = false; btn.textContent = "Crear mi cuenta de ebanista"; }
 });
 
 // ═════════════════════════════════════════════════════════════════════════════

@@ -1526,6 +1526,12 @@ async function handleAuthEbanista(req, res) {
     sendJson(res, 401, { error: "Contraseña incorrecta." });
     return;
   }
+  if (!isTenantActive(tenant)) {
+    sendJson(res, 403, { error: tenant.status === "pending"
+      ? "Tu cuenta está en revisión. Te activaremos pronto y podrás entrar con tu correo y contraseña."
+      : "Tu acceso está suspendido o venció. Contacta al administrador." });
+    return;
+  }
   const token = createEbanistaSession(tenant.id);
   logActivity({ actorType: "ebanista", actorId: tenant.id, actorLabel: tenant.companyName, action: "auth.login", meta: { ip } });
   sendJson(res, 200, { token, tenant: { ...publicTenant(tenant), active: isTenantActive(tenant) } });
@@ -1539,6 +1545,44 @@ async function handleAuthEbanistaLogout(req, res) {
   const token = getToken(req);
   if (token) ebanistaSessions.delete(token);
   sendJson(res, 200, { message: "Sesión cerrada." });
+}
+
+// Auto-registro de ebanista desde la portada: crea el tenant en estado "pending".
+// No puede iniciar sesión hasta que el admin lo apruebe (botón "Activar" en Admin).
+async function handleRegisterEbanista(req, res) {
+  const ip = getClientIp(req);
+  if (!checkRateLimit(`ebreg:${ip}`, 5, 60000)) { sendJson(res, 429, { error: "Demasiados intentos. Espera 1 minuto." }); return; }
+  const data = safeJson(await readBody(req), {});
+  const companyName = String(data.companyName || "").trim();
+  const emailNorm = String(data.email || "").trim().toLowerCase();
+  const passwordPlain = data.password && String(data.password).trim();
+  if (!companyName) { sendJson(res, 400, { error: "Falta el nombre del taller/ebanistería." }); return; }
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emailNorm)) { sendJson(res, 400, { error: "Ingresa un correo válido." }); return; }
+  if (!passwordPlain || passwordPlain.length < 4) { sendJson(res, 400, { error: "La contraseña debe tener al menos 4 caracteres." }); return; }
+  if (tenants.some(t => t.email && t.email.toLowerCase() === emailNorm)) { sendJson(res, 409, { error: "Ya existe una cuenta con ese correo." }); return; }
+  const { salt, hash } = hashPassword(passwordPlain);
+  const tenant = {
+    id: crypto.randomUUID(),
+    companyName,
+    contactName: String(data.contactName || "").trim() || "Contacto",
+    phone: String(data.phone || "").trim(),
+    email: String(data.email || "").trim(),
+    plan: "Básico",
+    status: "pending",
+    expiresAt: (() => { const d = new Date(); d.setDate(d.getDate() + 30); return d.toISOString().slice(0, 10); })(),
+    margin: 30, installBase: 75, transportBase: 30,
+    materials: "Melamina hidrófuga, canto PVC, herrajes estándar.",
+    terms: "60% para iniciar fabricación y 40% contra entrega.",
+    accessCode: makeCode(companyName),
+    passwordSalt: salt, passwordHash: hash,
+    catalog: { furnitureTypes: [], edgeOptions: [], hingeOptions: [], slideOptions: [], handleOptions: [] },
+    createdAt: new Date().toISOString(),
+    selfRegistered: true
+  };
+  tenants.push(tenant);
+  saveTenants(tenants);
+  logActivity({ actorType: "ebanista", actorId: tenant.id, actorLabel: companyName, action: "ebanista.self_registered", meta: { email: emailNorm } });
+  sendJson(res, 201, { ok: true, message: "¡Registro recibido! Tu cuenta queda en revisión. Te activaremos pronto y podrás entrar con tu correo y contraseña." });
 }
 
 async function handleAuthSeller(req, res) {
@@ -2219,6 +2263,7 @@ const server = http.createServer(async (req, res) => {
     if (method === "POST" && p === "/api/auth/ebanista")        { await handleAuthEbanista(req, res); return; }
     if (method === "GET"  && p === "/api/auth/ebanista/check")  { handleAuthEbanistaCheck(req, res); return; }
     if (method === "POST" && p === "/api/auth/ebanista/logout") { await handleAuthEbanistaLogout(req, res); return; }
+    if (method === "POST" && p === "/api/ebanistas/register")   { await handleRegisterEbanista(req, res); return; }
     if (method === "POST" && p === "/api/auth/seller")        { await handleAuthSeller(req, res); return; }
     if (method === "GET"  && p === "/api/auth/seller/check")  { handleAuthSellerCheck(req, res); return; }
     if (method === "POST" && p === "/api/auth/seller/logout") { await handleAuthSellerLogout(req, res); return; }
