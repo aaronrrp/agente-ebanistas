@@ -143,7 +143,7 @@
         <style>
           .pilla-hero{position:relative;min-height:78vh;display:flex;flex-direction:column;justify-content:flex-end;border-radius:22px;overflow:hidden;margin:0 0 1.75rem;padding:2rem 1.7rem 2.2rem;background:linear-gradient(135deg,#3B2D8F,#1A1346)}
           .pilla-hero-bg{position:absolute;inset:0;z-index:0}
-          .pilla-hero-bg img{width:100%;height:100%;object-fit:cover;display:block}
+          .pilla-hero-bg video{width:100%;height:100%;object-fit:cover;display:block}
           .pilla-hero-bg::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(26,19,70,.12) 0%,rgba(26,19,70,.04) 42%,rgba(26,19,70,.80) 100%)}
           .pilla-hero-content{position:relative;z-index:2;max-width:840px}
           .pilla-hero h1{color:#fff;font-weight:800;letter-spacing:-.04em;line-height:1.04;font-size:clamp(2.1rem,6vw,4.4rem);margin:0 0 1rem}
@@ -162,7 +162,7 @@
           @media(max-width:640px){.pilla-hero{min-height:66vh;padding:1.5rem 1.2rem 1.8rem}.pilla-hero .hero-tag{display:none}}
         </style>
         <div class="pilla-hero" id="pillaHero">
-          <div class="pilla-hero-bg"><img src="/panama-hero.jpg" alt="Panamá" onerror="this.style.display='none'"></div>
+          <div class="pilla-hero-bg"><video autoplay loop muted playsinline poster="/panama-hero.jpg"><source src="/panama-hero.mp4" type="video/mp4"></video></div>
           <div class="pilla-hero-content">
             <h1 data-hero-heading="Profesionales que|construyen soluciones"></h1>
             <p class="hero-sub hero-fade" style="transition-delay:.8s">Ebanistas, plomeros, electricistas, remodeladores y más en Panamá — verificados, con cotizaciones rápidas y precios justos.</p>
