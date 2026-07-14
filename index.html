@@ -139,6 +139,41 @@
 
       <!-- Vista: INICIO — portada de PiLLA -->
       <section id="publicHomeView">
+        <!-- Hero estilo "glass" con fondo de Panamá + título animado -->
+        <style>
+          .pilla-hero{position:relative;min-height:78vh;display:flex;flex-direction:column;justify-content:flex-end;border-radius:22px;overflow:hidden;margin:0 0 1.75rem;padding:2rem 1.7rem 2.2rem;background:linear-gradient(135deg,#3B2D8F,#1A1346)}
+          .pilla-hero-bg{position:absolute;inset:0;z-index:0}
+          .pilla-hero-bg img{width:100%;height:100%;object-fit:cover;display:block}
+          .pilla-hero-bg::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(26,19,70,.12) 0%,rgba(26,19,70,.04) 42%,rgba(26,19,70,.80) 100%)}
+          .pilla-hero-content{position:relative;z-index:2;max-width:840px}
+          .pilla-hero h1{color:#fff;font-weight:800;letter-spacing:-.04em;line-height:1.04;font-size:clamp(2.1rem,6vw,4.4rem);margin:0 0 1rem}
+          .pilla-hero .hero-sub{color:rgba(255,255,255,.92);font-size:clamp(1rem,2.4vw,1.35rem);max-width:640px;margin:0 0 1.5rem;line-height:1.4}
+          .pilla-hero .hero-ctas{display:flex;flex-wrap:wrap;gap:12px}
+          .pilla-hero .hero-btn{padding:13px 28px;border-radius:12px;font-weight:700;font-size:1rem;cursor:pointer;border:none;transition:transform .15s,box-shadow .15s}
+          .pilla-hero .hero-btn:hover{transform:translateY(-2px)}
+          .pilla-hero .hero-btn-primary{background:#F5B400;color:#1A1346;box-shadow:0 6px 18px rgba(245,180,0,.35)}
+          .pilla-hero .hero-btn-glass{color:#fff}
+          .pilla-hero .hero-tag{position:absolute;right:1.7rem;bottom:2.2rem;z-index:2;padding:12px 20px;border-radius:14px;color:#fff;font-weight:300;font-size:clamp(.9rem,1.8vw,1.3rem)}
+          .liquid-glass{background:rgba(26,19,70,.35);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.22);box-shadow:inset 0 1px 1px rgba(255,255,255,.14)}
+          .hero-char{display:inline-block;opacity:0;transform:translateX(-18px);transition:opacity .5s ease,transform .5s ease}
+          .pilla-hero.in .hero-char{opacity:1;transform:none}
+          .hero-fade{opacity:0;transition:opacity 1s ease}
+          .pilla-hero.in .hero-fade{opacity:1}
+          @media(max-width:640px){.pilla-hero{min-height:66vh;padding:1.5rem 1.2rem 1.8rem}.pilla-hero .hero-tag{display:none}}
+        </style>
+        <div class="pilla-hero" id="pillaHero">
+          <div class="pilla-hero-bg"><img src="/panama-hero.jpg" alt="Panamá" onerror="this.style.display='none'"></div>
+          <div class="pilla-hero-content">
+            <h1 data-hero-heading="Profesionales que|construyen soluciones"></h1>
+            <p class="hero-sub hero-fade" style="transition-delay:.8s">Ebanistas, plomeros, electricistas, remodeladores y más en Panamá — verificados, con cotizaciones rápidas y precios justos.</p>
+            <div class="hero-ctas hero-fade" style="transition-delay:1.2s">
+              <button class="hero-btn hero-btn-primary" type="button" onclick="publicNavRequest('profesionales')">Buscar profesionales</button>
+              <button class="hero-btn hero-btn-glass liquid-glass" type="button" onclick="showConsumerGate('register')">Crear cuenta gratis</button>
+            </div>
+          </div>
+          <div class="hero-tag liquid-glass hero-fade" style="transition-delay:1.4s">✓ Verificados · Cotizaciones rápidas · Precios justos</div>
+        </div>
+
         <div class="public-hero home-hero-compact">
           <h1>¿Qué necesitas hoy?</h1>
           <p class="public-hero-sub">Encuentra profesionales, empresas y materiales en Panamá. Elige una opción para empezar:</p>

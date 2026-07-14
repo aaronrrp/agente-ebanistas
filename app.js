@@ -9034,6 +9034,36 @@ function hideAllPublicSubviews() {
 // v52.1: el navbar solo tiene "Inicio"; Profesionales/Empresas/Retazos se abren
 // desde las tarjetas de la portada. El hero "Encuentra profesionales de
 // confianza" vive SOLO en la sección Profesionales.
+// Hero animado de la portada: título letra por letra + fade-ins escalonados.
+// Se construye una vez y se re-reproduce cada vez que se vuelve a Inicio.
+function initPillaHero() {
+  const hero = document.getElementById("pillaHero");
+  if (!hero) return;
+  if (!hero.dataset.built) {
+    hero.dataset.built = "1";
+    const h1 = hero.querySelector("[data-hero-heading]");
+    if (h1) {
+      const lines = (h1.dataset.heroHeading || "").split("|");
+      const charDelay = 30;
+      h1.textContent = "";
+      lines.forEach((line, li) => {
+        if (li) h1.appendChild(document.createElement("br"));
+        [...line].forEach((ch, ci) => {
+          const span = document.createElement("span");
+          span.className = "hero-char";
+          span.textContent = ch === " " ? " " : ch;
+          span.style.transitionDelay = (200 + (li * line.length * charDelay) + (ci * charDelay)) + "ms";
+          h1.appendChild(span);
+        });
+      });
+    }
+  }
+  hero.classList.remove("in");
+  void hero.offsetWidth; // reflow: permite re-reproducir la animación en cada visita
+  requestAnimationFrame(() => hero.classList.add("in"));
+}
+window.addEventListener("load", () => setTimeout(initPillaHero, 300));
+
 function publicNavGo(nav) {
   document.querySelectorAll("[data-public-nav]").forEach(b => b.classList.toggle("active", b.dataset.publicNav === nav));
   hideAllPublicSubviews();
