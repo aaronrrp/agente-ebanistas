@@ -535,6 +535,8 @@ function statusLabel(status) {
 function showView(viewId) {
   els.views.forEach((view) => view.classList.toggle("active", view.id === viewId));
   els.navItems.forEach((item) => item.classList.toggle("active", item.dataset.view === viewId));
+  // v54.27: oculta la campana de notificaciones en el asistente de IA (tapaba el botón enviar)
+  document.body.classList.toggle("ai-designer-active", viewId === "designerView");
   render();
   if (viewId === "adminView" && AUTH.mode === "admin") loadAdminDashboard();
   if (viewId === "sellersView" && AUTH.mode === "admin") loadSellersFromServer();
@@ -8954,18 +8956,32 @@ document.getElementById("pf_sortSelect")?.addEventListener("change", loadPublicD
 document.getElementById("publicDirectoryGrid")?.addEventListener("click", (e) => {
   const btn = e.target.closest("[data-contact-id]");
   if (!btn) return;
+  if (!requireSessionToContact()) return; // v54.26: cuenta requerida para contactar
   fetch(`/api/professionals/${btn.dataset.contactId}/contact-click`, { method: "POST" }).catch(() => {});
   openWhatsApp(btn.dataset.contactPhone, "Hola, vi tu perfil en PiLLA y me gustaría contactarte.");
 });
 document.getElementById("publicDirectoryGrid")?.addEventListener("click", (e) => {
   const btn = e.target.closest("[data-quote-id]");
   if (!btn) return;
+  if (!requireSessionToContact()) return; // v54.26: cuenta requerida para cotizar
   fetch(`/api/professionals/${btn.dataset.quoteId}/contact-click`, { method: "POST" }).catch(() => {});
   openWhatsApp(btn.dataset.contactPhone, `Hola ${btn.dataset.quoteName}, vi tu perfil en PiLLA y me gustaría solicitar una cotización.`);
+});
+// v54.26: "Llamar" (enlace tel:) también pide cuenta si no hay sesión
+document.getElementById("publicDirectoryGrid")?.addEventListener("click", (e) => {
+  const call = e.target.closest(".pca-call");
+  if (call && !requireSessionToContact()) e.preventDefault();
 });
 document.getElementById("publicDirectoryGrid")?.addEventListener("click", (e) => {
   const btn = e.target.closest("[data-view-profile]");
   if (btn) openProProfileModal(btn.dataset.viewProfile);
+});
+// v54.26: contacto desde el modal "Ver perfil" — también pide cuenta si no hay sesión
+document.getElementById("proProfileContent")?.addEventListener("click", (e) => {
+  const b = e.target.closest(".pro-modal-contact");
+  if (!b) return;
+  if (!requireSessionToContact()) return;
+  openWhatsApp(b.dataset.mcPhone, `Hola ${b.dataset.mcName}, vi tu perfil en PiLLA y me gustaría contactarte.`);
 });
 
 document.getElementById("pf_submitRegisterBtn")?.addEventListener("click", async () => {
@@ -9065,6 +9081,7 @@ function initPillaHero() {
 window.addEventListener("load", () => setTimeout(initPillaHero, 300));
 
 function publicNavGo(nav) {
+  document.body.classList.remove("ai-designer-active"); // v54.27: fuera del asistente, campana visible de nuevo
   document.querySelectorAll("[data-public-nav]").forEach(b => b.classList.toggle("active", b.dataset.publicNav === nav));
   hideAllPublicSubviews();
   if (nav === "profesionales") {
@@ -9160,13 +9177,20 @@ function showConsumerGate(mode = "register", pending = null) {
   document.getElementById("cg_error")?.classList.add("hidden");
 }
 
-// Navegación CON gate — la usan el navbar y las tarjetas de portada/hub
+// v54.26: el directorio es libre de EXPLORAR (sin cuenta). La cuenta se pide al
+// CONTACTAR, no al mirar — así "Buscar profesionales" ya no repite "Crear cuenta".
 function publicNavRequest(nav) {
-  if (["profesionales", "empresas", "retazos"].includes(nav) && !hasPublicSession()) {
-    showConsumerGate("register", nav);
-    return;
-  }
   publicNavGo(nav);
+}
+
+// Barrera al contactar: devuelve true si hay sesión; si no, abre el registro
+// (guardando la navegación actual) y devuelve false. La usan los botones de
+// contacto del directorio (WhatsApp / Llamar / Cotizar) y del perfil.
+function requireSessionToContact() {
+  if (hasPublicSession()) return true;
+  try { toast("Crea tu cuenta gratis para contactar 👇"); } catch {}
+  showConsumerGate("register", "profesionales");
+  return false;
 }
 
 // Tarjetas de la portada y del hub Directorio
@@ -11207,7 +11231,7 @@ async function openProProfileModal(professionalId) {
         ${p.schedule ? `<div><strong style="font-size:.8rem;color:var(--muted)">HORARIO</strong><p style="margin:2px 0;font-size:.9rem">${escapeHtml(p.schedule)}</p></div>` : ""}
         ${p.location?.city ? `<div><strong style="font-size:.8rem;color:var(--muted)">UBICACIÓN</strong><p style="margin:2px 0;font-size:.9rem">📍 ${escapeHtml(p.location.city)}${p.location.province ? ", " + escapeHtml(p.location.province) : ""}</p></div>` : ""}
       </div>
-      ${(p.whatsapp || p.phone) ? `<a class="primary-btn" href="${waLink(p.whatsapp||p.phone, `Hola ${p.name}, vi tu perfil en PiLLA y me gustaría contactarte.`)}" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none;margin-bottom:16px">📞 Contactar por WhatsApp</a>` : ""}
+      ${(p.whatsapp || p.phone) ? `<button class="primary-btn pro-modal-contact" type="button" data-mc-phone="${escapeHtml(p.whatsapp||p.phone)}" data-mc-name="${escapeHtml(p.name)}" style="display:inline-block;margin-bottom:16px">📞 Contactar por WhatsApp</button>` : ""}
       <hr style="margin:12px 0;border:none;border-top:1px solid var(--line)">
       <h4 style="margin:0 0 10px">Reseñas (${ratings.length})</h4>
       <div id="proRatingsList">

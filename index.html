@@ -2700,6 +2700,8 @@ Yappy @miempresa"></textarea>
   <style>
     #notifBell{position:fixed;right:18px;bottom:18px;z-index:900;width:52px;height:52px;border-radius:50%;background:#3B2D8F;color:#fff;border:none;box-shadow:0 6px 20px rgba(26,19,70,.3);font-size:22px;cursor:pointer;display:none;align-items:center;justify-content:center}
     #notifBell.show{display:flex}
+    /* v54.27: en el asistente de IA la campana tapa el botón enviar (↑) → ocultarla ahí */
+    body.ai-designer-active #notifBell, body.ai-designer-active #notifPanel{display:none !important}
     #notifBadge{position:absolute;top:-4px;right:-4px;background:#F5B400;color:#1A1346;font-size:.72rem;font-weight:900;min-width:20px;height:20px;border-radius:999px;display:none;align-items:center;justify-content:center;padding:0 5px}
     #notifBadge.show{display:flex}
     #notifPanel{position:fixed;right:18px;bottom:80px;z-index:901;width:340px;max-width:calc(100vw - 36px);max-height:70vh;background:#fff;border-radius:16px;box-shadow:0 12px 40px rgba(26,19,70,.28);overflow:hidden;display:none;flex-direction:column}

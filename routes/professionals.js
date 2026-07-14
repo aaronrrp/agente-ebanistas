@@ -109,15 +109,12 @@ async function handle(req, res, { method, p, parts }) {
   }
 
   // GET /api/professionals — listado filtrable
-  // v52.2: BUSCAR profesionales exige cuenta (base de consumidores finales).
-  // Vale cualquier sesión: consumidor, profesional, empresa, ebanista, vendedor
-  // o admin. Los perfiles individuales (slug/:id) siguen públicos para que los
-  // enlaces compartidos y el QR funcionen sin registro.
+  // v54.26: el directorio es PÚBLICO — cualquiera puede EXPLORAR sin cuenta
+  // (igual que empresas y retazos). La cuenta se pide al CONTACTAR (gate en el
+  // cliente: botones WhatsApp/Llamar/Cotizar), no al mirar. Esto reduce fricción
+  // y evita que "Buscar profesionales" y "Crear cuenta" hagan lo mismo.
+  // Los perfiles individuales (slug/:id) ya eran públicos para compartir/QR.
   if (method === "GET" && p === "/api/professionals") {
-    if (!isAnyValidSession(getToken(req))) {
-      sendJson(res, 401, { error: "Regístrate gratis para buscar profesionales." });
-      return true;
-    }
     const q = Object.fromEntries(new URL(req.url, "http://x").searchParams);
     const list = professionals.filter(prof => matchesFilters(prof, q)).map(publicProfessionalForListing);
     const sort = q.sort || "recent";
