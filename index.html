@@ -2724,6 +2724,64 @@ Yappy @miempresa"></textarea>
     <div class="notif-list" id="notifList"></div>
   </div>
 
+  <!-- Asistente PiLLA — IA flotante global (v55.7). Reemplaza la campana como bolita
+       principal; usa el MISMO backend/cerebro (/api/ebanista-ai, Gemini 3.5). En toda la app. -->
+  <style>
+    #notifBell{display:none !important} /* la campana deja de ser la bolita principal */
+    #aiFab{position:fixed;right:18px;bottom:18px;z-index:900;width:58px;height:58px;border-radius:50%;
+      background:linear-gradient(135deg,#5B3FD6,#3B2D8F);color:#fff;border:none;
+      box-shadow:0 8px 22px rgba(59,45,143,.42);font-size:26px;cursor:pointer;display:flex;
+      align-items:center;justify-content:center;transition:transform .15s}
+    #aiFab:hover{transform:translateY(-2px) scale(1.05)}
+    #aiFabBadge{position:absolute;top:-3px;right:-3px;background:#F5B400;color:#1A1346;font-size:.72rem;
+      font-weight:900;min-width:20px;height:20px;border-radius:999px;display:none;align-items:center;justify-content:center;padding:0 5px}
+    #aiFabBadge.show{display:flex}
+    #aiPanel{position:fixed;right:18px;bottom:88px;z-index:901;width:370px;max-width:calc(100vw - 36px);
+      height:min(560px,72vh);background:#fff;border-radius:18px;box-shadow:0 14px 44px rgba(26,19,70,.32);
+      overflow:hidden;display:none;flex-direction:column}
+    #aiPanel.show{display:flex}
+    .aip-head{background:linear-gradient(135deg,#3B2D8F,#1A1346);color:#fff;padding:12px 14px;display:flex;align-items:center;gap:10px}
+    .aip-title{font-weight:800;font-size:.98rem;line-height:1.15}
+    .aip-title small{display:block;font-weight:500;font-size:.72rem;color:#c9c2ea}
+    .aip-actions{margin-left:auto;display:flex;gap:6px}
+    .aip-actions button{background:rgba(255,255,255,.14);border:none;color:#fff;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:15px;position:relative;display:flex;align-items:center;justify-content:center}
+    #aipNotifBadge{position:absolute;top:-4px;right:-4px;background:#F5B400;color:#1A1346;font-size:.6rem;font-weight:900;min-width:16px;height:16px;border-radius:999px;display:none;align-items:center;justify-content:center;padding:0 4px}
+    #aipNotifBadge.show{display:flex}
+    .aip-thread{flex:1;overflow-y:auto;padding:12px;background:#f7f6fb;display:flex;flex-direction:column;gap:8px}
+    .aip-msg{max-width:86%;padding:9px 12px;border-radius:14px;font-size:.9rem;line-height:1.4;white-space:pre-wrap;word-wrap:break-word}
+    .aip-msg.user{align-self:flex-end;background:#3B2D8F;color:#fff;border-bottom-right-radius:4px}
+    .aip-msg.bot{align-self:flex-start;background:#fff;color:#1A1346;border:1px solid #ece9f6;border-bottom-left-radius:4px}
+    .aip-chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 8px;background:#f7f6fb}
+    .aip-chip{background:#efeafc;color:#3B2D8F;border:none;border-radius:999px;padding:6px 11px;font-size:.8rem;font-weight:600;cursor:pointer}
+    .aip-inputbar{display:flex;gap:8px;padding:10px;border-top:1px solid #ece9f6;background:#fff}
+    .aip-inputbar input{flex:1;border:1px solid #ddd;border-radius:12px;padding:10px 12px;font-size:.9rem;outline:none}
+    .aip-inputbar input:focus{border-color:#3B2D8F}
+    .aip-inputbar button{background:#3B2D8F;color:#fff;border:none;border-radius:12px;width:44px;font-size:18px;cursor:pointer}
+    .aip-inputbar button:disabled{opacity:.5;cursor:default}
+    body.ai-designer-active #aiFab, body.ai-designer-active #aiPanel{display:none !important}
+  </style>
+  <button id="aiFab" type="button" aria-label="Asistente IA PiLLA">✨<span id="aiFabBadge"></span></button>
+  <div id="aiPanel" role="dialog" aria-label="Asistente PiLLA">
+    <div class="aip-head">
+      <span style="font-size:20px">✨</span>
+      <span class="aip-title">Asistente PiLLA<small>Con IA · pregúntame lo que sea</small></span>
+      <span class="aip-actions">
+        <button id="aipNotifBtn" type="button" title="Notificaciones">🔔<span id="aipNotifBadge"></span></button>
+        <button id="aipClose" type="button" title="Cerrar">✕</button>
+      </span>
+    </div>
+    <div class="aip-thread" id="aipThread"></div>
+    <div class="aip-chips" id="aipChips">
+      <button class="aip-chip" type="button" data-aip-q="¿Qué puedes hacer por mí?">¿Qué puedes hacer?</button>
+      <button class="aip-chip" type="button" data-aip-q="¿Cuántas láminas de melamina necesito para un clóset de 2.0 x 0.6 x 2.4 m?">Calcular material</button>
+      <button class="aip-chip" type="button" data-aip-q="Dame 3 ideas para un mueble de TV moderno en melamina">Ideas de diseño</button>
+    </div>
+    <div class="aip-inputbar">
+      <input id="aipInput" type="text" placeholder="Escríbeme algo…" autocomplete="off">
+      <button id="aipSend" type="button" aria-label="Enviar">↑</button>
+    </div>
+  </div>
+
   <script src="/mobile-bridge.js"></script>
   <script src="/app.js"></script>
 </body>

@@ -9575,11 +9575,14 @@ async function updateNotifBadge() {
   bell.classList.add("show");
   try {
     const { count } = await fetch("/api/notifications/unread-count", { headers: notifAuthHeader() }).then(r => r.json());
-    const badge = document.getElementById("notifBadge");
-    if (badge) {
-      if (count > 0) { badge.textContent = count > 99 ? "99+" : count; badge.classList.add("show"); }
-      else badge.classList.remove("show");
-    }
+    // v55.7: el conteo se refleja en la campana (oculta) Y en el Asistente IA (que la reemplaza).
+    const label = count > 99 ? "99+" : String(count);
+    ["notifBadge", "aiFabBadge", "aipNotifBadge"].forEach(id => {
+      const b = document.getElementById(id);
+      if (!b) return;
+      if (count > 0) { b.textContent = label; b.classList.add("show"); }
+      else b.classList.remove("show");
+    });
   } catch {}
 }
 
@@ -9625,6 +9628,77 @@ document.addEventListener("click", e => {
 });
 updateNotifBadge();
 setInterval(updateNotifBadge, 45000);
+
+// ── Asistente PiLLA (IA flotante global, v55.7) — mismo backend/cerebro que el diseñador
+// (/api/ebanista-ai, Gemini 3.5). Disponible en toda la app; reemplaza la campana como bolita.
+(function initAiAssistant() {
+  const fab = document.getElementById("aiFab");
+  const panel = document.getElementById("aiPanel");
+  const thread = document.getElementById("aipThread");
+  const input = document.getElementById("aipInput");
+  const sendBtn = document.getElementById("aipSend");
+  if (!fab || !panel || !thread || !input || !sendBtn) return;
+  let greeted = false;
+  const history = [];
+
+  function addMsg(text, who) {
+    const d = document.createElement("div");
+    d.className = "aip-msg " + who;
+    d.textContent = text;
+    thread.appendChild(d);
+    thread.scrollTop = thread.scrollHeight;
+    return d;
+  }
+  function openPanel() {
+    panel.classList.add("show");
+    if (!greeted) {
+      greeted = true;
+      addMsg("¡Hola! Soy tu asistente PiLLA con IA 🤖. Pregúntame lo que sea — materiales, medidas, ideas de muebles o cómo usar la plataforma.", "bot");
+    }
+    setTimeout(() => input.focus(), 60);
+  }
+  function closePanel() { panel.classList.remove("show"); }
+
+  fab.addEventListener("click", () => panel.classList.contains("show") ? closePanel() : openPanel());
+  document.getElementById("aipClose")?.addEventListener("click", closePanel);
+  document.getElementById("aipNotifBtn")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (typeof openNotifPanel === "function") openNotifPanel();
+  });
+
+  async function send() {
+    const msg = (input.value || "").trim();
+    if (!msg) return;
+    input.value = "";
+    addMsg(msg, "user");
+    history.push({ role: "user", text: msg });
+    if (history.length > 20) history.splice(0, history.length - 20);
+    sendBtn.disabled = true;
+    const typing = addMsg("…", "bot");
+    try {
+      const res = await fetch("/api/ebanista-ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(typeof publicAuthHeader === "function" ? publicAuthHeader() : {}) },
+        body: JSON.stringify({ message: msg, history, skipImageRouter: true })
+      });
+      const data = await res.json().catch(() => ({}));
+      typing.textContent = res.ok
+        ? (data.assistantText || "Listo.")
+        : (data.error || "Ahora mismo no puedo responder. Intenta en un momento.");
+      if (res.ok && data.assistantText) history.push({ role: "assistant", text: data.assistantText });
+    } catch {
+      typing.textContent = "Sin conexión con la IA. Revisa tu internet e intenta de nuevo.";
+    } finally {
+      sendBtn.disabled = false;
+      thread.scrollTop = thread.scrollHeight;
+    }
+  }
+  sendBtn.addEventListener("click", send);
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); send(); } });
+  document.querySelectorAll("[data-aip-q]").forEach(chip =>
+    chip.addEventListener("click", () => { input.value = chip.dataset.aipQ; send(); })
+  );
+})();
 
 // ── Referidos (Ola 4, #11) ───────────────────────────────────────────────────
 async function loadReferidos() {
