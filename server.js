@@ -2068,6 +2068,22 @@ async function serveStatic(req, res) {
 
   const filePath = path.normalize(path.join(rootDir, url.pathname));
   if (!filePath.startsWith(rootDir)) { res.writeHead(403); res.end("Forbidden"); return; }
+
+  // ── Seguridad (v55.0): serveStatic sirve CUALQUIER archivo bajo la raíz. Sin
+  // este filtro se podían descargar los .json de datos (tenants/professionals…,
+  // con hashes de contraseña + PII) o el código de server.js/routes/*/lib/*.
+  // Solo se permiten assets web reales; los .js se limitan a los scripts cliente.
+  {
+    const pth = url.pathname.toLowerCase();
+    const base = pth.slice(pth.lastIndexOf("/") + 1);
+    const ext2 = path.extname(pth);
+    const CLIENT_JS = new Set(["/app.js", "/mobile-bridge.js"]);
+    const DATA_EXT = new Set([".json", ".ndjson", ".env", ".md", ".mjs", ".lock", ".yaml", ".yml", ".map"]);
+    const SRC_DIRS = /^\/(routes|lib|node_modules|movil|\.git|\.claude)\//;
+    if (DATA_EXT.has(ext2) || (ext2 === ".js" && !CLIENT_JS.has(pth)) || SRC_DIRS.test(pth) || base.startsWith(".")) {
+      res.writeHead(404); res.end("Not found"); return;
+    }
+  }
   try {
     const st = fs.statSync(filePath);
     if (!st.isFile()) { res.writeHead(404); res.end("Not found"); return; }
