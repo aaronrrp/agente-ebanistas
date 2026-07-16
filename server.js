@@ -35,6 +35,11 @@ const hasGemini = () => Boolean(process.env.GEMINI_API_KEY);
 const hasOpenAI = () => Boolean(process.env.OPENAI_API_KEY);
 const aiTextAvailable = () => hasGemini() || hasOpenAI();
 let lastTextProvider = ""; // proveedor que respondió la última llamada de texto (para el campo "source")
+// v55.13 — memos de compatibilidad Gemini: si la API rechaza una capa opcional
+// (búsqueda web o el apagado del razonamiento interno), se desactiva sola y no se
+// vuelve a intentar en las siguientes llamadas (evita reintentos repetidos).
+let geminiSearchOk = true;
+let geminiThinkingOk = true;
 // En producción (Render define RENDER=true) NO hay contraseña por defecto: si falta
 // ADMIN_PASSWORD el login de admin queda deshabilitado. El fallback "admin1234" solo
 // existe para desarrollo local.
@@ -809,12 +814,16 @@ async function callGemini(sysPrompt, userContent, useWebSearch = true) {
       if (m) parts.push({ inline_data: { mime_type: m[1], data: m[2] } });
     }
   }
-  const doCall = async (withSearch) => {
+  const doCall = async (withSearch, withThinkingOff) => {
     const reqBody = {
       system_instruction: { parts: [{ text: sysPrompt }] },
       contents: [{ role: "user", parts }],
       generationConfig: { maxOutputTokens: 3500 }
     };
+    // v55.13: los Gemini 2.5+/3.x traen razonamiento interno ("thinking") ACTIVADO por
+    // defecto — suma segundos de latencia y cobra esos tokens. Para un asistente de chat
+    // lo apagamos: respuestas más rápidas y más baratas, con la misma calidad práctica.
+    if (withThinkingOff) reqBody.generationConfig.thinkingConfig = { thinkingBudget: 0 };
     if (withSearch) reqBody.tools = [{ google_search: {} }];
     const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`, {
       method: "POST",
@@ -824,14 +833,25 @@ async function callGemini(sysPrompt, userContent, useWebSearch = true) {
     const data = await apiRes.json();
     return { apiRes, data };
   };
-  let { apiRes, data } = await doCall(useWebSearch);
-  // v55.12: si falló CON búsqueda web (hay keys/modelos/tiers que rechazan la herramienta
-  // google_search), se reintenta UNA vez SIN búsqueda antes de rendirse — la búsqueda es
-  // "nice to have", nunca debe tumbar la respuesta. (Bug real: "¿qué hora es en Panamá?"
-  // activaba búsqueda → Gemini 400 → caía a OpenAI sin crédito → error confuso.)
-  if (!apiRes.ok && useWebSearch) {
-    console.warn(`[callGemini] falló CON google_search (${apiRes.status}: ${data.error?.message || "?"}); reintentando SIN búsqueda`);
-    ({ apiRes, data } = await doCall(false));
+
+  // Cascada de tolerancia (v55.12/13): búsqueda web y thinking-off son capas OPCIONALES —
+  // si la API del modelo/tier rechaza alguna, se reintenta sin ella y se memoriza para
+  // las próximas llamadas. Ninguna capa opcional debe tumbar una respuesta.
+  const s0 = useWebSearch && geminiSearchOk;
+  const t0 = geminiThinkingOk;
+  const planes = [[s0, t0]];
+  if (s0) planes.push([false, t0]);
+  if (t0) planes.push([false, false]);
+  let apiRes, data, usado = [s0, t0];
+  for (const [s, t] of planes) {
+    ({ apiRes, data } = await doCall(s, t));
+    usado = [s, t];
+    if (apiRes.ok) break;
+    console.warn(`[callGemini] intento (búsqueda=${s}, sinPensar=${t}) falló: ${apiRes.status} ${data.error?.message || "?"}`);
+  }
+  if (apiRes.ok) {
+    if (s0 && !usado[0]) { geminiSearchOk = false; console.warn("[callGemini] búsqueda web desactivada para esta key/modelo (memorizado)"); }
+    if (t0 && !usado[1]) { geminiThinkingOk = false; console.warn("[callGemini] thinkingConfig no soportado — se deja el razonamiento por defecto (memorizado)"); }
   }
   if (!apiRes.ok) {
     console.error("[callGemini] error response:", JSON.stringify(data));
