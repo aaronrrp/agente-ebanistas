@@ -9754,19 +9754,32 @@ setInterval(updateNotifBadge, 45000);
     sendBtn.disabled = true;
     const typing = addMsg("…", "bot");
     try {
-      const res = await fetch("/api/ebanista-ai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...(typeof publicAuthHeader === "function" ? publicAuthHeader() : {}) },
-        body: JSON.stringify({ message: msg, history, skipImageRouter: true })
-      });
-      const data = await res.json().catch(() => ({}));
-      typing.textContent = res.ok
+      // v55.16: con TIMEOUT — antes un servidor lento/dormido dejaba el "…" cargando infinito.
+      let ok, data;
+      if (typeof postAi === "function") {
+        ({ ok, data } = await postAi("/api/ebanista-ai", { message: msg, history, skipImageRouter: true }));
+      } else {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 75000);
+        const res = await fetch("/api/ebanista-ai", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: msg, history, skipImageRouter: true }),
+          signal: ctrl.signal
+        });
+        clearTimeout(t);
+        ok = res.ok;
+        data = await res.json().catch(() => ({}));
+      }
+      typing.textContent = ok
         ? (data.assistantText || "Listo.")
-        : (data.error || "Ahora mismo no puedo responder. Intenta en un momento.");
-      if (res.ok && data.assistantText) history.push({ role: "assistant", text: data.assistantText });
-      if (res.ok) { const nav = detectNav(msg); if (nav) appendNavButton(nav); }
-    } catch {
-      typing.textContent = "Sin conexión con la IA. Revisa tu internet e intenta de nuevo.";
+        : ((data && data.error) || "Ahora mismo no puedo responder. Intenta en un momento.");
+      if (ok && data.assistantText) history.push({ role: "assistant", text: data.assistantText });
+      if (ok) { const nav = detectNav(msg); if (nav) appendNavButton(nav); }
+    } catch (e) {
+      typing.textContent = (e && e.name === "AbortError")
+        ? "⏱ El servidor tardó demasiado — el plan gratis se 'duerme' y el primer mensaje puede tardar ~1 minuto. Escríbeme de nuevo."
+        : "Sin conexión con la IA. Revisa tu internet e intenta de nuevo.";
     } finally {
       sendBtn.disabled = false;
       thread.scrollTop = thread.scrollHeight;

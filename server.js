@@ -38,7 +38,9 @@ let lastTextProvider = ""; // proveedor que respondió la última llamada de tex
 // v55.13 — memos de compatibilidad Gemini: si la API rechaza una capa opcional
 // (búsqueda web o el apagado del razonamiento interno), se desactiva sola y no se
 // vuelve a intentar en las siguientes llamadas (evita reintentos repetidos).
-let geminiSearchOk = true;
+// Formato de búsqueda web que acepta la key/modelo: "gs" (google_search, modelos 2.0+),
+// "gsr" (google_search_retrieval, formato viejo) u "off" si la key no tiene grounding.
+let geminiSearchMode = "gs";
 let geminiThinkingOk = true;
 // v55.15 — las API keys nuevas de Google (formato "AQ.…") pueden requerir Authorization:
 // Bearer en vez del clásico x-goog-api-key. Se prueba uno; si la API lo rechaza, se
@@ -285,7 +287,7 @@ Tienes acceso a búsqueda web para información actualizada. Úsala cuando el us
   natural preguntando esos datos, SIN JSON, en vez de inventarlos (ver sección DESGLOSE abajo).
 
 Para preguntas generales: sé conversacional, útil y directo. Responde completo. No digas que "no puedes" buscar información — tienes web search. Si no sabes algo exacto, dilo honestamente pero siempre intenta ayudar.
-IMPORTANTE sobre la hora: NO puedes saber la hora exacta actual — no tienes reloj en tiempo real. Si te preguntan "qué hora es", responde honestamente: "No tengo acceso a la hora en tiempo real — consulta el reloj de tu dispositivo. Lo que sí puedo decirte es que Panamá usa UTC-5 todo el año (sin horario de verano)."
+SOBRE LA HORA Y LA FECHA: al final de este prompt se te entrega la FECHA Y HORA ACTUAL de Panamá (sección "AHORA MISMO") — úsala con total confianza cuando pregunten la hora, la fecha, el día o "qué día es hoy". Responde directo y natural (ej: "En Panamá son las 3:45 p. m. del miércoles 16 de julio"), sin decir que no tienes reloj.
 
 ══ INTERPRETACIÓN INTELIGENTE DE LENGUAJE COTIDIANO ══
 El usuario típico tiene 30-60 años, no es técnico, y describe muebles con sus propias palabras —
@@ -833,7 +835,8 @@ async function callGemini(sysPrompt, userContent, useWebSearch = true) {
     // defecto — suma segundos de latencia y cobra esos tokens. Para un asistente de chat
     // lo apagamos: respuestas más rápidas y más baratas, con la misma calidad práctica.
     if (withThinkingOff) reqBody.generationConfig.thinkingConfig = { thinkingBudget: 0 };
-    if (withSearch) reqBody.tools = [{ google_search: {} }];
+    if (withSearch === "gs") reqBody.tools = [{ google_search: {} }];
+    else if (withSearch === "gsr") reqBody.tools = [{ google_search_retrieval: {} }];
     const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`, {
       method: "POST",
       headers: geminiHeaders(),
@@ -846,11 +849,12 @@ async function callGemini(sysPrompt, userContent, useWebSearch = true) {
   // Cascada de tolerancia (v55.12/13): búsqueda web y thinking-off son capas OPCIONALES —
   // si la API del modelo/tier rechaza alguna, se reintenta sin ella y se memoriza para
   // las próximas llamadas. Ninguna capa opcional debe tumbar una respuesta.
-  const s0 = useWebSearch && geminiSearchOk;
+  const s0 = (useWebSearch && geminiSearchMode !== "off") ? geminiSearchMode : false;
   const t0 = geminiThinkingOk;
   const planes = [[s0, t0]];
-  if (s0) planes.push([false, t0]);
-  if (t0) planes.push([false, false]);
+  if (s0 === "gs") planes.push(["gsr", t0]);   // formato alterno de búsqueda
+  if (s0) planes.push([false, t0]);            // sin búsqueda
+  if (t0) planes.push([false, false]);         // sin búsqueda ni thinking-off
   let apiRes, data, usado = [s0, t0];
   for (const [s, t] of planes) {
     ({ apiRes, data } = await doCall(s, t));
@@ -859,7 +863,10 @@ async function callGemini(sysPrompt, userContent, useWebSearch = true) {
     console.warn(`[callGemini] intento (búsqueda=${s}, sinPensar=${t}) falló: ${apiRes.status} ${data.error?.message || "?"}`);
   }
   if (apiRes.ok) {
-    if (s0 && !usado[0]) { geminiSearchOk = false; console.warn("[callGemini] búsqueda web desactivada para esta key/modelo (memorizado)"); }
+    if (s0 && usado[0] !== s0) {
+      geminiSearchMode = usado[0] || "off";
+      console.warn(`[callGemini] búsqueda web: modo memorizado → ${geminiSearchMode}`);
+    }
     if (t0 && !usado[1]) { geminiThinkingOk = false; console.warn("[callGemini] thinkingConfig no soportado — se deja el razonamiento por defecto (memorizado)"); }
   }
   // v55.15: si todo falló con pinta de AUTENTICACIÓN (400/401/403), prueba el otro estilo
@@ -1295,7 +1302,9 @@ async function handleAi(req, res) {
     // Dominio mueble (hay señales semánticas, o ya hay un currentItem, o es la 2da llamada de
     // desglose) → nunca necesita búsqueda web. Solo se deja activa para preguntas generales.
     const isFurnitureDomain = semantic.count > 0 || Boolean(payload.currentItem) || Boolean(payload.skipImageRouter);
-    const parsed = await callAI(systemPrompt + pricesBlock + historyBlock, content, !isFurnitureDomain);
+    // v55.16: la IA recibe el reloj real del servidor — responde hora/fecha como una IA normal.
+    const nowBlock = `\n\n══ AHORA MISMO ══\nFecha y hora actual en Panamá (UTC-5): ${new Date().toLocaleString("es-PA", { timeZone: "America/Panama", dateStyle: "full", timeStyle: "short" })}.`;
+    const parsed = await callAI(systemPrompt + pricesBlock + historyBlock + nowBlock, content, !isFurnitureDomain);
     const normalized = normalizeAi(parsed, parsed?.assistantText);
     if (imageDecision === "button") {
       const why = semantic.count >= 2 ? "cambio chico sobre un mueble existente" : "1 señal, ambiguo";
