@@ -28,7 +28,7 @@ const imageModel = process.env.OPENAI_IMAGE_MODEL || "gpt-image-1";
 // Se cambia de motor SIN tocar código: AI_PROVIDER=gemini|openai. Por defecto usa
 // Gemini si hay GEMINI_API_KEY, si no OpenAI. Ambos se llaman por fetch (cero deps).
 // Los modelos son configurables por si Google/OpenAI cambian los nombres.
-const geminiModel = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const geminiModel = process.env.GEMINI_MODEL || "gemini-3.5-flash";
 const geminiImageModel = process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image";
 const AI_PROVIDER = String(process.env.AI_PROVIDER || (process.env.GEMINI_API_KEY ? "gemini" : "openai")).toLowerCase();
 const hasGemini = () => Boolean(process.env.GEMINI_API_KEY);
