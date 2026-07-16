@@ -24,6 +24,16 @@ const rootDir = __dirname;
 const port = Number(process.env.PORT || 5174);
 const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
 const imageModel = process.env.OPENAI_IMAGE_MODEL || "gpt-image-1";
+// ── Motor de IA (multi-proveedor) ────────────────────────────────────────────
+// Se cambia de motor SIN tocar código: AI_PROVIDER=gemini|openai. Por defecto usa
+// Gemini si hay GEMINI_API_KEY, si no OpenAI. Ambos se llaman por fetch (cero deps).
+// Los modelos son configurables por si Google/OpenAI cambian los nombres.
+const geminiModel = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const geminiImageModel = process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image";
+const AI_PROVIDER = String(process.env.AI_PROVIDER || (process.env.GEMINI_API_KEY ? "gemini" : "openai")).toLowerCase();
+const hasGemini = () => Boolean(process.env.GEMINI_API_KEY);
+const hasOpenAI = () => Boolean(process.env.OPENAI_API_KEY);
+const aiTextAvailable = () => hasGemini() || hasOpenAI();
 // En producción (Render define RENDER=true) NO hay contraseña por defecto: si falta
 // ADMIN_PASSWORD el login de admin queda deshabilitado. El fallback "admin1234" solo
 // existe para desarrollo local.
@@ -774,6 +784,60 @@ async function callOpenAI(sysPrompt, userContent, useWebSearch = true) {
   return { assistantText: text };
 }
 
+// ── Gemini (texto/visión) — MISMO contrato que callOpenAI: devuelve el JSON
+// parseado (acción) o { assistantText }. Cero dependencias (fetch + REST). ──
+async function callGemini(sysPrompt, userContent, useWebSearch = true) {
+  const parts = [];
+  for (const c of userContent) {
+    if (c.type === "input_text") parts.push({ text: c.text });
+    else if (c.type === "input_image" && c.image_url) {
+      const m = /^data:([^;]+);base64,(.+)$/.exec(c.image_url);
+      if (m) parts.push({ inline_data: { mime_type: m[1], data: m[2] } });
+    }
+  }
+  const reqBody = {
+    system_instruction: { parts: [{ text: sysPrompt }] },
+    contents: [{ role: "user", parts }],
+    generationConfig: { maxOutputTokens: 3500 }
+  };
+  if (useWebSearch) reqBody.tools = [{ google_search: {} }];
+  const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY },
+    body: JSON.stringify(reqBody)
+  });
+  const data = await apiRes.json();
+  if (!apiRes.ok) {
+    console.error("[callGemini] error response:", JSON.stringify(data));
+    const err = new Error(data.error?.message || `Gemini ${apiRes.status}`);
+    err.status = apiRes.status; err.code = data.error?.status;
+    throw err;
+  }
+  const text = (data.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("").trim();
+  const parsed = parseJson(text);
+  if (parsed) return parsed;
+  if (text.startsWith("{")) throw new Error("La respuesta se cortó a mitad de camino (era muy larga). Intenta de nuevo, o con un pedido más corto.");
+  return { assistantText: text };
+}
+
+// ── Despachador de IA de texto: elige el proveedor y, si el primario falla, hace
+// respaldo automático al otro. Deja OpenAI como red de seguridad. ──
+async function callAI(sysPrompt, userContent, useWebSearch = true) {
+  const primary = (AI_PROVIDER === "gemini" && hasGemini()) ? "gemini"
+                : hasOpenAI() ? "openai"
+                : hasGemini() ? "gemini" : null;
+  if (!primary) { const e = new Error("No hay motor de IA configurado (define GEMINI_API_KEY u OPENAI_API_KEY)."); e.status = 503; throw e; }
+  const run = (prov) => prov === "gemini" ? callGemini(sysPrompt, userContent, useWebSearch) : callOpenAI(sysPrompt, userContent, useWebSearch);
+  try {
+    return await run(primary);
+  } catch (e) {
+    const fb = (primary === "gemini" && hasOpenAI()) ? "openai" : (primary === "openai" && hasGemini()) ? "gemini" : null;
+    if (!fb) throw e;
+    console.warn(`[callAI] ${primary} falló (${e.message}); usando respaldo ${fb}`);
+    return await run(fb);
+  }
+}
+
 // Palabras que indican que el usuario quiere una IMAGEN generada, no una propuesta de mueble.
 // "mueble"/"cocina"/"diseño" se excluyen a propósito: aparecen en casi cualquier pedido normal
 // de cotización ("diseña un mueble de cocina") y dispararían el router por error.
@@ -980,8 +1044,8 @@ async function handleAi(req, res) {
     sendJson(res, 429, { error: "Demasiadas consultas seguidas. Espera 1 minuto." });
     return;
   }
-  if (!process.env.OPENAI_API_KEY) {
-    sendJson(res, 503, { error: "OPENAI_API_KEY no configurada. Usando modo local." });
+  if (!aiTextAvailable()) {
+    sendJson(res, 503, { error: "IA no configurada. Define GEMINI_API_KEY (o OPENAI_API_KEY). Usando modo local." });
     return;
   }
   const body = await readBody(req);
@@ -1153,7 +1217,7 @@ async function handleAi(req, res) {
     // Dominio mueble (hay señales semánticas, o ya hay un currentItem, o es la 2da llamada de
     // desglose) → nunca necesita búsqueda web. Solo se deja activa para preguntas generales.
     const isFurnitureDomain = semantic.count > 0 || Boolean(payload.currentItem) || Boolean(payload.skipImageRouter);
-    const parsed = await callOpenAI(systemPrompt + pricesBlock + historyBlock, content, !isFurnitureDomain);
+    const parsed = await callAI(systemPrompt + pricesBlock + historyBlock, content, !isFurnitureDomain);
     const normalized = normalizeAi(parsed, parsed?.assistantText);
     if (imageDecision === "button") {
       const why = semantic.count >= 2 ? "cambio chico sobre un mueble existente" : "1 señal, ambiguo";
@@ -1173,8 +1237,8 @@ async function handleSpaceAnalysis(req, res) {
     sendJson(res, 429, { error: "Demasiados análisis seguidos. Espera 1 minuto." });
     return;
   }
-  if (!process.env.OPENAI_API_KEY) {
-    sendJson(res, 503, { error: "OPENAI_API_KEY no configurada. Sube tu clave en Render para usar análisis de espacios." });
+  if (!aiTextAvailable()) {
+    sendJson(res, 503, { error: "IA no configurada. Define GEMINI_API_KEY (o OPENAI_API_KEY) en Render para usar análisis de espacios." });
     return;
   }
   const body = await readBody(req);
@@ -1191,7 +1255,7 @@ async function handleSpaceAnalysis(req, res) {
   ];
 
   try {
-    const parsed = await callOpenAI(spacePrompt, userContent);
+    const parsed = await callAI(spacePrompt, userContent);
     const firstItem = Array.isArray(parsed?.items) ? parsed.items[0] : parsed?.item || null;
     sendJson(res, 200, {
       source: "openai",
@@ -1216,8 +1280,34 @@ const PROVIDER_TIMEOUT_MS = 38000; // deja espacio para que el reintento entero 
 // Calidad alta por defecto en gpt-image-1 — la calidad visual no se negocia. "low"/"medium"
 // quedan disponibles si algún día se pide explícitamente desde el cliente (más barato pero
 // con menos detalle), pero NUNCA por default.
+// Generación de imagen con Gemini 2.5 Flash Image ("Nano Banana"). Devuelve el mismo
+// shape que la cascada, o null para dejar seguir a los otros proveedores.
+async function generateImageGemini(prompt) {
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiImageModel}:generateContent`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY },
+    body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }] }),
+    signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS)
+  });
+  const d = await r.json();
+  const part = (d.candidates?.[0]?.content?.parts || []).find(p => p.inline_data || p.inlineData);
+  const inline = part?.inline_data || part?.inlineData;
+  if (r.ok && inline?.data) return { ok: true, imageB64: inline.data, source: geminiImageModel };
+  console.log(`[gemini-image] status=${r.status} err="${d.error?.message || "sin imagen"}"`);
+  return null;
+}
+
 async function generateImageCascade(prompt, quality = "high") {
   const imgPrompt = `${prompt}, photorealistic interior design render, high quality, 4k, soft lighting`;
+
+  // 0. Gemini (si es el motor elegido) — antes que el resto de la cascada.
+  if (AI_PROVIDER === "gemini" && hasGemini()) {
+    try {
+      console.log("[gemini-image] trying...");
+      const g = await generateImageGemini(imgPrompt);
+      if (g && g.ok) { console.log("[gemini-image] success!"); return g; }
+    } catch (e) { console.log(`[gemini-image] exception: ${e.message}`); }
+  }
 
   // 1. Cloudflare Workers AI — FLUX.1-schnell (gratis, ~15 imgs/día, sin tarjeta)
   if (process.env.CF_ACCOUNT_ID && process.env.CF_API_TOKEN) {
@@ -1296,7 +1386,33 @@ async function generateImageCascade(prompt, quality = "high") {
 // transforma según el prompt, en vez de generar algo desde cero. gpt-image-1 soporta esto vía
 // multipart/form-data; FormData/Blob son globales nativos de Node (18+), cero dependencias nuevas.
 const EDIT_TIMEOUT_MS = 75000; // sube un archivo + edita en alta calidad: necesita más margen que PROVIDER_TIMEOUT_MS
+
+// Edición imagen→imagen con Gemini (referencia + instrucción). null → deja probar OpenAI.
+async function editImageGemini(imageDataUrl, prompt) {
+  const m = /^data:([^;]+);base64,(.+)$/.exec(imageDataUrl || "");
+  if (!m) return null;
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiImageModel}:generateContent`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY },
+    body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }, { inline_data: { mime_type: m[1], data: m[2] } }] }] }),
+    signal: AbortSignal.timeout(EDIT_TIMEOUT_MS)
+  });
+  const d = await r.json();
+  const part = (d.candidates?.[0]?.content?.parts || []).find(p => p.inline_data || p.inlineData);
+  const inline = part?.inline_data || part?.inlineData;
+  if (r.ok && inline?.data) return { ok: true, imageB64: inline.data, source: geminiImageModel };
+  console.log(`[gemini-image-edit] status=${r.status} err="${d.error?.message || "sin imagen"}"`);
+  return null;
+}
+
 async function editImageWithReference(imageDataUrl, prompt, quality = "high") {
+  // Gemini primero si es el motor elegido; si no da resultado, cae a OpenAI (si hay clave).
+  if (AI_PROVIDER === "gemini" && hasGemini()) {
+    try {
+      const g = await editImageGemini(imageDataUrl, prompt);
+      if (g && g.ok) return g;
+    } catch (e) { console.log(`[gemini-image-edit] exception: ${e.message}`); }
+  }
   // Misma variable que el resto del archivo (texto y generación desde cero usan esta
   // misma process.env.OPENAI_API_KEY, sin cliente ni configuración aparte) -- el log deja
   // constancia explícita de que se detectó (o no) antes de seguir, para diagnosticar en Render
@@ -2252,14 +2368,18 @@ const server = http.createServer(async (req, res) => {
     // Health
     if (method === "GET" && p === "/api/health") {
       const keySet = Boolean(process.env.OPENAI_API_KEY);
-      console.log(`[health] openaiConfigured=${keySet}, model=${model}, tenants=${tenants.length}`);
+      const activeProvider = (AI_PROVIDER === "gemini" && hasGemini()) ? "gemini" : hasOpenAI() ? "openai" : hasGemini() ? "gemini" : "none";
+      console.log(`[health] aiProvider=${activeProvider}, openai=${keySet}, gemini=${hasGemini()}, tenants=${tenants.length}`);
       sendJson(res, 200, {
+        aiProvider: activeProvider,
+        aiModel: activeProvider === "gemini" ? geminiModel : model,
         openaiConfigured: keySet,
+        geminiConfigured: hasGemini(),
         hfConfigured: Boolean(process.env.HF_TOKEN),
         model,
         adminPasswordSet: Boolean(process.env.ADMIN_PASSWORD),
         tenantsCount: tenants.length,
-        apiEndpoint: "chat/completions",
+        apiEndpoint: activeProvider === "gemini" ? "generateContent" : "chat/completions",
         build: "2026-06-05-v37"
       });
       return;
@@ -2416,7 +2536,9 @@ server.listen(port, () => {
   console.log(`\n🪚  Agente Ebanistas SaaS — http://localhost:${port}`);
   console.log(`   Admin password  : ${!ADMIN_PASSWORD ? "NO configurada — login admin DESHABILITADO (define ADMIN_PASSWORD)" : process.env.ADMIN_PASSWORD ? "configurada ✓" : "admin1234 solo-local (⚠ cambia con ADMIN_PASSWORD=xxx)"}`);
   console.log(`   Acceso admin    : ${ADMIN_ACCESS_PATH}${process.env.ADMIN_ACCESS_PATH ? " (personalizada)" : " (default — personaliza con ADMIN_ACCESS_PATH)"}`);
-  console.log(`   OpenAI          : ${process.env.OPENAI_API_KEY ? "activo ✓" : "no configurado (modo local)"}`);
+  const _activeProv = (AI_PROVIDER === "gemini" && hasGemini()) ? "gemini" : hasOpenAI() ? "openai" : hasGemini() ? "gemini" : "ninguno (modo local)";
+  console.log(`   Motor IA        : ${_activeProv}${_activeProv === "gemini" ? " (" + geminiModel + ")" : _activeProv === "openai" ? " (" + model + ")" : ""}`);
+  console.log(`   Claves IA       : OpenAI ${process.env.OPENAI_API_KEY ? "✓" : "✗"}   Gemini ${hasGemini() ? "✓" : "✗"}`);
   console.log(`   Ebanistas       : ${tenants.length} registrados\n`);
   tenants.forEach(t => console.log(`   • ${t.companyName.padEnd(30)} código: ${t.accessCode}  [${t.status}]`));
   console.log();
