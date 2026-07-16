@@ -3296,7 +3296,7 @@ async function sendToAI() {
       choices.style.cssText = "display:flex;gap:8px;flex-wrap:wrap;margin-top:10px";
       const bRender = document.createElement("button");
       bRender.className = "chat-quote-btn"; bRender.type = "button";
-      bRender.textContent = "🪑 El boceto/foto de un mueble — renderízalo";
+      bRender.textContent = "🪑 Boceto/foto de un mueble — render + despiece";
       bRender.onclick = () => runEnhanceSketchInline(pending, imgDataForRequest, message);
       const bPlan = document.createElement("button");
       bPlan.className = "chat-quote-btn"; bPlan.type = "button";
@@ -3840,6 +3840,7 @@ async function runEnhanceSketchInline(pending, imageData, message) {
   els.sendChatBtn.disabled = true;
   pending.textContent = "✏️ Convirtiendo tu boceto en render profesional… 15–30 seg";
   const dots = document.createElement("span"); dots.className = "loading-dots"; dots.innerHTML = "<span></span><span></span><span></span>"; pending.appendChild(dots);
+  let renderOk = false;
   try {
     const { ok, status, data } = await postAi("/api/enhance-sketch", { imageData, message });
     if (!ok) { pending.textContent = describeSketchError(status, data); return; }
@@ -3847,8 +3848,34 @@ async function runEnhanceSketchInline(pending, imageData, message) {
     if (data.imageB64 || data.imageUrl) {
       renderImageBlock(pending, data.imageB64 ? `data:image/png;base64,${data.imageB64}` : data.imageUrl);
     }
+    renderOk = true;
   } catch (e) {
     pending.textContent = e.name === "AbortError" ? "⏱ Tiempo agotado. Intenta con una imagen más liviana." : `❌ Error: ${e.message}`;
+  } finally {
+    els.sendChatBtn.disabled = false;
+    els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+  }
+  // v55.5: flujo NO lineal — tras el render, encadena el diseño técnico + despiece.
+  if (renderOk) await runDesignBreakdownFollowup(imageData, message);
+}
+
+// 2da etapa tras el render de un boceto: el modelo de VISIÓN mira el mueble y arma el
+// diseño técnico + despiece (con array 'pieces' para Cortes). Si faltan MEDIDAS
+// EXTERIORES que no pueda ver ni asumir, pregunta en una frase — no se corta el flujo.
+async function runDesignBreakdownFollowup(imageData, message) {
+  els.sendChatBtn.disabled = true;
+  const pending = appendChat("assistant", "📝 Ahora te armo el diseño técnico y el despiece…", true);
+  const dots = document.createElement("span"); dots.className = "loading-dots"; dots.innerHTML = "<span></span><span></span><span></span>"; pending.appendChild(dots);
+  els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+  const promptMsg = (message ? message + ". " : "") + "Basándote en el mueble de este boceto/render, dame el DISEÑO TÉCNICO y el DESPIECE COMPLETO en melamina 18mm: cada pieza con NOMBRE, medidas exactas en mm, CANTIDAD y CANTEADO, incluyendo el array 'pieces' para enviarlas a Cortes con un clic. Usa defaults de fabricación (fondo embutido, puertas sobrepuestas, correderas telescópicas) sin pedir confirmaciones. Si falta alguna MEDIDA EXTERIOR (ancho/alto/profundidad) que no puedas ver en la imagen ni asumir con un estándar razonable, pregúntala brevemente en una sola frase — NO inventes medidas exteriores.";
+  try {
+    const { ok, status, data } = await postAi("/api/ebanista-ai", { message: promptMsg, imageData, currentItem: state.lastDesignItems[0] || null, history: state.chatHistory, skipImageRouter: true });
+    if (!ok) { pending.textContent = describeAiError(status, data); return; }
+    pending.textContent = data.assistantText || "Diseño y despiece generados.";
+    renderAssistantContentBlocks(pending, data, promptMsg);
+    if (data.item) state.lastDesignItems = [data.item];
+  } catch (e) {
+    pending.textContent = e.name === "AbortError" ? "⏱ El despiece tardó demasiado. Escríbeme las medidas exteriores y lo genero al instante." : `❌ Error: ${e.message}`;
   } finally {
     els.sendChatBtn.disabled = false;
     els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
