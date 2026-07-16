@@ -1,0 +1,13 @@
+# Dependencias y artefactos de build de la app móvil (no van al repo)
+node_modules/
+www/
+
+# Proyectos nativos generados por `npx cap add` — se regeneran; opcional versionarlos.
+# Si quieres versionar la config nativa (íconos, firma), borra estas 2 líneas.
+android/
+ios/
+
+# Varios
+.DS_Store
+*.log
+.gradle/

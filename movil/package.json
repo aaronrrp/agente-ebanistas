@@ -1,0 +1,33 @@
+{
+  "name": "pilla-movil",
+  "version": "1.0.0",
+  "private": true,
+  "description": "App movil PiLLA (Capacitor) — envuelve la web y consume el MISMO backend. No se despliega a Render.",
+  "scripts": {
+    "sync-web": "node sync-web.mjs",
+    "add:android": "npm run sync-web && npx cap add android && npx cap sync android",
+    "add:ios": "npm run sync-web && npx cap add ios && npx cap sync ios",
+    "sync": "npm run sync-web && npx cap sync",
+    "open:android": "npx cap open android",
+    "open:ios": "npx cap open ios",
+    "assets": "npx @capacitor/assets generate --iconBackgroundColor '#1A1346' --splashBackgroundColor '#1A1346'"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/app": "^6.0.1",
+    "@capacitor/browser": "^6.0.3",
+    "@capacitor/camera": "^6.1.0",
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/haptics": "^6.0.1",
+    "@capacitor/ios": "^6.1.2",
+    "@capacitor/keyboard": "^6.0.2",
+    "@capacitor/preferences": "^6.0.2",
+    "@capacitor/push-notifications": "^6.0.2",
+    "@capacitor/splash-screen": "^6.0.2",
+    "@capacitor/status-bar": "^6.0.1"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^6.1.2"
+  }
+}

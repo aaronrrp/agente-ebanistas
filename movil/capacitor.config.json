@@ -1,0 +1,38 @@
+{
+  "appId": "com.pilla.app",
+  "appName": "PiLLA",
+  "webDir": "www",
+  "backgroundColor": "#1A1346",
+  "loggingBehavior": "production",
+  "android": {
+    "backgroundColor": "#1A1346",
+    "allowMixedContent": false
+  },
+  "ios": {
+    "backgroundColor": "#1A1346",
+    "contentInset": "always"
+  },
+  "server": {
+    "androidScheme": "https",
+    "iosScheme": "capacitor"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1400,
+      "launchAutoHide": true,
+      "backgroundColor": "#1A1346",
+      "showSpinner": false,
+      "androidScaleType": "CENTER_CROP"
+    },
+    "StatusBar": {
+      "style": "LIGHT",
+      "backgroundColor": "#1A1346"
+    },
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    },
+    "Keyboard": {
+      "resize": "native"
+    }
+  }
+}
