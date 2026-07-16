@@ -34,6 +34,7 @@ const AI_PROVIDER = String(process.env.AI_PROVIDER || (process.env.GEMINI_API_KE
 const hasGemini = () => Boolean(process.env.GEMINI_API_KEY);
 const hasOpenAI = () => Boolean(process.env.OPENAI_API_KEY);
 const aiTextAvailable = () => hasGemini() || hasOpenAI();
+let lastTextProvider = ""; // proveedor que respondió la última llamada de texto (para el campo "source")
 // En producción (Render define RENDER=true) NO hay contraseña por defecto: si falta
 // ADMIN_PASSWORD el login de admin queda deshabilitado. El fallback "admin1234" solo
 // existe para desarrollo local.
@@ -573,7 +574,7 @@ function normalizeAi(payload, fallback) {
     ? { ...payload.breakdown, pieces: Array.isArray(payload.breakdown.pieces) ? payload.breakdown.pieces.map(fixImplausiblePieceMm) : payload.breakdown.pieces }
     : null;
   return {
-    source: "openai",
+    source: lastTextProvider || "openai",
     assistantText: payload?.assistantText || fallback || "Propuesta generada.",
     actions: actions.length ? actions : ["fill_form"],
     items,
@@ -829,12 +830,12 @@ async function callAI(sysPrompt, userContent, useWebSearch = true) {
   if (!primary) { const e = new Error("No hay motor de IA configurado (define GEMINI_API_KEY u OPENAI_API_KEY)."); e.status = 503; throw e; }
   const run = (prov) => prov === "gemini" ? callGemini(sysPrompt, userContent, useWebSearch) : callOpenAI(sysPrompt, userContent, useWebSearch);
   try {
-    return await run(primary);
+    const r = await run(primary); lastTextProvider = primary; return r;
   } catch (e) {
     const fb = (primary === "gemini" && hasOpenAI()) ? "openai" : (primary === "openai" && hasGemini()) ? "gemini" : null;
     if (!fb) throw e;
     console.warn(`[callAI] ${primary} falló (${e.message}); usando respaldo ${fb}`);
-    return await run(fb);
+    const r = await run(fb); lastTextProvider = fb; return r;
   }
 }
 
@@ -1258,7 +1259,7 @@ async function handleSpaceAnalysis(req, res) {
     const parsed = await callAI(spacePrompt, userContent);
     const firstItem = Array.isArray(parsed?.items) ? parsed.items[0] : parsed?.item || null;
     sendJson(res, 200, {
-      source: "openai",
+      source: lastTextProvider || "openai",
       assistantText: parsed?.assistantText || "Analicé el espacio.",
       spaceType: parsed?.spaceType || "otro",
       designPrompt: parsed?.designPrompt || null,
