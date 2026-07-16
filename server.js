@@ -890,8 +890,8 @@ async function callAI(sysPrompt, userContent, useWebSearch = true) {
       // v55.12: si el respaldo TAMBIÉN falla, reporta ambos errores — antes solo se veía el del
       // respaldo (p.ej. "OpenAI sin crédito") y ocultaba la causa real del motor principal.
       const err = new Error(`Los dos motores fallaron — ${primary}: ${e.message} · ${fb}: ${e2.message}`);
-      err.status = e2.status || e.status;
-      err.code = e2.code || e.code;
+      // Sin status/code a propósito: así friendlyAiError NO lo tapa con el mensaje enlatado
+      // de un solo motor (p.ej. "OpenAI sin crédito") y el usuario ve la causa real de ambos.
       throw err;
     }
   }
