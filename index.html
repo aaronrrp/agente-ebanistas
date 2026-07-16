@@ -128,10 +128,10 @@
            portada; los botones Directorio/Empresas/Profesionales/Centro Sostenible
            duplicaban esos accesos y se eliminaron a pedido. -->
       <nav class="public-nav-links" aria-label="Navegación pública">
-        <button class="public-nav-link active" data-public-nav="inicio" type="button">🏠 Inicio</button>
-        <button class="public-nav-link" data-public-nav="trabajos" type="button">💼 Trabajos</button>
-        <button class="public-nav-link" data-public-nav="materiales" type="button">🧱 Materiales</button>
-        <button class="public-nav-link" data-public-nav="calculadoras" type="button">🧮 Calculadoras</button>
+        <button class="public-nav-link active" data-public-nav="inicio" type="button"><span data-icon="home"></span> Inicio</button>
+        <button class="public-nav-link" data-public-nav="trabajos" type="button"><span data-icon="briefcase"></span> Trabajos</button>
+        <button class="public-nav-link" data-public-nav="materiales" type="button"><span data-icon="layers"></span> Materiales</button>
+        <button class="public-nav-link" data-public-nav="calculadoras" type="button"><span data-icon="calculator"></span> Calculadoras</button>
       </nav>
       <button id="publicLoginBtn" class="secondary-btn" type="button">Iniciar sesión</button>
     </header>
@@ -186,52 +186,52 @@
         <!-- Paso 1: elige qué buscas (acción principal) -->
         <div class="home-cards">
           <button class="home-card" type="button" data-home-go="profesionales">
-            <span class="home-card-icon">👷</span>
+            <span class="home-card-icon" data-icon="users" data-icon-circle="var(--brand-blue)"></span>
             <strong>Buscar profesionales</strong>
             <span>Ebanistas, plomeros, electricistas, remodeladores y más — con reseñas reales.</span>
           </button>
           <button class="home-card" type="button" data-home-go="empresas">
-            <span class="home-card-icon">🏢</span>
+            <span class="home-card-icon" data-icon="building" data-icon-circle="var(--gold)"></span>
             <strong>Buscar empresas</strong>
             <span>Ferreterías, melamina, herrajes y maquinaria con catálogos y precios.</span>
           </button>
           <button class="home-card" type="button" data-home-go="retazos">
-            <span class="home-card-icon">♻️</span>
+            <span class="home-card-icon" data-icon="recycle" data-icon-circle="var(--brand-green)"></span>
             <strong>Centro Sostenible</strong>
             <span>Retazos de madera y melamina — compra, vende o regala sobrantes.</span>
           </button>
           <button class="home-card" type="button" data-home-go="trabajos">
-            <span class="home-card-icon">💼</span>
+            <span class="home-card-icon" data-icon="briefcase" data-icon-circle="var(--accent)"></span>
             <strong>Publicar un trabajo</strong>
             <span>Pide presupuesto para tu proyecto y recibe propuestas de profesionales.</span>
           </button>
           <button class="home-card" type="button" data-home-go="materiales">
-            <span class="home-card-icon">🧱</span>
+            <span class="home-card-icon" data-icon="store" data-icon-circle="var(--terracota)"></span>
             <strong>Comparar materiales</strong>
             <span>Busca melamina, MDF, herrajes y más — compara precios entre empresas.</span>
           </button>
           <button class="home-card" type="button" data-home-go="calculadoras">
-            <span class="home-card-icon">🧮</span>
+            <span class="home-card-icon" data-icon="calculator" data-icon-circle="var(--brand-blue)"></span>
             <strong>Calculadoras</strong>
             <span>Cuánta melamina, pintura, piso o herrajes necesitas — gratis y al instante.</span>
           </button>
           <button class="home-card" type="button" data-home-go="academia">
-            <span class="home-card-icon">🎓</span>
+            <span class="home-card-icon" data-icon="graduation" data-icon-circle="var(--gold)"></span>
             <strong>Academia PiLLA</strong>
             <span>Cursos y tutoriales del oficio — aprende gratis, mejora tu trabajo.</span>
           </button>
           <button class="home-card" type="button" data-home-go="inspiracion">
-            <span class="home-card-icon">✨</span>
+            <span class="home-card-icon" data-icon="lightbulb" data-icon-circle="var(--terracota)"></span>
             <strong>Inspiración</strong>
             <span>Diseños reales de cocinas, closets, baños y más para inspirar tu proyecto.</span>
           </button>
           <button class="home-card" type="button" data-home-go="referidos">
-            <span class="home-card-icon">🎁</span>
+            <span class="home-card-icon" data-icon="gift" data-icon-circle="var(--accent)"></span>
             <strong>Invita y gana</strong>
             <span>Por cada persona que se une con tu código, baja 10% de tu mensualidad.</span>
           </button>
           <button class="home-card" type="button" data-home-go="reservas">
-            <span class="home-card-icon">📅</span>
+            <span class="home-card-icon" data-icon="calendar" data-icon-circle="var(--brand-green)"></span>
             <strong>Reservar cita</strong>
             <span>Agenda una visita o cita con el profesional que elijas.</span>
           </button>
@@ -245,7 +245,7 @@
             <strong>Quiero buscar</strong>
             <span>Crea tu cuenta gratis para contactar profesionales y empresas.</span>
             <div class="home-join-actions">
-              <button id="homeConsumerRegisterBtn" class="primary-btn" type="button">✨ Crear cuenta gratis</button>
+              <button id="homeConsumerRegisterBtn" class="primary-btn" type="button"><span data-icon="sparkles"></span> Crear cuenta gratis</button>
               <button id="homeConsumerLoginBtn" class="secondary-btn" type="button">Ya tengo cuenta</button>
             </div>
           </div>
@@ -689,7 +689,7 @@
         <div class="tj-wrap">
           <div class="tj-topbar">
             <button class="secondary-btn" type="button" data-public-nav="inicio">← Inicio</button>
-            <h2>💼 Trabajos</h2>
+            <h2><span data-icon="briefcase"></span> Trabajos</h2>
             <button id="tj_newBtn" class="primary-btn" type="button">+ Publicar solicitud</button>
           </div>
           <p class="public-hero-sub tj-intro">Publica lo que necesitas y recibe propuestas de profesionales. O explora lo que otros están pidiendo.</p>
@@ -767,7 +767,7 @@
         <div class="mk-wrap">
           <div class="mk-topbar">
             <button class="secondary-btn" type="button" data-public-nav="inicio">← Inicio</button>
-            <h2>🧱 Materiales</h2>
+            <h2><span data-icon="layers"></span> Materiales</h2>
           </div>
           <p class="public-hero-sub" style="margin-top:0">Compara precios de materiales entre empresas. Busca lo que necesitas y encuentra la mejor opción cerca de ti.</p>
           <div class="mk-search">
@@ -800,7 +800,7 @@
         <div class="calc-wrap">
           <div class="calc-topbar">
             <button class="secondary-btn" type="button" data-public-nav="inicio">← Inicio</button>
-            <h2>🧮 Calculadoras</h2>
+            <h2><span data-icon="calculator"></span> Calculadoras</h2>
           </div>
           <p class="public-hero-sub" style="margin-top:0">Estima cuánto material necesitas para tu proyecto. Son aproximados e incluyen un margen de desperdicio.</p>
           <div class="calc-grid">
@@ -869,7 +869,7 @@
         <div class="ac-wrap">
           <div class="ac-topbar">
             <button class="secondary-btn" type="button" data-public-nav="inicio">← Inicio</button>
-            <h2>🎓 Academia PiLLA</h2>
+            <h2><span data-icon="graduation"></span> Academia PiLLA</h2>
           </div>
           <p class="public-hero-sub" style="margin-top:0">Aprende del oficio: cursos y tutoriales gratis para profesionales y clientes.</p>
           <div id="ac_list" class="tj-list"></div>
@@ -880,7 +880,7 @@
         <div class="ac-wrap">
           <div class="ac-topbar">
             <button class="secondary-btn" type="button" data-public-nav="inicio">← Inicio</button>
-            <h2>✨ Inspiración</h2>
+            <h2><span data-icon="lightbulb"></span> Inspiración</h2>
           </div>
           <p class="public-hero-sub" style="margin-top:0">Ideas y diseños reales: cocinas, closets, baños, oficinas y más.</p>
           <div id="insp_chips" class="mk-chips"></div>
@@ -905,7 +905,7 @@
         <div class="ac-wrap">
           <div class="ac-topbar">
             <button class="secondary-btn" type="button" data-public-nav="inicio">← Inicio</button>
-            <h2>🎁 Invita y gana</h2>
+            <h2><span data-icon="gift"></span> Invita y gana</h2>
           </div>
           <p class="public-hero-sub" style="margin-top:0">Comparte tu código. Por cada persona que se una con él, se te baja un <strong>10% de tu mensualidad</strong> (hasta llegar gratis).</p>
           <div id="ref_content"><p class="tj-empty">Cargando…</p></div>
@@ -917,7 +917,7 @@
         <div class="ac-wrap">
           <div class="ac-topbar">
             <button class="secondary-btn" type="button" data-public-nav="inicio">← Inicio</button>
-            <h2>📅 Reservar una cita</h2>
+            <h2><span data-icon="calendar"></span> Reservar una cita</h2>
           </div>
           <p class="public-hero-sub" style="margin-top:0">Pide una cita al profesional que elijas. Él la confirma y te avisamos.</p>
           <div id="rv_content"><p class="tj-empty">Cargando…</p></div>
@@ -1901,7 +1901,7 @@
         <!-- ── Catálogo global de categorías + productos por empresa ──────── -->
         <div class="admin-subpanel hidden" data-admin-panel="contenido">
           <section class="panel" style="margin-bottom:1rem">
-            <h3 style="margin-top:0">🎓 Academia — Cursos</h3>
+            <h3 style="margin-top:0"><span data-icon="graduation"></span> Academia — Cursos</h3>
             <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:8px">
               <input id="adm_courseTitle" placeholder="Título del curso*">
               <input id="adm_courseCat" placeholder="Categoría (ej: Ebanistería)">
@@ -1913,7 +1913,7 @@
             <div id="adm_coursesList" style="margin-top:12px"></div>
           </section>
           <section class="panel">
-            <h3 style="margin-top:0">✨ Inspiración — Diseños</h3>
+            <h3 style="margin-top:0"><span data-icon="lightbulb"></span> Inspiración — Diseños</h3>
             <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:8px">
               <input id="adm_inspTitle" placeholder="Título*">
               <select id="adm_inspCat"><option value="cocina">Cocina</option><option value="closet">Closet</option><option value="baño">Baño</option><option value="oficina">Oficina</option><option value="dormitorio">Dormitorio</option><option value="sala">Sala</option><option value="comercial">Comercial</option><option value="otro">Otro</option></select>
@@ -2767,10 +2767,10 @@ Yappy @miempresa"></textarea>
     .aip-inputbar button:disabled{opacity:.5;cursor:default}
     body.ai-designer-active #aiFab, body.ai-designer-active #aiPanel{display:none !important}
   </style>
-  <button id="aiFab" type="button" aria-label="Asistente IA PiLLA">✨<span id="aiFabBadge"></span></button>
+  <button id="aiFab" type="button" aria-label="Asistente IA PiLLA"><span data-icon="sparkles"></span><span id="aiFabBadge"></span></button>
   <div id="aiPanel" role="dialog" aria-label="Asistente PiLLA">
     <div class="aip-head">
-      <span style="font-size:20px">✨</span>
+      <span style="font-size:20px" data-icon="sparkles"></span>
       <span class="aip-title">Asistente PiLLA<small>Con IA · pregúntame lo que sea</small></span>
       <span class="aip-actions">
         <button id="aipNotifBtn" type="button" title="Notificaciones">🔔<span id="aipNotifBadge"></span></button>
@@ -2790,6 +2790,7 @@ Yappy @miempresa"></textarea>
   </div>
 
   <script src="/mobile-bridge.js"></script>
+  <script src="/icons.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

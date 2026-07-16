@@ -12,7 +12,7 @@ const root = join(here, "..");           // raíz del repo (backend + web)
 const www = join(here, "www");           // destino que empaqueta Capacitor
 
 // Requeridos para que la app funcione. El puente (mobile-bridge.js) DEBE ir.
-const REQUIRED = ["index.html", "app.js", "styles.css", "mobile-bridge.js", "pilla-logo.png"];
+const REQUIRED = ["index.html", "app.js", "styles.css", "mobile-bridge.js", "icons.js", "pilla-logo.png"];
 // Opcionales (media del hero): se copian si existen.
 const OPTIONAL = ["panama-hero.jpg", "panama-hero.mp4", "favicon.ico"];
 

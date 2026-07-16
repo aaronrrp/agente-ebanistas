@@ -827,6 +827,10 @@ async function callGemini(sysPrompt, userContent, useWebSearch = true) {
     err.status = apiRes.status; err.code = data.error?.status;
     throw err;
   }
+  // Consumo visible en logs (v55.11) — para comparar costos Gemini vs OpenAI.
+  // Gemini 3.5 Flash cobra por token; estos números salen en los logs de Render.
+  const gu = data.usageMetadata;
+  if (gu) console.log(`[costo] callGemini (${geminiModel}) tokens: entrada=${gu.promptTokenCount || 0} salida=${gu.candidatesTokenCount || 0} total=${gu.totalTokenCount || 0}`);
   const text = (data.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("").trim();
   const parsed = parseJson(text);
   if (parsed) return parsed;
@@ -1437,7 +1441,9 @@ async function editImageWithReference(imageDataUrl, prompt, quality = "high") {
     console.log(`[enhance-sketch] abortando: falta OPENAI_API_KEY (mismo nombre de variable que usan el chat de texto y la generación desde texto)`);
     // 401 (no 503) -- así el cliente puede distinguir "no hay clave" de cualquier otra falla
     // (timeout, excepción de red, etc.) que también cae en el catch de abajo con 503.
-    return { ok: false, status: 401, error: "OPENAI_API_KEY no configurada." };
+    return { ok: false, status: 401, error: hasGemini()
+      ? "La edición con Gemini no dio resultado y no hay OPENAI_API_KEY de respaldo. Intenta de nuevo."
+      : "OPENAI_API_KEY no configurada." };
   }
   const blob = dataUrlToBlob(imageDataUrl);
   if (!blob) {
@@ -2207,7 +2213,7 @@ async function serveStatic(req, res) {
     const pth = url.pathname.toLowerCase();
     const base = pth.slice(pth.lastIndexOf("/") + 1);
     const ext2 = path.extname(pth);
-    const CLIENT_JS = new Set(["/app.js", "/mobile-bridge.js"]);
+    const CLIENT_JS = new Set(["/app.js", "/mobile-bridge.js", "/icons.js"]);
     const DATA_EXT = new Set([".json", ".ndjson", ".env", ".md", ".mjs", ".lock", ".yaml", ".yml", ".map"]);
     const SRC_DIRS = /^\/(routes|lib|node_modules|movil|\.git|\.claude)\//;
     if (DATA_EXT.has(ext2) || (ext2 === ".js" && !CLIENT_JS.has(pth)) || SRC_DIRS.test(pth) || base.startsWith(".")) {

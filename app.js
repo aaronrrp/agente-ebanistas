@@ -455,10 +455,15 @@ async function checkAiBackend() {
   try {
     const response = await fetch("/api/health", { cache: "no-store" });
     const data = response.ok ? await response.json() : null;
-    state.aiBackendAvailable = Boolean(data?.openaiConfigured);
+    // v55.11: la IA es multi-proveedor — disponible con Gemini U OpenAI (antes solo miraba OpenAI
+    // y con solo GEMINI_API_KEY decía "sin clave" aunque Gemini funcionara perfecto).
+    state.aiBackendAvailable = Boolean(data?.geminiConfigured || data?.openaiConfigured);
+    const provLabel = data?.aiProvider === "gemini" ? "Gemini conectado ✓"
+                    : data?.aiProvider === "openai" ? "OpenAI conectado ✓"
+                    : "Modo local activo";
     setAiStatus(
       state.aiBackendAvailable ? "online" : "local",
-      state.aiBackendAvailable ? "OpenAI conectado" : "Modo local activo"
+      state.aiBackendAvailable ? provLabel : "Modo local activo"
     );
   } catch {
     state.aiBackendAvailable = false;
@@ -3150,8 +3155,10 @@ async function postAi(endpoint, body) {
 
 function describeAiError(status, data) {
   const icon = status === 503 ? "⚠️" : status === 429 ? "⏳" : "❌";
+  // v55.11: en 503 se muestra el mensaje real del servidor (multi-proveedor: Gemini u OpenAI),
+  // no un texto fijo de OpenAI.
   return status === 503
-    ? "⚠️ Sin clave de OpenAI. Configura OPENAI_API_KEY en Render."
+    ? `⚠️ ${data?.error || "IA no configurada. Define GEMINI_API_KEY (o OPENAI_API_KEY) en Render."}`
     : `${icon} ${data?.error || "Error desconocido, intenta de nuevo."}`;
 }
 
@@ -3782,7 +3789,7 @@ function clearImageState() {
 // reserva 503 para timeouts/excepciones reales de red al subir la imagen -- mezclar ambos bajo
 // el mismo mensaje fue justo el bug reportado (decía "sin clave" cuando la clave sí existía).
 function describeSketchError(status, data) {
-  if (status === 401) return "⚠️ Sin clave de OpenAI configurada en el servidor. Configura OPENAI_API_KEY en Render.";
+  if (status === 401) return `⚠️ ${data?.error || "No hay clave de IA configurada en el servidor (GEMINI_API_KEY u OPENAI_API_KEY)."}`;
   if (status === 429) return `⏳ ${data?.error || "Demasiadas solicitudes, espera un momento."}`;
   return `❌ ${data?.error || "No se pudo mejorar la imagen, intenta de nuevo."}`;
 }
@@ -4084,7 +4091,9 @@ function renderAssistantOutput(item, prompt, plan = {}) {
     </tr>
   `).join("");
   const hiddenPieces = Math.max(0, pieces.length - 12);
-  const sourceText = plan.source === "openai" ? "OpenAI conectado" : "modo local operativo";
+  const sourceText = plan.source === "gemini" ? "Gemini conectado"
+                   : plan.source === "openai" ? "OpenAI conectado"
+                   : "modo local operativo";
 
   els.assistantOutput.innerHTML = `
     <div class="ai-result">
