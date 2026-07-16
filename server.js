@@ -809,18 +809,30 @@ async function callGemini(sysPrompt, userContent, useWebSearch = true) {
       if (m) parts.push({ inline_data: { mime_type: m[1], data: m[2] } });
     }
   }
-  const reqBody = {
-    system_instruction: { parts: [{ text: sysPrompt }] },
-    contents: [{ role: "user", parts }],
-    generationConfig: { maxOutputTokens: 3500 }
+  const doCall = async (withSearch) => {
+    const reqBody = {
+      system_instruction: { parts: [{ text: sysPrompt }] },
+      contents: [{ role: "user", parts }],
+      generationConfig: { maxOutputTokens: 3500 }
+    };
+    if (withSearch) reqBody.tools = [{ google_search: {} }];
+    const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY },
+      body: JSON.stringify(reqBody)
+    });
+    const data = await apiRes.json();
+    return { apiRes, data };
   };
-  if (useWebSearch) reqBody.tools = [{ google_search: {} }];
-  const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY },
-    body: JSON.stringify(reqBody)
-  });
-  const data = await apiRes.json();
+  let { apiRes, data } = await doCall(useWebSearch);
+  // v55.12: si falló CON búsqueda web (hay keys/modelos/tiers que rechazan la herramienta
+  // google_search), se reintenta UNA vez SIN búsqueda antes de rendirse — la búsqueda es
+  // "nice to have", nunca debe tumbar la respuesta. (Bug real: "¿qué hora es en Panamá?"
+  // activaba búsqueda → Gemini 400 → caía a OpenAI sin crédito → error confuso.)
+  if (!apiRes.ok && useWebSearch) {
+    console.warn(`[callGemini] falló CON google_search (${apiRes.status}: ${data.error?.message || "?"}); reintentando SIN búsqueda`);
+    ({ apiRes, data } = await doCall(false));
+  }
   if (!apiRes.ok) {
     console.error("[callGemini] error response:", JSON.stringify(data));
     const err = new Error(data.error?.message || `Gemini ${apiRes.status}`);
@@ -852,7 +864,16 @@ async function callAI(sysPrompt, userContent, useWebSearch = true) {
     const fb = (primary === "gemini" && hasOpenAI()) ? "openai" : (primary === "openai" && hasGemini()) ? "gemini" : null;
     if (!fb) throw e;
     console.warn(`[callAI] ${primary} falló (${e.message}); usando respaldo ${fb}`);
-    const r = await run(fb); lastTextProvider = fb; return r;
+    try {
+      const r = await run(fb); lastTextProvider = fb; return r;
+    } catch (e2) {
+      // v55.12: si el respaldo TAMBIÉN falla, reporta ambos errores — antes solo se veía el del
+      // respaldo (p.ej. "OpenAI sin crédito") y ocultaba la causa real del motor principal.
+      const err = new Error(`Los dos motores fallaron — ${primary}: ${e.message} · ${fb}: ${e2.message}`);
+      err.status = e2.status || e.status;
+      err.code = e2.code || e.code;
+      throw err;
+    }
   }
 }
 
