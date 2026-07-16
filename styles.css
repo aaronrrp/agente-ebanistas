@@ -2095,6 +2095,14 @@ textarea {
   border-radius: 8px; padding: 6px 10px; font-weight: 800; letter-spacing: 1px; font-size: .9rem; }
 .promo-card-cta { position: absolute; right: 14px; bottom: 12px; font-size: 1.15rem; opacity: .9; }
 
+/* Botón "← Inicio" en vistas públicas que se abren desde las tarjetas (v55.9) */
+.public-back-btn { margin: 14px 0 2px 18px; padding: 6px 14px; font-size: .85rem; }
+
+/* Botón de orquestación del Asistente IA ("Ir a Materiales →", etc.) */
+.aip-nav-btn { align-self: flex-start; background: #F5B400; color: #1A1346; border: none; border-radius: 12px;
+  padding: 9px 14px; font-weight: 800; font-size: .88rem; cursor: pointer; margin-top: 2px; }
+.aip-nav-btn:hover { filter: brightness(1.05); }
+
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    PORTAL DE EMPRESA â€” v45
    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */

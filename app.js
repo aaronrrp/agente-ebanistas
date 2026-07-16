@@ -9680,6 +9680,36 @@ setInterval(updateNotifBadge, 45000);
   let greeted = false;
   const history = [];
 
+  // Orquestación (v55.9): detecta a qué módulo quiere ir el usuario y ofrece un botón
+  // que lo lleva. No navega solo — el usuario confirma con un clic (UX + seguridad).
+  const NAV_MAP = [
+    { view: "materiales",    label: "Materiales",   re: /\b(melamina|material(es)?|l[aá]mina|tablero|herraj|bisagra|corredera|tapacanto|comprar material|ferreter[ií]a)\b/i },
+    { view: "profesionales", label: "Profesionales", re: /\b(ebanista|carpinter|profesional|plomer|electricist|remodelad|instalad|maestro de obra|directorio)\b/i },
+    { view: "empresas",      label: "Empresas",     re: /\b(empresa|distribuidor|proveedor|fabricante)\b/i },
+    { view: "trabajos",      label: "Trabajos",     re: /\b(trabajo|empleo|vacante|contratar|chamba|oportunidad laboral)\b/i },
+    { view: "retazos",       label: "Retazos",      re: /\b(retazo|sobrante|reciclad|desperdicio)\b/i },
+    { view: "calculadoras",  label: "Calculadoras", re: /\b(calcul|cu[aá]nt[oa]s?\s+(l[aá]minas?|material|pintura|piso|drywall)|metros cuadrados)\b/i },
+    { view: "reservas",      label: "Reservas",     re: /\b(reserv|agendar|cita|turno)\b/i }
+  ];
+  function detectNav(message) {
+    const t = String(message || "");
+    for (const n of NAV_MAP) if (n.re.test(t)) return n;
+    return null;
+  }
+  function appendNavButton(nav) {
+    const btn = document.createElement("button");
+    btn.className = "aip-nav-btn";
+    btn.type = "button";
+    btn.textContent = "Ir a " + nav.label + " →";
+    btn.addEventListener("click", () => {
+      closePanel();
+      if (typeof publicNavRequest === "function") publicNavRequest(nav.view);
+      else if (typeof publicNavGo === "function") publicNavGo(nav.view);
+    });
+    thread.appendChild(btn);
+    thread.scrollTop = thread.scrollHeight;
+  }
+
   function addMsg(text, who) {
     const d = document.createElement("div");
     d.className = "aip-msg " + who;
@@ -9725,6 +9755,7 @@ setInterval(updateNotifBadge, 45000);
         ? (data.assistantText || "Listo.")
         : (data.error || "Ahora mismo no puedo responder. Intenta en un momento.");
       if (res.ok && data.assistantText) history.push({ role: "assistant", text: data.assistantText });
+      if (res.ok) { const nav = detectNav(msg); if (nav) appendNavButton(nav); }
     } catch {
       typing.textContent = "Sin conexión con la IA. Revisa tu internet e intenta de nuevo.";
     } finally {
