@@ -8863,6 +8863,7 @@ function showPublicDirectorio(initialView = "inicio") {
   }
   initLocationSelects();
   loadPublicBanner();
+  loadPublicPromos();
   publicNavGo(initialView);
 }
 
@@ -8876,10 +8877,18 @@ async function loadPublicBanner() {
     const res = await fetch("/api/ads?type=banner_principal");
     const list = res.ok ? await res.json() : [];
     if (!list.length) { slot.innerHTML = ""; return; }
-    const ad = list[0];
+    // Rotación: si hay varios banners activos, se elige uno al azar por carga.
+    const ad = list[Math.floor(Math.random() * list.length)];
+    const inner = ad.imageUrl
+      ? `<img src="${escapeHtml(ad.imageUrl)}" alt="${escapeHtml(ad.title)}">`
+      : `<div class="public-banner-fallback">${escapeHtml(ad.title)}</div>`;
     slot.innerHTML = `
-      <a href="${escapeHtml(ad.linkUrl || "#")}" target="_blank" rel="noopener" id="publicBannerLink" data-ad-id="${ad.id}" class="public-banner-link">
-        ${ad.imageUrl ? `<img src="${escapeHtml(ad.imageUrl)}" alt="${escapeHtml(ad.title)}">` : `<div class="public-banner-fallback">${escapeHtml(ad.title)}</div>`}
+      <a href="${escapeHtml(ad.linkUrl || "#")}" ${ad.linkUrl ? 'target="_blank" rel="noopener"' : ""} id="publicBannerLink" data-ad-id="${ad.id}" class="public-banner-link">
+        <div class="public-banner-inner">
+          <span class="public-banner-tag">Publicidad</span>
+          ${inner}
+          ${ad.linkUrl ? `<span class="public-banner-cta">Ver más →</span>` : ""}
+        </div>
       </a>`;
     fetch(`/api/ads/${ad.id}/impression`, { method: "POST" }).catch(() => {});
   } catch { slot.innerHTML = ""; }
@@ -8888,6 +8897,36 @@ document.getElementById("publicBannerSlot")?.addEventListener("click", (e) => {
   const link = e.target.closest("[data-ad-id]");
   if (!link) return;
   fetch(`/api/ads/${link.dataset.adId}/click`, { method: "POST" }).catch(() => {});
+});
+
+// Promociones y cupones activos — tira de tarjetas atractiva en la portada (v55.8).
+async function loadPublicPromos() {
+  const slot = document.getElementById("publicPromosSlot");
+  if (!slot) return;
+  try {
+    const [promos, cupones] = await Promise.all([
+      fetch("/api/ads?type=promocion").then(r => r.ok ? r.json() : []),
+      fetch("/api/ads?type=cupon").then(r => r.ok ? r.json() : [])
+    ]);
+    const list = [...(promos || []), ...(cupones || [])].slice(0, 8);
+    if (!list.length) { slot.innerHTML = ""; return; }
+    const cards = list.map(ad => {
+      const isCupon = ad.type === "cupon";
+      const code = ad.couponCode ? `<span class="promo-card-code">🎟 ${escapeHtml(ad.couponCode)}</span>` : "";
+      return `<a href="${escapeHtml(ad.linkUrl || "#")}" ${ad.linkUrl ? 'target="_blank" rel="noopener"' : ""} class="promo-card${isCupon ? " cupon" : ""}" data-ad-id="${ad.id}">
+        <div class="promo-card-type">${isCupon ? "🎟 Cupón" : "🔥 Promoción"}</div>
+        <div class="promo-card-title">${escapeHtml(ad.title)}</div>
+        ${code}
+        <span class="promo-card-cta">→</span>
+      </a>`;
+    }).join("");
+    slot.innerHTML = `<div class="public-promos"><p class="public-promos-head">Promociones y ofertas</p><div class="public-promos-grid">${cards}</div></div>`;
+    list.forEach(ad => fetch(`/api/ads/${ad.id}/impression`, { method: "POST" }).catch(() => {}));
+  } catch { slot.innerHTML = ""; }
+}
+document.getElementById("publicPromosSlot")?.addEventListener("click", (e) => {
+  const link = e.target.closest("[data-ad-id]");
+  if (link) fetch(`/api/ads/${link.dataset.adId}/click`, { method: "POST" }).catch(() => {});
 });
 
 function professionalCategoryLabel(value) {
