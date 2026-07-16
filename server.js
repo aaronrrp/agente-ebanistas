@@ -40,6 +40,15 @@ let lastTextProvider = ""; // proveedor que respondió la última llamada de tex
 // vuelve a intentar en las siguientes llamadas (evita reintentos repetidos).
 let geminiSearchOk = true;
 let geminiThinkingOk = true;
+// v55.15 — las API keys nuevas de Google (formato "AQ.…") pueden requerir Authorization:
+// Bearer en vez del clásico x-goog-api-key. Se prueba uno; si la API lo rechaza, se
+// cambia al otro y se memoriza. Así el código sirve para ambas generaciones de keys.
+let geminiUseBearer = false;
+function geminiHeaders() {
+  return geminiUseBearer
+    ? { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.GEMINI_API_KEY}` }
+    : { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY };
+}
 // En producción (Render define RENDER=true) NO hay contraseña por defecto: si falta
 // ADMIN_PASSWORD el login de admin queda deshabilitado. El fallback "admin1234" solo
 // existe para desarrollo local.
@@ -827,7 +836,7 @@ async function callGemini(sysPrompt, userContent, useWebSearch = true) {
     if (withSearch) reqBody.tools = [{ google_search: {} }];
     const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY },
+      headers: geminiHeaders(),
       body: JSON.stringify(reqBody)
     });
     const data = await apiRes.json();
@@ -852,6 +861,16 @@ async function callGemini(sysPrompt, userContent, useWebSearch = true) {
   if (apiRes.ok) {
     if (s0 && !usado[0]) { geminiSearchOk = false; console.warn("[callGemini] búsqueda web desactivada para esta key/modelo (memorizado)"); }
     if (t0 && !usado[1]) { geminiThinkingOk = false; console.warn("[callGemini] thinkingConfig no soportado — se deja el razonamiento por defecto (memorizado)"); }
+  }
+  // v55.15: si todo falló con pinta de AUTENTICACIÓN (400/401/403), prueba el otro estilo
+  // de header (x-goog-api-key ↔ Authorization: Bearer) con la petición mínima. Las keys
+  // nuevas de Google ("AQ.…") pueden requerir Bearer; las clásicas ("AIza…") usan el header.
+  if (!apiRes.ok && [400, 401, 403].includes(apiRes.status)) {
+    geminiUseBearer = !geminiUseBearer;
+    console.warn(`[callGemini] probando estilo de auth alterno: ${geminiUseBearer ? "Authorization: Bearer" : "x-goog-api-key"}`);
+    ({ apiRes, data } = await doCall(false, false));
+    if (!apiRes.ok) { geminiUseBearer = !geminiUseBearer; } // tampoco sirvió → revertir
+    else console.warn("[callGemini] estilo de auth alterno FUNCIONÓ (memorizado para las próximas llamadas)");
   }
   if (!apiRes.ok) {
     console.error("[callGemini] error response:", JSON.stringify(data));
@@ -1344,7 +1363,7 @@ const PROVIDER_TIMEOUT_MS = 38000; // deja espacio para que el reintento entero 
 async function generateImageGemini(prompt) {
   const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiImageModel}:generateContent`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY },
+    headers: geminiHeaders(),
     body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }] }),
     signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS)
   });
@@ -1452,7 +1471,7 @@ async function editImageGemini(imageDataUrl, prompt) {
   if (!m) return null;
   const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiImageModel}:generateContent`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY },
+    headers: geminiHeaders(),
     body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }, { inline_data: { mime_type: m[1], data: m[2] } }] }] }),
     signal: AbortSignal.timeout(EDIT_TIMEOUT_MS)
   });
