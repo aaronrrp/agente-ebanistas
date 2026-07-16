@@ -4,6 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PiLLA — Profesionales que construyen soluciones</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -11,7 +14,7 @@
   <!-- ── LOADING OVERLAY (visible until tryAutoLogin resolves) ─── -->
   <div id="appLoading" style="position:fixed;inset:0;background:#fff;display:flex;align-items:center;justify-content:center;z-index:9999">
     <div style="text-align:center;font-family:sans-serif;color:#6B7280">
-      <div style="font-size:2.4rem;margin-bottom:10px;font-weight:900;color:#3B2D8F;letter-spacing:-1px">Pi<span style="color:#F5B400">L</span>LA</div>
+      <div style="font-size:2.4rem;margin-bottom:10px;font-weight:900;color:#2D235F;letter-spacing:-1px">Pi<span style="color:#F9A825">L</span>LA</div>
       <p style="margin:0;font-size:0.95rem">Cargando…</p>
     </div>
   </div>
@@ -20,7 +23,7 @@
   <div id="loginScreen" class="login-screen" style="display:none">
     <button id="loginBackBtn" class="login-back-btn" type="button">← Volver al inicio</button>
     <div class="login-card">
-      <div class="login-logo" style="font-size:2.2rem;font-weight:900;letter-spacing:-1px;color:#3B2D8F;line-height:1">Pi<span style="color:#F5B400">L</span>LA</div>
+      <div class="login-logo" style="font-size:2.2rem;font-weight:900;letter-spacing:-1px;color:#2D235F;line-height:1">Pi<span style="color:#F9A825">L</span>LA</div>
       <h1 class="login-title">PiLLA</h1>
       <p class="login-subtitle">Inicia sesión en tu cuenta</p>
 
@@ -142,7 +145,7 @@
       <section id="publicHomeView">
         <!-- Hero estilo "glass" con fondo de Panamá + título animado -->
         <style>
-          .pilla-hero{position:relative;min-height:78vh;display:flex;flex-direction:column;justify-content:flex-end;border-radius:22px;overflow:hidden;margin:0 0 1.75rem;padding:2rem 1.7rem 2.2rem;background:linear-gradient(135deg,#3B2D8F,#1A1346)}
+          .pilla-hero{position:relative;min-height:78vh;display:flex;flex-direction:column;justify-content:flex-end;border-radius:22px;overflow:hidden;margin:0 0 1.75rem;padding:2rem 1.7rem 2.2rem;background:linear-gradient(135deg,#2D235F,#211A47)}
           .pilla-hero-bg{position:absolute;inset:0;z-index:0}
           .pilla-hero-bg video{width:100%;height:100%;object-fit:cover;display:block}
           .pilla-hero-bg::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(26,19,70,.12) 0%,rgba(26,19,70,.04) 42%,rgba(26,19,70,.80) 100%)}
@@ -152,7 +155,7 @@
           .pilla-hero .hero-ctas{display:flex;flex-wrap:wrap;gap:12px}
           .pilla-hero .hero-btn{padding:13px 28px;border-radius:12px;font-weight:700;font-size:1rem;cursor:pointer;border:none;transition:transform .15s,box-shadow .15s}
           .pilla-hero .hero-btn:hover{transform:translateY(-2px)}
-          .pilla-hero .hero-btn-primary{background:#F5B400;color:#1A1346;box-shadow:0 6px 18px rgba(245,180,0,.35)}
+          .pilla-hero .hero-btn-primary{background:#F9A825;color:#211A47;box-shadow:0 6px 18px rgba(245,180,0,.35)}
           .pilla-hero .hero-btn-glass{color:#fff}
           .pilla-hero .hero-tag{position:absolute;right:1.7rem;bottom:2.2rem;z-index:2;padding:12px 20px;border-radius:14px;color:#fff;font-weight:300;font-size:clamp(.9rem,1.8vw,1.3rem)}
           .liquid-glass{background:rgba(26,19,70,.35);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.22);box-shadow:inset 0 1px 1px rgba(255,255,255,.14)}
@@ -649,7 +652,7 @@
       <style>
         .tj-wrap{max-width:960px;margin:0 auto;padding:0 4px}
         .tj-topbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:1rem 0 .25rem}
-        .tj-topbar h2{margin:0;flex:1;font-size:1.4rem;color:var(--oscuro,#1A1346)}
+        .tj-topbar h2{margin:0;flex:1;font-size:1.4rem;color:var(--oscuro,#211A47)}
         .tj-intro{margin-top:0}
         .tj-tabs{max-width:420px}
         .tj-form{margin-top:1rem}
@@ -658,9 +661,9 @@
         .tj-form-actions{display:flex;gap:8px;margin-top:12px}
         .tj-list{margin-top:1rem;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
         .tj-card{background:#fff;border:1px solid #ece9f5;border-radius:14px;padding:16px;box-shadow:0 2px 10px rgba(26,19,70,.06)}
-        .tj-card h4{margin:.35rem 0;color:var(--oscuro,#1A1346);font-size:1.05rem}
+        .tj-card h4{margin:.35rem 0;color:var(--oscuro,#211A47);font-size:1.05rem}
         .tj-card-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
-        .tj-cat{background:#efeafd;color:#3B2D8F;font-size:.72rem;font-weight:700;padding:3px 9px;border-radius:999px;text-transform:capitalize}
+        .tj-cat{background:#efeafd;color:#2D235F;font-size:.72rem;font-weight:700;padding:3px 9px;border-radius:999px;text-transform:capitalize}
         .tj-time{color:#9ca3af;font-size:.78rem}
         .tj-desc{color:#4b5563;font-size:.9rem;margin:.25rem 0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
         .tj-meta{color:#6B7280;font-size:.85rem;margin-top:.35rem}
@@ -676,7 +679,7 @@
         .tj-proposals{margin-top:.75rem;border-top:1px dashed #e5e1f2;padding-top:.6rem;display:flex;flex-direction:column;gap:10px}
         .tj-prop{background:#faf9ff;border:1px solid #ece9f5;border-radius:10px;padding:12px}
         .tj-prop-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-        .tj-prop-price{margin-left:auto;font-weight:800;color:#3B2D8F}
+        .tj-prop-price{margin-left:auto;font-weight:800;color:#2D235F}
         .tj-rep{color:#fff;font-size:.68rem;font-weight:800;padding:2px 8px;border-radius:999px}
         .tj-prop-meta{color:#6B7280;font-size:.8rem;margin:.35rem 0}
         .tj-prop-msg{color:#374151;font-size:.9rem;margin:.35rem 0;white-space:pre-wrap}
@@ -737,23 +740,23 @@
       <style>
         .mk-wrap{max-width:960px;margin:0 auto;padding:0 4px}
         .mk-topbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:1rem 0 .25rem}
-        .mk-topbar h2{margin:0;font-size:1.4rem;color:var(--oscuro,#1A1346)}
+        .mk-topbar h2{margin:0;font-size:1.4rem;color:var(--oscuro,#211A47)}
         .mk-search{display:flex;gap:8px;margin:.75rem 0}
         .mk-search input{flex:1;padding:12px 14px;border:1px solid #d9d4ec;border-radius:12px;font-size:1rem}
         .mk-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:.5rem}
-        .mk-chip{background:#efeafd;color:#3B2D8F;border:none;border-radius:999px;padding:6px 12px;font-size:.85rem;font-weight:600;cursor:pointer}
+        .mk-chip{background:#efeafd;color:#2D235F;border:none;border-radius:999px;padding:6px 12px;font-size:.85rem;font-weight:600;cursor:pointer}
         .mk-chip:hover{background:#e0d8fb}
         .mk-chip span{opacity:.6;font-weight:800}
         .mk-sort{color:#6B7280;font-size:.85rem;margin:.25rem 0 .75rem;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
         .mk-sort-btn{background:none;border:1px solid #e5e1f2;border-radius:999px;padding:5px 12px;font-size:.82rem;cursor:pointer;color:#4b5563}
-        .mk-sort-btn.active{background:#3B2D8F;color:#fff;border-color:#3B2D8F}
+        .mk-sort-btn.active{background:#2D235F;color:#fff;border-color:#2D235F}
         .mk-card h4{display:flex;flex-wrap:wrap;gap:4px;align-items:baseline}
         .mk-brand{color:#6B7280;font-weight:600;font-size:.9rem}
         .mk-specs{color:#6B7280;font-size:.85rem;margin:.15rem 0}
-        .mk-price{font-size:1.35rem;font-weight:900;color:#3B2D8F;margin:.35rem 0}
+        .mk-price{font-size:1.35rem;font-weight:900;color:#2D235F;margin:.35rem 0}
         .mk-old{color:#9ca3af;text-decoration:line-through;font-size:.95rem;font-weight:600;margin-right:6px}
         .mk-co{border-top:1px solid #f3f1fa;padding-top:.5rem;margin-top:.35rem;font-size:.85rem;color:#374151;display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px}
-        .mk-rating{color:#F5B400;font-weight:700}
+        .mk-rating{color:#F9A825;font-weight:700}
         .mk-stock{font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:999px}
         .mk-stock-in_stock{background:#dcfce7;color:#166534}
         .mk-stock-on_order{background:#fef9c3;color:#854d0e}
@@ -784,13 +787,13 @@
       <style>
         .calc-wrap{max-width:900px;margin:0 auto;padding:0 4px}
         .calc-topbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:1rem 0 .25rem}
-        .calc-topbar h2{margin:0;font-size:1.4rem;color:var(--oscuro,#1A1346)}
+        .calc-topbar h2{margin:0;font-size:1.4rem;color:var(--oscuro,#211A47)}
         .calc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px;margin-top:1rem}
         .calc-card{background:#fff;border:1px solid #ece9f5;border-radius:14px;padding:16px;box-shadow:0 2px 10px rgba(26,19,70,.06)}
-        .calc-card h4{margin:0 0 .5rem;color:var(--oscuro,#1A1346);font-size:1rem}
+        .calc-card h4{margin:0 0 .5rem;color:var(--oscuro,#211A47);font-size:1rem}
         .calc-card label{display:block;font-size:.85rem;color:#4b5563;margin:.4rem 0}
         .calc-card input{width:100%;padding:8px 10px;border:1px solid #d9d4ec;border-radius:8px;font-size:.95rem;margin-top:2px}
-        .calc-out{margin-top:.6rem;background:#f5f3ff;border-radius:10px;padding:10px 12px;font-weight:800;color:#3B2D8F;font-size:1.05rem;text-align:center}
+        .calc-out{margin-top:.6rem;background:#f5f3ff;border-radius:10px;padding:10px 12px;font-weight:800;color:#2D235F;font-size:1.05rem;text-align:center}
         .calc-note{font-size:.75rem;color:#9ca3af;margin-top:.35rem}
       </style>
       <section id="publicCalculadorasView" class="hidden">
@@ -851,8 +854,8 @@
       <style>
         .ac-wrap{max-width:960px;margin:0 auto;padding:0 4px}
         .ac-topbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:1rem 0 .25rem}
-        .ac-topbar h2{margin:0;font-size:1.4rem;color:var(--oscuro,#1A1346)}
-        .mk-chip.active{background:#3B2D8F;color:#fff}
+        .ac-topbar h2{margin:0;font-size:1.4rem;color:var(--oscuro,#211A47)}
+        .mk-chip.active{background:#2D235F;color:#fff}
         .ac-card .ac-thumb{height:130px;background:#efeafd center/cover no-repeat;border-radius:10px;margin:-2px 0 .6rem}
         .ac-level{background:#fef3c7;color:#92400e;font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:999px;text-transform:capitalize}
         .insp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-top:1rem}
@@ -887,7 +890,7 @@
 
       <!-- Vista: REFERIDOS (Ola 4, #11) -->
       <style>
-        .ref-card{background:linear-gradient(135deg,#3B2D8F,#1A1346);color:#fff;border-radius:16px;padding:22px;text-align:center;max-width:420px;margin:1rem auto}
+        .ref-card{background:linear-gradient(135deg,#2D235F,#211A47);color:#fff;border-radius:16px;padding:22px;text-align:center;max-width:420px;margin:1rem auto}
         .ref-label{font-size:.8rem;opacity:.8}
         .ref-code{font-size:2rem;font-weight:900;letter-spacing:2px;margin:.3rem 0}
         .ref-actions{display:flex;gap:8px;justify-content:center;margin:.75rem 0;flex-wrap:wrap}
@@ -1467,7 +1470,7 @@
   <div class="app-shell" id="appShell" style="display:none">
     <aside class="sidebar">
       <div class="brand-lockup">
-        <div class="brand-mark" id="sidebarLogoMark" style="font-size:.95rem;font-weight:900;letter-spacing:-0.5px;background:#3B2D8F;color:#fff">Pi<span style="color:#F5B400">L</span></div>
+        <div class="brand-mark" id="sidebarLogoMark" style="font-size:.95rem;font-weight:900;letter-spacing:-0.5px;background:#2D235F;color:#fff">Pi<span style="color:#F9A825">L</span></div>
         <div>
           <strong style="font-weight:900;letter-spacing:-0.5px">PiLLA</strong>
           <span>Plataforma</span>
@@ -2702,22 +2705,22 @@ Yappy @miempresa"></textarea>
 
   <!-- Centro de notificaciones (Ola 4, #13) — flotante, aparece con sesión -->
   <style>
-    #notifBell{position:fixed;right:18px;bottom:18px;z-index:900;width:52px;height:52px;border-radius:50%;background:#3B2D8F;color:#fff;border:none;box-shadow:0 6px 20px rgba(26,19,70,.3);font-size:22px;cursor:pointer;display:none;align-items:center;justify-content:center}
+    #notifBell{position:fixed;right:18px;bottom:18px;z-index:900;width:52px;height:52px;border-radius:50%;background:#2D235F;color:#fff;border:none;box-shadow:0 6px 20px rgba(26,19,70,.3);font-size:22px;cursor:pointer;display:none;align-items:center;justify-content:center}
     #notifBell.show{display:flex}
     /* v54.27: en el asistente de IA la campana tapa el botón enviar (↑) → ocultarla ahí */
     body.ai-designer-active #notifBell, body.ai-designer-active #notifPanel{display:none !important}
-    #notifBadge{position:absolute;top:-4px;right:-4px;background:#F5B400;color:#1A1346;font-size:.72rem;font-weight:900;min-width:20px;height:20px;border-radius:999px;display:none;align-items:center;justify-content:center;padding:0 5px}
+    #notifBadge{position:absolute;top:-4px;right:-4px;background:#F9A825;color:#211A47;font-size:.72rem;font-weight:900;min-width:20px;height:20px;border-radius:999px;display:none;align-items:center;justify-content:center;padding:0 5px}
     #notifBadge.show{display:flex}
     #notifPanel{position:fixed;right:18px;bottom:80px;z-index:901;width:340px;max-width:calc(100vw - 36px);max-height:70vh;background:#fff;border-radius:16px;box-shadow:0 12px 40px rgba(26,19,70,.28);overflow:hidden;display:none;flex-direction:column}
     #notifPanel.show{display:flex}
-    .notif-head{background:#1A1346;color:#fff;padding:12px 16px;font-weight:800;display:flex;justify-content:space-between;align-items:center}
+    .notif-head{background:#211A47;color:#fff;padding:12px 16px;font-weight:800;display:flex;justify-content:space-between;align-items:center}
     .notif-head button{background:none;border:none;color:#c9c2ea;font-size:.78rem;cursor:pointer}
     .notif-list{overflow-y:auto;padding:6px}
     .notif-item{padding:11px 12px;border-radius:10px;display:flex;gap:10px}
     .notif-item.unread{background:#f3f0ff}
-    .notif-dot{width:8px;height:8px;border-radius:50%;background:#3B2D8F;margin-top:6px;flex-shrink:0}
+    .notif-dot{width:8px;height:8px;border-radius:50%;background:#2D235F;margin-top:6px;flex-shrink:0}
     .notif-item.read .notif-dot{background:transparent}
-    .notif-body strong{display:block;font-size:.9rem;color:#1A1346}
+    .notif-body strong{display:block;font-size:.9rem;color:#211A47}
     .notif-body span{font-size:.82rem;color:#6B7280}
     .notif-time{font-size:.7rem;color:#9ca3af;margin-top:2px;display:block}
     .notif-empty{padding:2rem 1rem;text-align:center;color:#9ca3af;font-size:.9rem}
@@ -2733,34 +2736,34 @@ Yappy @miempresa"></textarea>
   <style>
     #notifBell{display:none !important} /* la campana deja de ser la bolita principal */
     #aiFab{position:fixed;right:18px;bottom:18px;z-index:900;width:58px;height:58px;border-radius:50%;
-      background:linear-gradient(135deg,#5B3FD6,#3B2D8F);color:#fff;border:none;
+      background:linear-gradient(135deg,#4A3F94,#2D235F);color:#fff;border:none;
       box-shadow:0 8px 22px rgba(59,45,143,.42);font-size:26px;cursor:pointer;display:flex;
       align-items:center;justify-content:center;transition:transform .15s}
     #aiFab:hover{transform:translateY(-2px) scale(1.05)}
-    #aiFabBadge{position:absolute;top:-3px;right:-3px;background:#F5B400;color:#1A1346;font-size:.72rem;
+    #aiFabBadge{position:absolute;top:-3px;right:-3px;background:#F9A825;color:#211A47;font-size:.72rem;
       font-weight:900;min-width:20px;height:20px;border-radius:999px;display:none;align-items:center;justify-content:center;padding:0 5px}
     #aiFabBadge.show{display:flex}
     #aiPanel{position:fixed;right:18px;bottom:88px;z-index:901;width:370px;max-width:calc(100vw - 36px);
       height:min(560px,72vh);background:#fff;border-radius:18px;box-shadow:0 14px 44px rgba(26,19,70,.32);
       overflow:hidden;display:none;flex-direction:column}
     #aiPanel.show{display:flex}
-    .aip-head{background:linear-gradient(135deg,#3B2D8F,#1A1346);color:#fff;padding:12px 14px;display:flex;align-items:center;gap:10px}
+    .aip-head{background:linear-gradient(135deg,#2D235F,#211A47);color:#fff;padding:12px 14px;display:flex;align-items:center;gap:10px}
     .aip-title{font-weight:800;font-size:.98rem;line-height:1.15}
     .aip-title small{display:block;font-weight:500;font-size:.72rem;color:#c9c2ea}
     .aip-actions{margin-left:auto;display:flex;gap:6px}
     .aip-actions button{background:rgba(255,255,255,.14);border:none;color:#fff;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:15px;position:relative;display:flex;align-items:center;justify-content:center}
-    #aipNotifBadge{position:absolute;top:-4px;right:-4px;background:#F5B400;color:#1A1346;font-size:.6rem;font-weight:900;min-width:16px;height:16px;border-radius:999px;display:none;align-items:center;justify-content:center;padding:0 4px}
+    #aipNotifBadge{position:absolute;top:-4px;right:-4px;background:#F9A825;color:#211A47;font-size:.6rem;font-weight:900;min-width:16px;height:16px;border-radius:999px;display:none;align-items:center;justify-content:center;padding:0 4px}
     #aipNotifBadge.show{display:flex}
     .aip-thread{flex:1;overflow-y:auto;padding:12px;background:#f7f6fb;display:flex;flex-direction:column;gap:8px}
     .aip-msg{max-width:86%;padding:9px 12px;border-radius:14px;font-size:.9rem;line-height:1.4;white-space:pre-wrap;word-wrap:break-word}
-    .aip-msg.user{align-self:flex-end;background:#3B2D8F;color:#fff;border-bottom-right-radius:4px}
-    .aip-msg.bot{align-self:flex-start;background:#fff;color:#1A1346;border:1px solid #ece9f6;border-bottom-left-radius:4px}
+    .aip-msg.user{align-self:flex-end;background:#2D235F;color:#fff;border-bottom-right-radius:4px}
+    .aip-msg.bot{align-self:flex-start;background:#fff;color:#211A47;border:1px solid #ece9f6;border-bottom-left-radius:4px}
     .aip-chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 8px;background:#f7f6fb}
-    .aip-chip{background:#efeafc;color:#3B2D8F;border:none;border-radius:999px;padding:6px 11px;font-size:.8rem;font-weight:600;cursor:pointer}
+    .aip-chip{background:#efeafc;color:#2D235F;border:none;border-radius:999px;padding:6px 11px;font-size:.8rem;font-weight:600;cursor:pointer}
     .aip-inputbar{display:flex;gap:8px;padding:10px;border-top:1px solid #ece9f6;background:#fff}
     .aip-inputbar input{flex:1;border:1px solid #ddd;border-radius:12px;padding:10px 12px;font-size:.9rem;outline:none}
-    .aip-inputbar input:focus{border-color:#3B2D8F}
-    .aip-inputbar button{background:#3B2D8F;color:#fff;border:none;border-radius:12px;width:44px;font-size:18px;cursor:pointer}
+    .aip-inputbar input:focus{border-color:#2D235F}
+    .aip-inputbar button{background:#2D235F;color:#fff;border:none;border-radius:12px;width:44px;font-size:18px;cursor:pointer}
     .aip-inputbar button:disabled{opacity:.5;cursor:default}
     body.ai-designer-active #aiFab, body.ai-designer-active #aiPanel{display:none !important}
   </style>
