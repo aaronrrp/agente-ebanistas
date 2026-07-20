@@ -29,8 +29,9 @@ const imageModel = process.env.OPENAI_IMAGE_MODEL || "gpt-image-1";
 // Gemini si hay GEMINI_API_KEY, si no OpenAI. Ambos se llaman por fetch (cero deps).
 // Los modelos son configurables por si Google/OpenAI cambian los nombres.
 const geminiModel = process.env.GEMINI_MODEL || "gemini-3.5-flash";
-// v55.18: modelo Gemini de RESPALDO si el primario está saturado ("high demand"). Más estable.
-const geminiModelFallback = process.env.GEMINI_MODEL_FALLBACK || "gemini-2.5-flash";
+// v55.18: modelo Gemini de RESPALDO si el primario está saturado ("high demand") o no existe.
+// v55.21: 2.5-flash fue retirado para cuentas nuevas → se usa 2.0-flash (estable y disponible).
+const geminiModelFallback = process.env.GEMINI_MODEL_FALLBACK || "gemini-2.0-flash";
 const geminiImageModel = process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image";
 const AI_PROVIDER = String(process.env.AI_PROVIDER || (process.env.GEMINI_API_KEY ? "gemini" : "openai")).toLowerCase();
 const hasGemini = () => Boolean(process.env.GEMINI_API_KEY);
@@ -892,8 +893,10 @@ async function callGemini(sysPrompt, userContent, useWebSearch = true) {
 
   // v55.18: si el modelo primario está SATURADO (429/503 "high demand"/overloaded), se cae a un
   // modelo Gemini de respaldo más estable — el chat aguanta los picos SIN necesitar OpenAI.
-  const isOverload = (r, d) => r.status === 429 || r.status === 503 ||
-    /overloaded|high demand|unavailable|exhausted|try again later/i.test(d?.error?.message || "");
+  // v55.21: además de saturación (429/503), también cae al siguiente modelo si el actual fue
+  // RETIRADO o no existe ("no longer available"/"not found"/404) — Google retira modelos seguido.
+  const isOverload = (r, d) => r.status === 429 || r.status === 503 || r.status === 404 ||
+    /overloaded|high demand|unavailable|exhausted|try again later|no longer available|not found|not supported|does not exist|is not found/i.test(d?.error?.message || "");
   const modelos = geminiModelFallback && geminiModelFallback !== geminiModel
     ? [geminiModel, geminiModelFallback] : [geminiModel];
   let apiRes, data;
@@ -1320,7 +1323,7 @@ async function handleAi(req, res) {
   // systemPrompt gigante de ebanistería → muchísimos menos tokens de entrada = respuestas casi
   // instantáneas y más baratas. Sin búsqueda web (velocidad). Se activa con { lite: true }.
   if (payload.lite) {
-    const LITE_PROMPT = `Eres el asistente de PiLLA, plataforma para profesionales de la construcción y el mueble en Panamá. Responde CUALQUIER pregunta (dudas, ideas, cálculos, cómo usar la plataforma, temas generales) de forma BREVE, clara y útil, en español y en texto natural (NUNCA JSON). Si el usuario quiere el diseño técnico completo de un mueble (render + despiece + cortes), sugiérele abrir la sección "Diseñar IA". Sé directo y rápido.`;
+    const LITE_PROMPT = `Eres el asistente de PiLLA, plataforma para profesionales y clientes de la construcción y el mueble en Panamá. RESPONDE SIEMPRE EN ESPAÑOL (de Panamá), aunque te escriban en otro idioma — nunca respondas en inglés. Atiendes a cualquier persona, esté registrada o no. Responde CUALQUIER pregunta (dudas sencillas, ideas, cálculos, precios orientativos, cómo usar la plataforma, temas generales) de forma BREVE, clara y amable, en texto natural (NUNCA JSON). Si el usuario quiere el diseño técnico completo de un mueble (render + despiece + cortes), invítalo amablemente a abrir la sección "Diseñar IA". Sé directo y rápido.`;
     const hist = Array.isArray(payload.history)
       ? payload.history.slice(-6).map(h => `${h.role === "user" ? "Usuario" : "Asistente"}: ${h.text}`).join("\n") : "";
     const liteText = (hist ? hist + "\n" : "") + "Usuario: " + String(payload.message || "");
