@@ -54,15 +54,15 @@
         <p id="loginClientError" class="login-error hidden"></p>
       </div>
 
-      <!-- Tab: ebanista por código -->
+      <!-- Tab: ebanista (correo + contraseña) -->
       <div id="loginCodePanel" class="login-panel hidden" role="tabpanel">
-        <p id="loginCodeHint" class="login-hint">Ingresa tu correo (o el código que te dio el administrador), o usa el enlace directo que te enviaron.</p>
-        <input id="loginCodeInput" class="login-input" type="text"
-               placeholder="Tu correo o código de acceso"
-               autocomplete="username" autocapitalize="none" spellcheck="false">
-        <input id="loginEbPasswordInput" class="login-input hidden" type="password"
+        <p id="loginCodeHint" class="login-hint">Entra con tu correo y contraseña.</p>
+        <input id="loginCodeInput" class="login-input" type="email"
+               placeholder="Tu correo"
+               autocomplete="email" autocapitalize="none" spellcheck="false">
+        <input id="loginEbPasswordInput" class="login-input" type="password"
                placeholder="Tu contraseña" autocomplete="current-password">
-        <button id="loginCodeBtn" class="primary-btn login-btn" type="button">Ingresar →</button>
+        <button id="loginCodeBtn" class="primary-btn login-btn" type="button">Entrar →</button>
       </div>
 
       <!-- Tab: profesional -->
@@ -88,15 +88,15 @@
         <button id="loginCompanyBtn" class="primary-btn login-btn" type="button">Entrar →</button>
       </div>
 
-      <!-- Tab: vendedor por código -->
+      <!-- Tab: vendedor (correo + contraseña) -->
       <div id="loginSellerPanel" class="login-panel hidden" role="tabpanel">
-        <p id="loginSellerHint" class="login-hint">Ingresa el código que te dio el administrador.</p>
-        <input id="loginSellerCodeInput" class="login-input" type="text"
-               placeholder="Ejemplo: carlosmendoza-7d2f1a"
-               autocomplete="off" autocapitalize="none" spellcheck="false">
-        <input id="loginSellerPasswordInput" class="login-input hidden" type="password"
+        <p id="loginSellerHint" class="login-hint">Entra con tu correo y contraseña.</p>
+        <input id="loginSellerCodeInput" class="login-input" type="email"
+               placeholder="Tu correo"
+               autocomplete="email" autocapitalize="none" spellcheck="false">
+        <input id="loginSellerPasswordInput" class="login-input" type="password"
                placeholder="Tu contraseña" autocomplete="current-password">
-        <button id="loginSellerBtn" class="primary-btn login-btn" type="button">Ingresar →</button>
+        <button id="loginSellerBtn" class="primary-btn login-btn" type="button">Entrar →</button>
       </div>
 
       <!-- Tab: admin -->

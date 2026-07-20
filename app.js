@@ -10353,14 +10353,15 @@ function _prefillCodeTab(code) {
 let _ebLoginStep = "code"; // "code" | "password"
 
 function _resetEbLoginStep() {
-  _ebLoginStep = "code";
-  document.getElementById("loginEbPasswordInput")?.classList.add("hidden");
+  // v55.23: login por CORREO + CONTRASEÑA (sin códigos). Ambos campos visibles siempre.
+  _ebLoginStep = "password";
+  document.getElementById("loginEbPasswordInput")?.classList.remove("hidden");
   const pwInput = document.getElementById("loginEbPasswordInput");
   if (pwInput) pwInput.value = "";
   const hint = document.getElementById("loginCodeHint");
-  if (hint) hint.textContent = "Ingresa el código que te dio el administrador, o usa el enlace directo que te enviaron.";
+  if (hint) hint.textContent = "Entra con tu correo y contraseña.";
   const btn = document.getElementById("loginCodeBtn");
-  if (btn) btn.textContent = "Ingresar →";
+  if (btn) btn.textContent = "Entrar →";
 }
 
 function _showEbPasswordStep(companyName) {
@@ -10377,14 +10378,15 @@ function _showEbPasswordStep(companyName) {
 let _sellerLoginStep = "code"; // "code" | "password"
 
 function _resetSellerLoginStep() {
-  _sellerLoginStep = "code";
+  // v55.23: login por CORREO + CONTRASEÑA (sin códigos). Ambos campos visibles.
+  _sellerLoginStep = "password";
   const pwInput = document.getElementById("loginSellerPasswordInput");
-  pwInput?.classList.add("hidden");
+  pwInput?.classList.remove("hidden");
   if (pwInput) pwInput.value = "";
   const hint = document.getElementById("loginSellerHint");
-  if (hint) hint.textContent = "Ingresa el código que te dio el administrador.";
+  if (hint) hint.textContent = "Entra con tu correo y contraseña.";
   const btn = document.getElementById("loginSellerBtn");
-  if (btn) btn.textContent = "Ingresar →";
+  if (btn) btn.textContent = "Entrar →";
 }
 
 function _prefillSellerTab(code) {
@@ -10487,96 +10489,42 @@ document.getElementById("loginClientToRegister")?.addEventListener("click", () =
 
 // ── Ebanista login with code (+ password, only when the tenant has one) ────
 document.getElementById("loginCodeBtn")?.addEventListener("click", async () => {
-  const code = document.getElementById("loginCodeInput").value.trim();
-  if (!code) { setLoginError("Ingresa tu código de acceso."); return; }
-
-  // Step 2: password already requested — submit code+password to the server
-  if (_ebLoginStep === "password") {
-    const password = document.getElementById("loginEbPasswordInput").value;
-    if (!password) { setLoginError("Ingresa tu contraseña."); return; }
-    if (window.location.protocol === "file:") { setLoginError("Sin conexión al servidor."); return; }
-    try {
-      const res = await fetch("/api/auth/ebanista", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code, password })
-      });
-      const data = await res.json();
-      if (!res.ok) { setLoginError(data.error || "Contraseña incorrecta."); return; }
-      setLoginError("");
-      _loginAsEbanista(data.tenant, data.token);
-    } catch { setLoginError("Sin conexión al servidor."); }
-    return;
-  }
-
-  // Step 1: try server first; fall back to local state (for offline/demo)
-  let tenant = null;
-  if (window.location.protocol !== "file:") {
-    try {
-      const res = await fetch(`/api/tenant-by-code?code=${encodeURIComponent(code)}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.requiresPassword) { setLoginError(""); _showEbPasswordStep(data.companyName); return; }
-        // Merge server tenant into local state
-        const existing = state.tenants.find(t => t.id === data.id);
-        if (existing) Object.assign(existing, data);
-        else state.tenants.push(data);
-        save();
-        tenant = data;
-      }
-    } catch {}
-  }
-  // Fallback: search local state
-  if (!tenant) {
-    tenant = state.tenants.find(t => t.accessCode === code);
-  }
-
-  if (!tenant) { setLoginError("Código no válido. Verifica con tu administrador."); return; }
-
-  AUTH.mode = "ebanista";
-  AUTH.tenantId = tenant.id;
-  AUTH.accessCode = tenant.accessCode;
-  state.selectedTenantId = tenant.id;
-  sessionStorage.setItem("ebAuthMode", "ebanista");
-  sessionStorage.setItem("ebTenantId", tenant.id);
-  sessionStorage.setItem("ebAccessCode", tenant.accessCode);
-  save();
-
-  // Hide admin nav item from ebanistas
-  document.querySelector('[data-view="adminView"]')?.classList.add("hidden");
-  document.querySelector('[data-view="sellersView"]')?.classList.add("hidden");
-  showApp();
-  showView("clientView");
-});
-
-// ── Vendedor login with code + password ─────────────────────────────────────
-document.getElementById("loginSellerBtn")?.addEventListener("click", async () => {
-  const code = document.getElementById("loginSellerCodeInput").value.trim();
-  if (!code) { setLoginError("Ingresa tu código de acceso."); return; }
-
-  if (_sellerLoginStep === "password") {
-    const password = document.getElementById("loginSellerPasswordInput").value;
-    if (!password) { setLoginError("Ingresa tu contraseña."); return; }
-    if (window.location.protocol === "file:") { setLoginError("Sin conexión al servidor."); return; }
-    try {
-      const res = await fetch("/api/auth/seller", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code, password })
-      });
-      const data = await res.json();
-      if (!res.ok) { setLoginError(data.error || "Contraseña incorrecta."); return; }
-      setLoginError("");
-      _loginAsSeller(data.seller, data.token);
-    } catch { setLoginError("Sin conexión al servidor."); }
-    return;
-  }
-
+  // v55.23: login de ebanista por CORREO + CONTRASEÑA (sin códigos). El servidor
+  // /api/auth/ebanista acepta el correo (o un código legacy) — mandamos ambos directo,
+  // sin el paso /api/tenant-by-code que solo buscaba por código y rompía el login por correo.
+  const code = document.getElementById("loginCodeInput").value.trim();      // correo del ebanista
+  const password = document.getElementById("loginEbPasswordInput").value;
+  if (!code) { setLoginError("Ingresa tu correo."); return; }
+  if (!password) { setLoginError("Ingresa tu contraseña."); return; }
   if (window.location.protocol === "file:") { setLoginError("Sin conexión al servidor."); return; }
   try {
-    const res = await fetch(`/api/seller-by-code?code=${encodeURIComponent(code)}`);
-    if (!res.ok) { setLoginError("Código no válido. Verifica con tu administrador."); return; }
+    const res = await fetch("/api/auth/ebanista", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, password })
+    });
     const data = await res.json();
-    if (data.requiresPassword) { setLoginError(""); _showSellerPasswordStep(data.name); return; }
-    _loginAsSeller(data, null);
+    if (!res.ok) { setLoginError(data.error || "Correo o contraseña incorrectos."); return; }
+    setLoginError("");
+    _loginAsEbanista(data.tenant, data.token);
+  } catch { setLoginError("Sin conexión al servidor."); }
+});
+
+// ── Vendedor login: CORREO + CONTRASEÑA (v55.23, sin códigos) ────────────────
+document.getElementById("loginSellerBtn")?.addEventListener("click", async () => {
+  const code = document.getElementById("loginSellerCodeInput").value.trim();   // correo del vendedor
+  const password = document.getElementById("loginSellerPasswordInput").value;
+  if (!code) { setLoginError("Ingresa tu correo."); return; }
+  if (!password) { setLoginError("Ingresa tu contraseña."); return; }
+  if (window.location.protocol === "file:") { setLoginError("Sin conexión al servidor."); return; }
+  try {
+    const res = await fetch("/api/auth/seller", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, password })
+    });
+    const data = await res.json();
+    if (!res.ok) { setLoginError(data.error || "Correo o contraseña incorrectos."); return; }
+    setLoginError("");
+    _loginAsSeller(data.seller, data.token);
   } catch { setLoginError("Sin conexión al servidor."); }
 });
 

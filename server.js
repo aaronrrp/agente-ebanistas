@@ -1881,8 +1881,10 @@ async function handleAuthSeller(req, res) {
   }
   const body = await readBody(req);
   const { code, password } = safeJson(body, {});
-  const s = sellers.find(s => s.accessCode === code);
-  if (!s) { sendJson(res, 401, { error: "Código no válido." }); return; }
+  // v55.23: el "usuario" del vendedor es su CORREO (o un código legacy). Ya no solo por código.
+  const q = String(code || "").trim().toLowerCase();
+  const s = sellers.find(s => s.accessCode === code || (s.email && s.email.toLowerCase() === q));
+  if (!s) { sendJson(res, 401, { error: "Correo o código no válido." }); return; }
   if (s.status !== "active") { sendJson(res, 403, { error: "Cuenta de vendedor suspendida." }); return; }
   if (s.passwordHash && !verifyPassword(password, s.passwordSalt, s.passwordHash)) {
     logActivity({ actorType: "vendedor", actorId: s.id, actorLabel: s.name, action: "auth.login.failed", meta: { ip } });
