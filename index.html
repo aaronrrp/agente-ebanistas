@@ -1665,8 +1665,14 @@
               <label>Título*
                 <input id="adm_adTitle" type="text">
               </label>
-              <label>URL de imagen
-                <input id="adm_adImageUrl" type="text" placeholder="https://...">
+              <label class="span-2">Imagen o video del anuncio
+                <div style="display:flex;align-items:center;gap:12px;margin-top:6px">
+                  <div id="adm_adMediaPreview" style="width:96px;height:60px;border-radius:8px;overflow:hidden;background:var(--surface-soft);border:1px solid var(--line);display:none;flex:0 0 auto"></div>
+                  <label class="secondary-btn" style="cursor:pointer;margin:0">📎 Subir imagen o video<input id="adm_adMediaFile" type="file" accept="image/*,video/*" style="display:none"></label>
+                </div>
+                <small class="login-hint">Imagen (JPG/PNG) o video corto (MP4, máx ~7&nbsp;MB). El video necesita Cloudinary configurado en el servidor.</small>
+                <input id="adm_adImageUrl" type="hidden">
+                <input id="adm_adMediaType" type="hidden" value="image">
               </label>
               <label>URL de destino (al hacer clic)
                 <input id="adm_adLinkUrl" type="text" placeholder="https://...">

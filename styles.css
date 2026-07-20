@@ -2077,7 +2077,8 @@ textarea {
 .public-banner-link { position: relative; display: block; max-width: 1080px; margin: 16px auto 0; padding: 0 18px; text-decoration: none; }
 .public-banner-inner { position: relative; border-radius: 16px; overflow: hidden; box-shadow: 0 8px 26px rgba(26,19,70,.16); transition: transform .18s, box-shadow .18s; }
 .public-banner-link:hover .public-banner-inner { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(26,19,70,.24); }
-.public-banner-link img { width: 100%; max-height: 180px; object-fit: cover; display: block; }
+.public-banner-link img,
+.public-banner-link video { width: 100%; max-height: 180px; object-fit: cover; display: block; }
 .public-banner-fallback {
   background: linear-gradient(120deg,#2D235F,#4A3F94 60%,#F9A825);
   color: #fff; padding: 28px 24px; text-align: center; font-weight: 800; font-size: 1.15rem; letter-spacing: .2px;

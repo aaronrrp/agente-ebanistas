@@ -1218,6 +1218,9 @@ async function loadAdminAdsTab() {
     el.innerHTML = list.length ? list.map(ad => `
       <div class="admin-entity-row" data-entity-id="${ad.id}">
         <div class="admin-entity-info">
+          ${ad.imageUrl ? (ad.mediaType === "video"
+            ? `<video src="${escapeHtml(ad.imageUrl)}" muted playsinline style="width:72px;height:44px;object-fit:cover;border-radius:6px"></video>`
+            : `<img src="${escapeHtml(ad.imageUrl)}" alt="" style="width:72px;height:44px;object-fit:cover;border-radius:6px">`) : ""}
           <strong>${escapeHtml(ad.title)}</strong>${statusBadgeHtml(ad.active ? "active" : "pending")}
           <span>${escapeHtml(AD_TYPE_LABELS[ad.type] || ad.type)} · 👁 ${ad.stats.impressions} · 🖱 ${ad.stats.clicks}${ad.endsAt ? " · vence " + ad.endsAt : ""}</span>
           ${ad.paymentNote ? `<span>💲 ${escapeHtml(ad.paymentNote)}</span>` : ""}
@@ -1243,6 +1246,49 @@ document.getElementById("adm_adsList")?.addEventListener("click", async (e) => {
   }
 });
 
+// v55.33: la publicidad admite subir imagen O video (no solo URL). Imágenes usan
+// smartUploadImage (con respaldo a data URL); los videos requieren Cloudinary (no
+// caben como data URL) y se suben crudos al mismo endpoint /api/upload-image.
+function _fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onerror = () => reject(new Error("No se pudo leer el archivo."));
+    r.onload = () => resolve(r.result);
+    r.readAsDataURL(file);
+  });
+}
+async function _uploadAdVideo(file) {
+  const dataUrl = await _fileToDataUrl(file);
+  const headers = Object.assign({ "Content-Type": "application/json" }, adminAuthHeaderAdmin());
+  const res = await fetch("/api/upload-image", { method: "POST", headers, body: JSON.stringify({ imageData: dataUrl, folder: "ads" }) });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok || !d.url) throw new Error(d.error || "No se pudo subir el video (los videos requieren Cloudinary configurado).");
+  return d.url;
+}
+function _admRenderAdMediaPreview(url, mediaType) {
+  const box = document.getElementById("adm_adMediaPreview");
+  if (!box) return;
+  if (!url) { box.style.display = "none"; box.innerHTML = ""; return; }
+  box.innerHTML = mediaType === "video"
+    ? `<video src="${escapeHtml(url)}" muted playsinline style="width:100%;height:100%;object-fit:cover"></video>`
+    : `<img src="${escapeHtml(url)}" alt="" style="width:100%;height:100%;object-fit:cover">`;
+  box.style.display = "block";
+}
+document.getElementById("adm_adMediaFile")?.addEventListener("change", async (e) => {
+  const f = e.target.files?.[0]; if (!f) return;
+  const isVideo = f.type.startsWith("video/");
+  if (isVideo && f.size > 7_500_000) { toast("El video es muy grande (máx ~7MB, usa un clip corto).", "error"); e.target.value = ""; return; }
+  toast(isVideo ? "Subiendo video…" : "Subiendo imagen…");
+  try {
+    const url = isVideo ? await _uploadAdVideo(f) : await smartUploadImage(f, "ads", adminAuthHeaderAdmin);
+    document.getElementById("adm_adImageUrl").value = url;
+    document.getElementById("adm_adMediaType").value = isVideo ? "video" : "image";
+    _admRenderAdMediaPreview(url, isVideo ? "video" : "image");
+    toast(isVideo ? "Video listo ✅" : "Imagen lista ✅");
+  } catch (err) { toast(err.message || "No se pudo subir.", "error"); }
+  finally { e.target.value = ""; }
+});
+
 document.getElementById("adm_createAdBtn")?.addEventListener("click", async () => {
   const title = document.getElementById("adm_adTitle").value.trim();
   if (!title) { toast("Falta el título.", "error"); return; }
@@ -1250,6 +1296,7 @@ document.getElementById("adm_createAdBtn")?.addEventListener("click", async () =
     type: document.getElementById("adm_adType").value,
     title,
     imageUrl: document.getElementById("adm_adImageUrl").value.trim(),
+    mediaType: document.getElementById("adm_adMediaType").value || "image",
     linkUrl: document.getElementById("adm_adLinkUrl").value.trim(),
     couponCode: document.getElementById("adm_adCouponCode").value.trim(),
     paymentNote: document.getElementById("adm_adPaymentNote").value.trim(),
@@ -1261,6 +1308,8 @@ document.getElementById("adm_createAdBtn")?.addEventListener("click", async () =
     toast("Anuncio creado (inactivo hasta que lo actives) ✓");
     document.getElementById("adm_adTitle").value = "";
     document.getElementById("adm_adImageUrl").value = "";
+    document.getElementById("adm_adMediaType").value = "image";
+    _admRenderAdMediaPreview("", "image");
     document.getElementById("adm_adLinkUrl").value = "";
     document.getElementById("adm_adCouponCode").value = "";
     document.getElementById("adm_adPaymentNote").value = "";
@@ -8890,7 +8939,9 @@ async function loadPublicBanner() {
     // Rotación: si hay varios banners activos, se elige uno al azar por carga.
     const ad = list[Math.floor(Math.random() * list.length)];
     const inner = ad.imageUrl
-      ? `<img src="${escapeHtml(ad.imageUrl)}" alt="${escapeHtml(ad.title)}">`
+      ? (ad.mediaType === "video"
+          ? `<video src="${escapeHtml(ad.imageUrl)}" autoplay muted loop playsinline></video>`
+          : `<img src="${escapeHtml(ad.imageUrl)}" alt="${escapeHtml(ad.title)}">`)
       : `<div class="public-banner-fallback">${escapeHtml(ad.title)}</div>`;
     slot.innerHTML = `
       <a href="${escapeHtml(ad.linkUrl || "#")}" ${ad.linkUrl ? 'target="_blank" rel="noopener"' : ""} id="publicBannerLink" data-ad-id="${ad.id}" class="public-banner-link">

@@ -72,6 +72,7 @@ async function handle(req, res, { method, p, parts }) {
       ownerId: data.ownerId || "",
       title: data.title,
       imageUrl: data.imageUrl || "",
+      mediaType: data.mediaType === "video" ? "video" : "image",
       linkUrl: data.linkUrl || "",
       couponCode: data.couponCode || "",
       startsAt: data.startsAt || null,
@@ -93,7 +94,7 @@ async function handle(req, res, { method, p, parts }) {
     if (!ad) { sendJson(res, 404, { error: "No encontrado." }); return true; }
     const body = await readBody(req);
     const data = body ? JSON.parse(body) : {};
-    for (const field of ["title", "imageUrl", "linkUrl", "couponCode", "startsAt", "endsAt", "paymentNote"]) {
+    for (const field of ["title", "imageUrl", "mediaType", "linkUrl", "couponCode", "startsAt", "endsAt", "paymentNote"]) {
       if (data[field] !== undefined) ad[field] = data[field];
     }
     if (TYPES.includes(data.type)) ad.type = data.type;

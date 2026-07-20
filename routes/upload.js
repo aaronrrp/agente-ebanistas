@@ -26,29 +26,33 @@ function signParams(params, apiSecret) {
   return crypto.createHash("sha1").update(sorted + apiSecret).digest("hex");
 }
 
-async function uploadToCloudinary(blob, folder) {
+async function uploadToCloudinary(blob, folder, resourceType) {
+  const isVideo = resourceType === "video";
   const timestamp = Math.floor(Date.now() / 1000);
   const paramsToSign = { timestamp, folder: folder || "agente-ebanistas" };
   const signature = signParams(paramsToSign, process.env.CLOUDINARY_API_SECRET);
 
-  const ext = blob.type.includes("png") ? "png" : blob.type.includes("webp") ? "webp" : "jpg";
+  const ext = isVideo
+    ? (blob.type.includes("webm") ? "webm" : blob.type.includes("quicktime") ? "mov" : "mp4")
+    : (blob.type.includes("png") ? "png" : blob.type.includes("webp") ? "webp" : "jpg");
   const form = new FormData();
-  form.append("file", blob, `foto.${ext}`);
+  form.append("file", blob, `media.${ext}`);
   form.append("api_key", process.env.CLOUDINARY_API_KEY);
   form.append("timestamp", String(timestamp));
   form.append("signature", signature);
   form.append("folder", paramsToSign.folder);
 
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-  const ar = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+  // Cloudinary usa endpoints distintos por tipo de recurso: image/upload vs video/upload.
+  const ar = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/${isVideo ? "video" : "image"}/upload`, {
     method: "POST",
     body: form,
-    signal: AbortSignal.timeout(30000)
+    signal: AbortSignal.timeout(isVideo ? 90000 : 30000)
   });
   const ad = await ar.json();
   if (!ar.ok || !ad.secure_url) {
     console.log(`[upload-image] Cloudinary respondió status=${ar.status} error="${ad.error?.message}"`);
-    return { ok: false, error: ad.error?.message || "No se pudo subir la imagen." };
+    return { ok: false, error: ad.error?.message || (isVideo ? "No se pudo subir el video." : "No se pudo subir la imagen.") };
   }
   return { ok: true, url: ad.secure_url };
 }
@@ -71,27 +75,32 @@ async function handle(req, res, { method, p }) {
 
   if (!cloudinaryConfigured()) {
     console.log("[upload-image] CLOUDINARY_* no configurado -- ver routes/upload.js para las 3 variables necesarias");
-    sendJson(res, 503, { error: "Subida de imágenes no configurada todavía en el servidor. Pega un link a la foto por ahora." });
+    sendJson(res, 503, { error: "Subida de imágenes/videos no configurada todavía en el servidor. Pega un link por ahora." });
     return true;
   }
 
   const body = await readBody(req);
   const data = body ? JSON.parse(body) : {};
-  if (typeof data.imageData !== "string" || !data.imageData.startsWith("data:image/")) {
-    sendJson(res, 400, { error: "Se requiere una imagen." });
+  const raw = typeof data.imageData === "string" ? data.imageData : "";
+  const isImage = raw.startsWith("data:image/");
+  const isVideo = raw.startsWith("data:video/");
+  if (!isImage && !isVideo) {
+    sendJson(res, 400, { error: "Se requiere una imagen o un video." });
     return true;
   }
-  const blob = dataUrlToBlob(data.imageData);
-  if (!blob) { sendJson(res, 400, { error: "Imagen inválida." }); return true; }
-  if (blob.size > 8_000_000) { sendJson(res, 400, { error: "La imagen es demasiado grande (máximo ~8MB)." }); return true; }
+  const blob = dataUrlToBlob(raw);
+  if (!blob) { sendJson(res, 400, { error: "Archivo inválido." }); return true; }
+  // El body está topado en 10MB (lib/shared.js), así que un video cabe hasta ~7MB en crudo.
+  if (isVideo && blob.size > 7_500_000) { sendJson(res, 400, { error: "El video es muy grande (máx ~7MB, usa un clip corto)." }); return true; }
+  if (isImage && blob.size > 8_000_000) { sendJson(res, 400, { error: "La imagen es demasiado grande (máximo ~8MB)." }); return true; }
 
   try {
-    const result = await uploadToCloudinary(blob, data.folder);
+    const result = await uploadToCloudinary(blob, data.folder, isVideo ? "video" : "image");
     if (!result.ok) { sendJson(res, 502, { error: result.error }); return true; }
-    sendJson(res, 200, { url: result.url });
+    sendJson(res, 200, { url: result.url, mediaType: isVideo ? "video" : "image" });
   } catch (e) {
     console.log(`[upload-image] excepción: ${e.message}`);
-    sendJson(res, 503, { error: "No se pudo subir la imagen, intenta de nuevo." });
+    sendJson(res, 503, { error: isVideo ? "No se pudo subir el video, intenta con uno más corto." : "No se pudo subir la imagen, intenta de nuevo." });
   }
   return true;
 }
