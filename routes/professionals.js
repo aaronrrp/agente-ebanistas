@@ -99,7 +99,7 @@ function matchesFilters(p, q) {
   return true;
 }
 
-async function handle(req, res, { method, p, parts }) {
+async function handle(req, res, { method, p, parts, getCallerIdentity, tenants }) {
   // GET /api/professionals/slug/:slug — perfil por URL amigable
   if (method === "GET" && parts[0] === "api" && parts[1] === "professionals" && parts[2] === "slug" && parts[3]) {
     const prof = professionals.find(x => x.slug === parts[3] && x.status === "approved");
@@ -407,6 +407,62 @@ async function handle(req, res, { method, p, parts }) {
     logActivity({ actorType: "admin", action: "professional.password_changed", meta: { id: prof.id, name: prof.name } });
     sendJson(res, 200, { ok: true });
     return true;
+  }
+
+  // ── Perfil PÚBLICO del ebanista (v55.31) ─────────────────────────────────────
+  // Reutiliza TODO el sistema de profesionales: cada ebanista puede tener un perfil
+  // profesional ligado a su cuenta (ownerTenantId) que aparece en el directorio,
+  // recibe reseñas de clientes y muestra portafolio/estadísticas — administrado desde
+  // su propio panel. Así los ebanistas tienen las mismas opciones que los profesionales.
+  if (parts[0] === "api" && parts[1] === "ebanista" && parts[2] === "profile" && !parts[3]) {
+    const idn = getCallerIdentity ? getCallerIdentity(req) : null;
+    if (!idn || idn.role !== "ebanista" || !idn.tenantId) {
+      sendJson(res, 401, { error: "Inicia sesión como ebanista." }); return true;
+    }
+    const tenant = (tenants || []).find(t => t.id === idn.tenantId);
+    let prof = professionals.find(x => x.ownerTenantId === idn.tenantId);
+
+    if (method === "GET") {
+      if (prof) { sendJson(res, 200, { exists: true, professional: publicProfessional(prof) }); return true; }
+      sendJson(res, 200, { exists: false, prefill: {
+        name: tenant?.companyName || "", company: tenant?.companyName || "",
+        phone: tenant?.phone || "", whatsapp: tenant?.phone || "",
+        email: tenant?.email || "", category: "ebanista"
+      } }); return true;
+    }
+
+    if (method === "POST") {
+      const data = JSON.parse((await readBody(req)) || "{}");
+      const EDITABLE = ["company", "description", "specialty", "experienceYears", "phone", "whatsapp", "email", "schedule", "photoUrl", "portfolioUrls", "location", "socialLinks", "coverPhotoUrl", "services", "certifications", "availability", "videos"];
+      if (!prof) {
+        const name = String(data.name || tenant?.companyName || "").trim();
+        if (!name) { sendJson(res, 400, { error: "Falta el nombre del perfil." }); return true; }
+        const id = crypto.randomUUID();
+        prof = {
+          id, slug: makeSlug(name, id),
+          category: CATEGORIES.includes(data.category) ? data.category : "ebanista",
+          name, company: tenant?.companyName || "", description: "", specialty: "",
+          experienceYears: 0, phone: tenant?.phone || "", whatsapp: tenant?.phone || "",
+          email: tenant?.email || "",
+          location: { province: "", city: "", address: "" }, schedule: "",
+          photoUrl: "", portfolioUrls: [],
+          socialLinks: { facebook: "", instagram: "", tiktok: "", website: "" },
+          coverPhotoUrl: "", services: [], certifications: [], availability: "available", videos: [],
+          active: true, idoneidad: { has: false, number: "", photoUrl: "" },
+          ownerTenantId: idn.tenantId, status: "approved",
+          ratings: { avg: 0, count: 0 }, createdAt: new Date().toISOString()
+        };
+        professionals.push(prof);
+      }
+      for (const f of EDITABLE) if (data[f] !== undefined) prof[f] = data[f];
+      if (data.name !== undefined && String(data.name).trim()) prof.name = String(data.name).trim();
+      if (CATEGORIES.includes(data.category)) prof.category = data.category;
+      if (data.active !== undefined) prof.active = Boolean(data.active);
+      saveProfessionals(professionals);
+      logActivity({ actorType: "ebanista", actorId: idn.tenantId, action: "ebanista.profile.saved", meta: { profId: prof.id } });
+      sendJson(res, 200, { ok: true, professional: publicProfessional(prof) });
+      return true;
+    }
   }
 
   return false;

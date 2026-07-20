@@ -1493,6 +1493,7 @@
         <button class="nav-item" data-view="quoteView" type="button">📋 Cotizar</button>
         <button class="nav-item" data-view="cutsView" type="button">✂️ Cortes</button>
         <button class="nav-item" data-view="handoffsView" type="button">📨 Envíos</button>
+        <button class="nav-item" data-view="ebProfileView" type="button">⭐ Mi Perfil Público</button>
       </nav>
 
       <div class="sidebar-note">
@@ -2139,6 +2140,35 @@
             <button id="sendChatBtn" class="chat-send-btn" type="button" aria-label="Enviar mensaje" title="Enviar">↑</button>
           </div>
         </div>
+      </section>
+
+      <!-- Perfil PÚBLICO del ebanista (v55.31) — mismas opciones que un profesional -->
+      <section id="ebProfileView" class="view">
+        <h2>⭐ Mi Perfil Público</h2>
+        <p class="muted">Publica tu perfil para aparecer en el <strong>directorio de PiLLA</strong>, recibir <strong>reseñas de clientes</strong> y mostrar tu portafolio — igual que un profesional.</p>
+        <div id="ebProfileStatus" class="subscription-banner" style="margin:12px 0"></div>
+        <div class="form-grid">
+          <label>Nombre público<input id="ebp_name" type="text" placeholder="Ej: Ebanistería Los Robles"></label>
+          <label>Categoría<select id="ebp_category"></select></label>
+          <label>Especialidad<input id="ebp_specialty" type="text" placeholder="Ej: Cocinas y closets a medida"></label>
+          <label>Años de experiencia<input id="ebp_experience" type="number" min="0" placeholder="Ej: 8"></label>
+          <label>Teléfono<input id="ebp_phone" type="tel" placeholder="Ej: 6000-0000"></label>
+          <label>WhatsApp<input id="ebp_whatsapp" type="tel" placeholder="Ej: 6000-0000"></label>
+          <label>Provincia<input id="ebp_province" type="text" placeholder="Ej: Panamá"></label>
+          <label>Ciudad<input id="ebp_city" type="text" placeholder="Ej: Ciudad de Panamá"></label>
+        </div>
+        <label style="display:block;margin-top:10px">Descripción<textarea id="ebp_description" rows="3" placeholder="Cuéntale a los clientes qué haces y por qué elegirte."></textarea></label>
+        <label style="display:block;margin-top:10px">Foto de perfil (URL de imagen)<input id="ebp_photo" type="url" placeholder="https://..."></label>
+        <label style="display:block;margin-top:10px">Portafolio (una URL de imagen por línea)<textarea id="ebp_portfolio" rows="3" placeholder="https://imagen1.jpg"></textarea></label>
+        <label style="display:block;margin-top:10px">Servicios (uno por línea)<textarea id="ebp_services" rows="3" placeholder="Closets a medida&#10;Cocinas"></textarea></label>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+          <button id="ebp_saveBtn" class="primary-btn" type="button">💾 Guardar y publicar</button>
+          <a id="ebp_viewPublic" class="secondary-btn" href="#" target="_blank" rel="noopener" style="display:none;text-decoration:none">👁 Ver mi perfil público</a>
+        </div>
+        <hr style="margin:22px 0;border:none;border-top:1px solid var(--line)">
+        <div class="metrics-grid" id="ebp_stats"></div>
+        <h3 style="margin:18px 0 10px">⭐ Reseñas de clientes</h3>
+        <div id="ebp_reviews"><p class="login-hint">Publica tu perfil para empezar a recibir reseñas.</p></div>
       </section>
 
       <section id="quoteView" class="view">

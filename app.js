@@ -543,6 +543,7 @@ function showView(viewId) {
   // v54.27: oculta la campana de notificaciones en el asistente de IA (tapaba el botón enviar)
   document.body.classList.toggle("ai-designer-active", viewId === "designerView");
   render();
+  if (viewId === "ebProfileView") loadEbanistaProfile();
   if (viewId === "adminView" && AUTH.mode === "admin") loadAdminDashboard();
   if (viewId === "sellersView" && AUTH.mode === "admin") loadSellersFromServer();
   if (viewId === "quoteView" && AUTH.mode === "vendedor") loadSellerQuoteClientOptions();
@@ -13698,6 +13699,74 @@ async function loadAdminAiUsageTab() {
   }
 }
 document.getElementById("adm_refreshAiUsageBtn")?.addEventListener("click", loadAdminAiUsageTab);
+
+// ── Perfil PÚBLICO del ebanista (v55.31) — reutiliza el sistema de profesionales ──
+async function loadEbanistaProfile() {
+  const catSel = document.getElementById("ebp_category");
+  if (catSel && !catSel.options.length && Array.isArray(PROFESSIONAL_CATEGORIES)) {
+    catSel.innerHTML = PROFESSIONAL_CATEGORIES.map(c => `<option value="${c.value}">${escapeHtml(c.label)}</option>`).join("");
+  }
+  const st = document.getElementById("ebProfileStatus");
+  try {
+    const res = await fetch("/api/ebanista/profile", { headers: { Authorization: `Bearer ${AUTH.ebToken || ""}` } });
+    const data = await res.json();
+    if (!res.ok) { if (st) st.textContent = data.error || "No se pudo cargar el perfil."; return; }
+    const p = data.exists ? data.professional : (data.prefill || {});
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v ?? ""; };
+    set("ebp_name", p.name); if (catSel) catSel.value = p.category || "ebanista";
+    set("ebp_specialty", p.specialty); set("ebp_experience", p.experienceYears || "");
+    set("ebp_phone", p.phone); set("ebp_whatsapp", p.whatsapp);
+    set("ebp_province", p.location?.province); set("ebp_city", p.location?.city);
+    set("ebp_description", p.description); set("ebp_photo", p.photoUrl);
+    set("ebp_portfolio", (p.portfolioUrls || []).join("\n"));
+    set("ebp_services", (p.services || []).join("\n"));
+    if (st) { st.className = "subscription-banner active " + (data.exists ? "ok" : ""); st.textContent = data.exists ? "✅ Tu perfil está publicado en el directorio de PiLLA." : "Aún no has publicado tu perfil. Llénalo y guarda para aparecer en el directorio."; }
+    const link = document.getElementById("ebp_viewPublic");
+    if (link) { if (data.exists) { link.href = `/p/${p.slug || p.id}`; link.style.display = "inline-block"; } else link.style.display = "none"; }
+    const stats = document.getElementById("ebp_stats");
+    if (stats) stats.innerHTML = data.exists ? `
+      <article class="metric-card"><span>Calificación</span><strong>${p.ratings?.count ? p.ratings.avg + " ★" : "—"}</strong><span>${p.ratings?.count || 0} reseña${p.ratings?.count !== 1 ? "s" : ""}</span></article>
+      <article class="metric-card"><span>Vistas del perfil</span><strong>${p.views || 0}</strong></article>
+      <article class="metric-card"><span>Clics de contacto</span><strong>${p.contactClicks || 0}</strong></article>` : "";
+    if (data.exists) loadEbanistaReviews(p.id);
+  } catch { if (st) st.textContent = "Sin conexión al servidor."; }
+}
+async function loadEbanistaReviews(proId) {
+  const box = document.getElementById("ebp_reviews");
+  if (!box) return;
+  try {
+    const list = await fetch(`/api/professionals/${proId}/ratings`).then(r => r.ok ? r.json() : []);
+    box.innerHTML = (Array.isArray(list) && list.length) ? list.map(r => `
+      <div style="padding:10px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;background:var(--surface-soft)">
+        <div style="display:flex;justify-content:space-between;align-items:center"><strong style="font-size:.9rem">${escapeHtml(r.raterName || "Anónimo")}</strong>
+          <span>${[1,2,3,4,5].map(i => i <= r.stars ? "★" : "☆").join("")}</span></div>
+        ${r.comment ? `<p style="margin:4px 0 0;font-size:.88rem;color:var(--muted)">${escapeHtml(r.comment)}</p>` : ""}
+      </div>`).join("") : '<p class="login-hint">Aún no tienes reseñas. Comparte tu perfil con tus clientes para que te califiquen.</p>';
+  } catch { box.innerHTML = '<p class="login-hint">No se pudieron cargar las reseñas.</p>'; }
+}
+document.getElementById("ebp_saveBtn")?.addEventListener("click", async () => {
+  const btn = document.getElementById("ebp_saveBtn");
+  const val = (id) => (document.getElementById(id)?.value || "").trim();
+  const body = {
+    name: val("ebp_name"), category: document.getElementById("ebp_category")?.value || "ebanista",
+    specialty: val("ebp_specialty"), experienceYears: Number(val("ebp_experience")) || 0,
+    phone: val("ebp_phone"), whatsapp: val("ebp_whatsapp"),
+    location: { province: val("ebp_province"), city: val("ebp_city"), address: "" },
+    description: val("ebp_description"), photoUrl: val("ebp_photo"),
+    portfolioUrls: val("ebp_portfolio").split("\n").map(s => s.trim()).filter(Boolean).slice(0, 20),
+    services: val("ebp_services").split("\n").map(s => s.trim()).filter(Boolean).slice(0, 20)
+  };
+  if (!body.name) { toast("Ponle un nombre a tu perfil.", "error"); return; }
+  btn.disabled = true; const prev = btn.textContent; btn.textContent = "Guardando…";
+  try {
+    const res = await fetch("/api/ebanista/profile", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${AUTH.ebToken || ""}` }, body: JSON.stringify(body) });
+    const data = await res.json();
+    if (!res.ok) { toast(data.error || "No se pudo guardar.", "error"); return; }
+    toast("✅ Perfil publicado en el directorio.");
+    loadEbanistaProfile();
+  } catch { toast("Sin conexión al servidor.", "error"); }
+  finally { btn.disabled = false; btn.textContent = prev; }
+});
 
 // ── UX v51: mostrar/ocultar contraseña en el login ───────────────────────────
 // Checkbox explícito (no ícono) — más claro para el público 30-60 de PiLLA.
