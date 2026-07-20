@@ -13642,7 +13642,8 @@ async function loadAdminAiUsageTab() {
   try {
     const res = await fetch("/api/admin/ai-usage", { headers: adminAuthHeaderAdmin() });
     if (!res.ok) { tableEl.innerHTML = '<p class="login-hint">No se pudo cargar el consumo.</p>'; return; }
-    const { days, model, imageModel } = await res.json();
+    const { days, model, imageModel, provider } = await res.json();
+    const provLabel = provider === "gemini" ? "Gemini" : provider === "openai" ? "OpenAI" : "Modo local";
     const sorted = Object.entries(days).sort((a, b) => b[0].localeCompare(a[0])); // recientes primero
 
     const today = new Date().toISOString().slice(0, 10);
@@ -13660,7 +13661,7 @@ async function loadAdminAiUsageTab() {
       <article class="metric-card"><span>Hoy</span><strong>$${t.cost.toFixed(3)}</strong><span>${t.calls} llamada${t.calls !== 1 ? "s" : ""}</span></article>
       <article class="metric-card"><span>Últimos 7 días</span><strong>$${w.cost.toFixed(3)}</strong><span>${w.calls} llamadas</span></article>
       <article class="metric-card"><span>Últimos 30 días</span><strong>$${m.cost.toFixed(3)}</strong><span>${m.calls} llamadas</span></article>
-      <article class="metric-card"><span>Modelos</span><strong style="font-size:.95rem">${escapeHtml(model || "—")}</strong><span>${escapeHtml(imageModel || "—")}</span></article>`;
+      <article class="metric-card"><span>Motor · ${escapeHtml(provLabel)}</span><strong style="font-size:.95rem">${escapeHtml(model || "—")}</strong><span>${escapeHtml(imageModel || "—")}</span></article>`;
 
     if (!sorted.length) {
       tableEl.innerHTML = '<p class="login-hint">Todavía no hay consumo registrado. Los datos empiezan a acumularse con la primera llamada a la IA desde este deploy.</p>';

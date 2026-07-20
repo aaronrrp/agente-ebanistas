@@ -2598,7 +2598,15 @@ const server = http.createServer(async (req, res) => {
     // Consumo IA acumulado por día (admin only) — tab "Consumo IA" del panel
     if (method === "GET" && p === "/api/admin/ai-usage") {
       if (!requireAdmin(req, res)) return;
-      sendJson(res, 200, { days: aiUsage.days, prices: PRICE_USD, model, imageModel });
+      // v55.27: reporta el motor REALMENTE activo (Gemini) y su modelo, no las etiquetas fijas
+      // de OpenAI (esos nombres viejos confundían: la app no usa OpenAI, usa Gemini).
+      const activeProvider = (AI_PROVIDER === "gemini" && hasGemini()) ? "gemini" : hasOpenAI() ? "openai" : hasGemini() ? "gemini" : "none";
+      sendJson(res, 200, {
+        days: aiUsage.days, prices: PRICE_USD,
+        provider: activeProvider,
+        model: activeProvider === "gemini" ? geminiModel : model,
+        imageModel: activeProvider === "gemini" ? (activeImageModel || geminiImageModel) : imageModel
+      });
       return;
     }
 
