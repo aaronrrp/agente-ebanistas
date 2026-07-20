@@ -699,7 +699,11 @@ const PRICE_USD = {
   imageTextInputPer1M: 5.00,
   imageInputPer1M: 10.00,
   imageOutputPer1M: 40.00,
-  imagePerUnit: { low: 0.011, medium: 0.042, high: 0.167 } // respaldo si la API no manda "usage"
+  imagePerUnit: { low: 0.011, medium: 0.042, high: 0.167 }, // respaldo si la API no manda "usage"
+  // v55.17: precios estimados de Gemini (mucho más baratos que OpenAI). Ajústalos con env
+  // GEMINI_PRICE_IN_1M / GEMINI_PRICE_OUT_1M si cambian. El costo REAL está en AI Studio.
+  geminiInputPer1M: Number(process.env.GEMINI_PRICE_IN_1M || 0.30),
+  geminiOutputPer1M: Number(process.env.GEMINI_PRICE_OUT_1M || 2.50)
 };
 // ── Acumulador de consumo IA (v51) ───────────────────────────────────────────
 // Antes el costo estimado solo se veía en la consola de Render. Ahora cada
@@ -736,6 +740,14 @@ function logEstimatedCost(label, usage) {
   const outTok = usage.output_tokens || 0;
   const cost = (inTok / 1e6) * PRICE_USD.textInputPer1M + (outTok / 1e6) * PRICE_USD.textOutputPer1M;
   console.log(`[costo] ${label}: ${inTok} tokens entrada + ${outTok} tokens salida ≈ $${cost.toFixed(4)} USD (estimado)`);
+  recordAiUsage("text", { inTok, outTok, cost });
+}
+// v55.17: consumo de Gemini → MISMO tablero "Consumo IA" (Gemini usa usageMetadata, no "usage").
+function logGeminiCost(label, usageMetadata) {
+  const inTok = usageMetadata?.promptTokenCount || 0;
+  const outTok = usageMetadata?.candidatesTokenCount || 0;
+  const cost = (inTok / 1e6) * PRICE_USD.geminiInputPer1M + (outTok / 1e6) * PRICE_USD.geminiOutputPer1M;
+  console.log(`[costo] ${label}: ${inTok} entrada + ${outTok} salida ≈ $${cost.toFixed(4)} USD (estimado Gemini)`);
   recordAiUsage("text", { inTok, outTok, cost });
 }
 function logEstimatedImageCost(label, quality, source, usage) {
@@ -887,8 +899,7 @@ async function callGemini(sysPrompt, userContent, useWebSearch = true) {
   }
   // Consumo visible en logs (v55.11) — para comparar costos Gemini vs OpenAI.
   // Gemini 3.5 Flash cobra por token; estos números salen en los logs de Render.
-  const gu = data.usageMetadata;
-  if (gu) console.log(`[costo] callGemini (${geminiModel}) tokens: entrada=${gu.promptTokenCount || 0} salida=${gu.candidatesTokenCount || 0} total=${gu.totalTokenCount || 0}`);
+  logGeminiCost(`callGemini (${geminiModel})`, data.usageMetadata);
   const text = (data.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("").trim();
   const parsed = parseJson(text);
   if (parsed) return parsed;
