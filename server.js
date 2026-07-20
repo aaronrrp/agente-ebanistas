@@ -1450,21 +1450,49 @@ const PROVIDER_TIMEOUT_MS = 38000; // deja espacio para que el reintento entero 
 // Calidad alta por defecto en gpt-image-1 — la calidad visual no se negocia. "low"/"medium"
 // quedan disponibles si algún día se pide explícitamente desde el cliente (más barato pero
 // con menos detalle), pero NUNCA por default.
-// Generación de imagen con Gemini 2.5 Flash Image ("Nano Banana"). Devuelve el mismo
-// shape que la cascada, o null para dejar seguir a los otros proveedores.
-async function generateImageGemini(prompt) {
-  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiImageModel}:generateContent`, {
-    method: "POST",
-    headers: geminiHeaders(),
-    body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }] }),
-    signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS)
-  });
-  const d = await r.json();
-  const part = (d.candidates?.[0]?.content?.parts || []).find(p => p.inline_data || p.inlineData);
-  const inline = part?.inline_data || part?.inlineData;
-  if (r.ok && inline?.data) return { ok: true, imageB64: inline.data, source: geminiImageModel };
-  console.log(`[gemini-image] status=${r.status} err="${d.error?.message || "sin imagen"}"`);
+// v55.24 — modelo de imagen de Gemini AUTO-RESUELTO ("Nano Banana"). Google retira modelos
+// (gemini-2.5-flash-image quedó viejo), así que se prueban varios candidatos + los descubiertos
+// por ListModels hasta que uno DEVUELVA imagen, y se memoriza el que funciona. Sin esto el render
+// caía a proveedores gratis de baja calidad. Devuelve {ok, imageB64, source} o null.
+let activeImageModel = null;
+const geminiImageRetired = new Set();
+let geminiImageDiscovered = null;
+async function discoverGeminiImageModels() {
+  if (geminiImageDiscovered) return geminiImageDiscovered;
+  const all = await discoverGeminiModels();
+  geminiImageDiscovered = all.filter(n => /image/i.test(n) && !/embedding/i.test(n));
+  return geminiImageDiscovered;
+}
+async function callGeminiImage(parts, timeoutMs) {
+  let cands = [activeImageModel, geminiImageModel, "gemini-3.1-flash-image", "gemini-3-pro-image", "gemini-2.5-flash-image"]
+    .filter((v, i, a) => v && a.indexOf(v) === i && !geminiImageRetired.has(v));
+  for (let pass = 0; pass < 2; pass++) {
+    for (const model of cands) {
+      try {
+        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+          method: "POST", headers: geminiHeaders(),
+          body: JSON.stringify({ contents: [{ role: "user", parts }] }),
+          signal: AbortSignal.timeout(timeoutMs)
+        });
+        const d = await r.json();
+        const part = (d.candidates?.[0]?.content?.parts || []).find(p => p.inline_data || p.inlineData);
+        const inline = part?.inline_data || part?.inlineData;
+        if (r.ok && inline?.data) { activeImageModel = model; return { ok: true, imageB64: inline.data, source: model }; }
+        const msg = d.error?.message || `status ${r.status}`;
+        if (/no longer available|not found|not supported|does not exist|is not found/i.test(msg)) geminiImageRetired.add(model);
+        console.log(`[gemini-image] ${model} sin imagen: ${msg}`);
+      } catch (e) { console.log(`[gemini-image] ${model} excepción: ${e.message}`); }
+    }
+    if (pass === 0) {
+      const disc = (await discoverGeminiImageModels()).filter(m => !cands.includes(m) && !geminiImageRetired.has(m));
+      if (!disc.length) break;
+      cands = disc;
+    }
+  }
   return null;
+}
+async function generateImageGemini(prompt) {
+  return await callGeminiImage([{ text: prompt }], PROVIDER_TIMEOUT_MS);
 }
 
 async function generateImageCascade(prompt, quality = "high") {
@@ -1561,18 +1589,7 @@ const EDIT_TIMEOUT_MS = 75000; // sube un archivo + edita en alta calidad: neces
 async function editImageGemini(imageDataUrl, prompt) {
   const m = /^data:([^;]+);base64,(.+)$/.exec(imageDataUrl || "");
   if (!m) return null;
-  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiImageModel}:generateContent`, {
-    method: "POST",
-    headers: geminiHeaders(),
-    body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }, { inline_data: { mime_type: m[1], data: m[2] } }] }] }),
-    signal: AbortSignal.timeout(EDIT_TIMEOUT_MS)
-  });
-  const d = await r.json();
-  const part = (d.candidates?.[0]?.content?.parts || []).find(p => p.inline_data || p.inlineData);
-  const inline = part?.inline_data || part?.inlineData;
-  if (r.ok && inline?.data) return { ok: true, imageB64: inline.data, source: geminiImageModel };
-  console.log(`[gemini-image-edit] status=${r.status} err="${d.error?.message || "sin imagen"}"`);
-  return null;
+  return await callGeminiImage([{ text: prompt }, { inline_data: { mime_type: m[1], data: m[2] } }], EDIT_TIMEOUT_MS);
 }
 
 async function editImageWithReference(imageDataUrl, prompt, quality = "high") {
