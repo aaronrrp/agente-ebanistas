@@ -11087,49 +11087,67 @@ els.marginPercent?.addEventListener("change", (e) => {
   }
 
   let recognition = null;
-  let recording = false;
+  let recording = false;   // true = el usuario quiere seguir grabando (no parar solo)
+  let finalText = "";      // lo ya reconocido de forma definitiva (se conserva entre pausas)
+
+  function stopUi() {
+    btn.textContent = "🎤";
+    btn.classList.remove("recording");
+    btn.title = "Hablar con IA";
+  }
 
   btn.addEventListener("click", () => {
-    if (recording) { recognition?.stop(); return; }
+    // v55.17: si ya está grabando, ESTE clic la detiene (a propósito). No para sola.
+    if (recording) {
+      recording = false;
+      try { recognition?.stop(); } catch {}
+      stopUi();
+      return;
+    }
 
+    finalText = (els.chatInput.value || "").trim();
+    if (finalText) finalText += " ";
     recognition = new SpeechRecognition();
     recognition.lang = navigator.language?.startsWith("es") ? navigator.language : "es-ES";
     recognition.interimResults = true;
-    recognition.continuous = false;
+    recognition.continuous = true;          // no se corta al hacer una pausa al hablar
     recognition.maxAlternatives = 1;
 
     recognition.onstart = () => {
       recording = true;
       btn.textContent = "⏹";
       btn.classList.add("recording");
-      btn.title = "Detener grabación";
+      btn.title = "Toca para detener";
     };
 
     recognition.onresult = (event) => {
-      const transcript = Array.from(event.results)
-        .map(r => r[0].transcript).join("");
-      els.chatInput.value = transcript;
+      let interim = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const res = event.results[i];
+        if (res.isFinal) finalText += res[0].transcript + " ";
+        else interim += res[0].transcript;
+      }
+      els.chatInput.value = (finalText + interim).trim();
       els.chatInput.style.height = "auto";
       els.chatInput.style.height = Math.min(els.chatInput.scrollHeight, 140) + "px";
     };
 
+    // Clave: si el navegador corta el reconocimiento solo (silencio/límite del motor) PERO
+    // el usuario sigue en modo grabación, se reinicia — así solo se detiene con el botón.
     recognition.onend = () => {
-      recording = false;
-      btn.textContent = "🎤";
-      btn.classList.remove("recording");
-      btn.title = "Hablar con IA";
+      if (recording) { try { recognition.start(); } catch { recording = false; stopUi(); } }
+      else stopUi();
     };
 
     recognition.onerror = (event) => {
-      recording = false;
-      btn.textContent = "🎤";
-      btn.classList.remove("recording");
-      btn.title = "Hablar con IA";
-      if (event.error === "not-allowed") {
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        recording = false; stopUi();
         toast("Permiso de micrófono denegado — actívalo en el navegador.", "error");
       } else if (event.error !== "aborted" && event.error !== "no-speech") {
+        recording = false; stopUi();
         toast("Error de micrófono: " + event.error, "error");
       }
+      // "no-speech"/"aborted": no apagamos el modo — onend decide si reinicia.
     };
 
     recognition.start();
