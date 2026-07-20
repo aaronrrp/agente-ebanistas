@@ -872,13 +872,21 @@ async function callGemini(sysPrompt, userContent, useWebSearch = true) {
     if (withThinkingOff) reqBody.generationConfig.thinkingConfig = { thinkingBudget: 0 };
     if (withSearch === "gs") reqBody.tools = [{ google_search: {} }];
     else if (withSearch === "gsr") reqBody.tools = [{ google_search_retrieval: {} }];
-    const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent`, {
-      method: "POST",
-      headers: geminiHeaders(),
-      body: JSON.stringify(reqBody)
-    });
-    const data = await apiRes.json();
-    return { apiRes, data };
+    // v55.28: timeout POR INTENTO (40s). Sin esto, un modelo saturado/colgado consumía todo el
+    // presupuesto y el cliente cortaba a los 90s ("el despiece tardó demasiado"). Con try/catch,
+    // un timeout se trata como intento fallido → la cascada pasa al siguiente modelo/plan.
+    try {
+      const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent`, {
+        method: "POST",
+        headers: geminiHeaders(),
+        body: JSON.stringify(reqBody),
+        signal: AbortSignal.timeout(40000)
+      });
+      const data = await apiRes.json();
+      return { apiRes, data };
+    } catch (e) {
+      return { apiRes: { ok: false, status: 504 }, data: { error: { message: "timeout/red: " + e.message } } };
+    }
   };
 
   // Cascada de tolerancia por modelo: búsqueda web y thinking-off son capas OPCIONALES;
@@ -915,8 +923,8 @@ async function callGemini(sysPrompt, userContent, useWebSearch = true) {
   // modelo Gemini de respaldo más estable — el chat aguanta los picos SIN necesitar OpenAI.
   // v55.21: además de saturación (429/503), también cae al siguiente modelo si el actual fue
   // RETIRADO o no existe ("no longer available"/"not found"/404) — Google retira modelos seguido.
-  const isOverload = (r, d) => r.status === 429 || r.status === 503 || r.status === 404 ||
-    /overloaded|high demand|unavailable|exhausted|try again later|no longer available|not found|not supported|does not exist|is not found/i.test(d?.error?.message || "");
+  const isOverload = (r, d) => r.status === 429 || r.status === 503 || r.status === 404 || r.status === 504 ||
+    /overloaded|high demand|unavailable|exhausted|try again later|no longer available|not found|not supported|does not exist|is not found|timeout/i.test(d?.error?.message || "");
   const isRetired = (r, d) => r.status === 404 ||
     /no longer available|not found|not supported|does not exist|is not found/i.test(d?.error?.message || "");
   // v55.22: cola de modelos AUTO-DESCUBIERTA. Primario + el que funcionó antes + respaldo
@@ -1058,9 +1066,12 @@ function extractCmDimensionsFromText(message) {
 // señal de que el usuario está describiendo una pieza real y probablemente quiera verla.
 function scoreImageSignals(message) {
   const text = String(message || "").toLowerCase();
+  // v55.28: el ÁREA de un cuarto ("7 metros cuadrados", "7 m2") NO es una medida del mueble.
+  // Antes "el mueble va en 7 metros cuadrados" contaba como medida → disparaba una imagen al azar.
+  const sinArea = text.replace(/\d+(?:[.,]\d+)?\s*(?:m2|m²|mts?2|metros?\s*cuadrados?|mts?\s*cuadrados?)\b/g, " ");
   const signals = {
-    medidas: /\d+(?:[.,]\d+)?\s*(?:cm|mm|m|mts?|metros?|cent[ií]metros?|mil[ií]metros?)\b/.test(text)
-      || /\d+\s*[x×]\s*\d+/.test(text),
+    medidas: /\d+(?:[.,]\d+)?\s*(?:cm|mm|m|mts?|metros?|cent[ií]metros?|mil[ií]metros?)\b/.test(sinArea)
+      || /\d+\s*[x×]\s*\d+/.test(sinArea),
     materiales: /\b(melamina|mdf|madera|acero|vidrio|pvc|aluminio|f[oó]rmica|laminado|triplay|contrachapado|granito|m[aá]rmol|cuarzo)\b/.test(text),
     componentes: /\b(gavetas?|cajones?|cajonera|puertas?|repisas?|entrepa[ñn]os?|patas?|bisagras?|correderas?|jaladores?|tiradores?|mesones?|cubiertas?)\b/.test(text),
     estructural: /\b(espacio libre|compartimentos?|divisiones?|laterales?|central(es)?|interno|interna|externo|externa|integrado|empotrado|sobrepuesto|hueco)\b/.test(text),
