@@ -521,7 +521,7 @@ Si pide VARIOS muebles en el mismo mensaje → devuelve TODOS en el array "items
 
 Responde SOLO JSON válido:
 {
-  "assistantText": "2–3 oraciones directas en español, tono de WhatsApp. Menciona cada mueble con sus medidas. NUNCA uses 'Estimado', NUNCA firmes.",
+  "assistantText": "Tu respuesta COMPLETA y natural en español (tono cercano de WhatsApp, sin 'Estimado' ni firmas). Explícalo con la libertad y riqueza de un MAESTRO EBANISTA experto: qué propones y por qué, materiales y acabados, cómo se arma, medidas de cada mueble, recomendaciones y advertencias útiles, alternativas si aplican. Escribe TAN DETALLADO como haga falta — NO te limites a 2-3 líneas; da una respuesta rica como la darías en persona. Los datos técnicos exactos van IGUAL en los campos de abajo (items/breakdown/pieces) para los botones — no los omitas por escribir bonito.",
   "actions": ["fill_form"],
   "items": [
     {
@@ -665,7 +665,7 @@ REGLAS PARA PROPONER MUEBLES:
 
 Responde SOLO JSON válido:
 {
-  "assistantText": "Descripción del espacio analizado y por qué propones cada mueble. Sé específico: menciona la pared disponible, el estilo, las dimensiones estimadas del espacio. 2-4 oraciones.",
+  "assistantText": "Descripción RICA y natural del espacio analizado y por qué propones cada mueble. Sé específico y generoso en detalle: la pared disponible, el estilo, las dimensiones estimadas, materiales, cómo aprovechar el espacio, recomendaciones. Escribe con libertad de experto, tan detallado como haga falta (no te limites a un par de líneas).",
   "spaceType": "cocina|dormitorio|sala|oficina|baño|lavandería|otro",
   "designPrompt": "English DALL-E 3 prompt (under 900 chars) for a photorealistic interior design rendering showing the suggested furniture IN the space. Be specific: room type, furniture style, melamine color, dimensions, lighting. Example: 'Photorealistic interior design of a modern bedroom with a white melamine built-in closet 200cm tall x 150cm wide, soft close doors, minimalist style, warm lighting, high quality render'",
   "actions": ["fill_form", "add_to_quote"],
@@ -817,7 +817,7 @@ async function callOpenAI(sysPrompt, userContent, useWebSearch = true) {
       input: inputMessages,
       // El desglose ahora pide cálculo explícito por pieza (más texto) — 2000 se quedaba corto
       // y la respuesta llegaba truncada a mitad del JSON (rompía el parseo).
-      max_output_tokens: 3500
+      max_output_tokens: 6000
     })
   });
   const data = await apiRes.json();
@@ -865,7 +865,7 @@ async function callGemini(sysPrompt, userContent, useWebSearch = true) {
     const reqBody = {
       system_instruction: { parts: [{ text: sysPrompt }] },
       contents: [{ role: "user", parts }],
-      generationConfig: { maxOutputTokens: 3500 }
+      generationConfig: { maxOutputTokens: 6000 }
     };
     // v55.13: los Gemini 2.5+/3.x traen razonamiento interno ("thinking") ACTIVADO por
     // defecto — suma segundos de latencia y cobra esos tokens. Para un chat lo apagamos.
