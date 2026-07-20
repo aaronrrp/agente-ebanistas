@@ -365,6 +365,16 @@
           </div>
         </div>
 
+        <!-- Mapa del directorio (v55.34) — pines/zonas de cada profesional -->
+        <div id="dirMapWrap" style="margin:4px 0 16px">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+            <button id="dirNearMeBtn" class="secondary-btn" type="button" style="font-size:.85rem">📍 Cerca de mí</button>
+            <button id="dirToggleMapBtn" class="secondary-btn" type="button" style="font-size:.85rem">🗺️ Ocultar mapa</button>
+            <span id="dirNearMeStatus" class="login-hint" style="margin:0"></span>
+          </div>
+          <div id="dirMap" style="width:100%;height:320px;border-radius:12px;border:1px solid var(--line);background:var(--surface-soft);overflow:hidden"></div>
+        </div>
+
         <div id="publicDirectoryGrid" class="public-directory-grid"></div>
 
         <!-- Modal: perfil completo del profesional -->
@@ -2171,6 +2181,10 @@
           <label>Provincia<input id="ebp_province" type="text" placeholder="Ej: Panamá"></label>
           <label>Ciudad<input id="ebp_city" type="text" placeholder="Ej: Ciudad de Panamá"></label>
         </div>
+        <div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <button id="ebp_locBtn" type="button" class="secondary-btn" style="font-size:.85rem;margin:0">📍 Poner mi ubicación en el mapa</button>
+          <span id="ebp_locStatus" class="login-hint" style="margin:0"></span>
+        </div>
         <label style="display:block;margin-top:10px">Descripción<textarea id="ebp_description" rows="3" placeholder="Cuéntale a los clientes qué haces y por qué elegirte."></textarea></label>
         <div style="margin-top:12px"><strong style="font-size:.9rem">Foto de perfil</strong>
           <div style="display:flex;align-items:center;gap:12px;margin-top:6px">
@@ -2847,6 +2861,30 @@ Yappy @miempresa"></textarea>
     <div class="aip-inputbar">
       <input id="aipInput" type="text" placeholder="Escríbeme algo…" autocomplete="off">
       <button id="aipSend" type="button" aria-label="Enviar">↑</button>
+    </div>
+  </div>
+
+  <!-- Modal selector de ubicación (v55.34) — reutilizable por todos los perfiles -->
+  <div id="locPickerModal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal-box" style="max-width:560px">
+      <button class="modal-close-btn" id="locPicker_close" type="button" aria-label="Cerrar">✕</button>
+      <h3 style="margin:0 0 6px">📍 Tu ubicación en el mapa</h3>
+      <p class="login-hint" style="margin:0 0 10px">Arrastra el pin o toca el mapa para marcar tu taller o zona de trabajo.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+        <button id="locPicker_useMe" class="secondary-btn" type="button" style="font-size:.85rem">📡 Usar mi ubicación</button>
+        <label style="display:flex;align-items:center;gap:6px;font-size:.85rem;margin:0">
+          Mostrar:
+          <select id="locPicker_precision" style="font-size:.85rem;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface)">
+            <option value="exact">Ubicación exacta (tengo taller/local)</option>
+            <option value="approx">Solo la zona (trabajo desde casa)</option>
+          </select>
+        </label>
+      </div>
+      <div id="locPickerMap" style="width:100%;height:340px;border-radius:12px;border:1px solid var(--line);background:var(--surface-soft);overflow:hidden"></div>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button id="locPicker_save" class="primary-btn" type="button">Guardar ubicación</button>
+        <button id="locPicker_cancel" class="secondary-btn" type="button">Cancelar</button>
+      </div>
     </div>
   </div>
 

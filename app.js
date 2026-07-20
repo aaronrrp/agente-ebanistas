@@ -9005,6 +9005,238 @@ function currentBestAuthToken() {
     || (typeof _publicPostAuth !== "undefined" && _publicPostAuth?.token) || null;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  MAPA Y UBICACIÓN (Leaflet + OpenStreetMap, sin API key) — v55.34
+//  Inspirado en apps tipo YoMap: mostrar en un mapa la ubicación (taller o zona)
+//  de cada profesional. Leaflet se carga bajo demanda desde CDN (mismo criterio
+//  que las fuentes de Google) — sin dependencias npm en el servidor.
+// ═══════════════════════════════════════════════════════════════════════════
+const PILLA_MAP_CENTER = [8.9824, -79.5199]; // Ciudad de Panamá
+const OSM_TILES = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+const OSM_ATTRIB = "© OpenStreetMap";
+let _leafletPromise = null;
+function loadLeaflet() {
+  if (window.L) return Promise.resolve(window.L);
+  if (_leafletPromise) return _leafletPromise;
+  _leafletPromise = new Promise((resolve, reject) => {
+    const css = document.createElement("link");
+    css.rel = "stylesheet";
+    css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+    document.head.appendChild(css);
+    const s = document.createElement("script");
+    s.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+    s.async = true;
+    s.onload = () => window.L ? resolve(window.L) : reject(new Error("Leaflet no cargó."));
+    s.onerror = () => reject(new Error("No se pudo cargar el mapa (revisa tu conexión)."));
+    document.head.appendChild(s);
+  });
+  return _leafletPromise;
+}
+// Pin con emoji vía divIcon: evita el clásico problema de los íconos PNG de
+// Leaflet rotos cuando se sirve desde CDN.
+function _pillaPinIcon(L) {
+  return L.divIcon({
+    className: "pilla-pin",
+    html: '<div style="font-size:28px;line-height:1;transform:translate(-50%,-90%);filter:drop-shadow(0 2px 3px rgba(0,0,0,.45))">📍</div>',
+    iconSize: [0, 0], iconAnchor: [0, 0]
+  });
+}
+function haversineKm(a, b) {
+  const R = 6371, toRad = d => d * Math.PI / 180;
+  const dLat = toRad(b[0] - a[0]), dLng = toRad(b[1] - a[1]);
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a[0])) * Math.cos(toRad(b[0])) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
+}
+function directionsUrl(lat, lng) { return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`; }
+function _hasCoords(loc) {
+  return loc && typeof loc.lat === "number" && typeof loc.lng === "number" && !(loc.lat === 0 && loc.lng === 0);
+}
+function _geolocate() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) { reject(new Error("Tu dispositivo no comparte ubicación.")); return; }
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve([pos.coords.latitude, pos.coords.longitude]),
+      () => reject(new Error("No se pudo obtener tu ubicación (¿permiso denegado?).")),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  });
+}
+
+// ── Mapa del directorio ──────────────────────────────────────────────────────
+let _dirMap = null, _dirMarkers = null, _dirUserLoc = null, _dirMapHidden = false;
+async function renderDirectoryMap(list) {
+  const wrap = document.getElementById("dirMapWrap");
+  const mapEl = document.getElementById("dirMap");
+  if (!wrap || !mapEl) return;
+  const geo = (list || []).filter(p => _hasCoords(p.location));
+  if (!geo.length && !_dirUserLoc) { wrap.style.display = "none"; return; }
+  wrap.style.display = "";
+  let L;
+  try { L = await loadLeaflet(); } catch { wrap.style.display = "none"; return; }
+  if (!_dirMap) {
+    _dirMap = L.map(mapEl, { scrollWheelZoom: false }).setView(PILLA_MAP_CENTER, 11);
+    L.tileLayer(OSM_TILES, { attribution: OSM_ATTRIB, maxZoom: 19 }).addTo(_dirMap);
+    _dirMarkers = L.layerGroup().addTo(_dirMap);
+  }
+  _dirMarkers.clearLayers();
+  const bounds = [];
+  for (const p of geo) {
+    const ll = [p.location.lat, p.location.lng];
+    bounds.push(ll);
+    if (p.location.precision === "approx") {
+      L.circle(ll, { radius: 900, color: "#2D235F", weight: 1, fillColor: "#2D235F", fillOpacity: 0.12 }).addTo(_dirMarkers);
+    }
+    L.marker(ll, { icon: _pillaPinIcon(L) }).addTo(_dirMarkers).bindPopup(
+      `<div style="text-align:center;min-width:140px">
+        ${p.photoUrl ? `<img src="${escapeHtml(p.photoUrl)}" alt="" style="width:52px;height:52px;border-radius:50%;object-fit:cover;margin:0 auto 6px;display:block">` : ""}
+        <strong>${escapeHtml(p.name)}</strong><br>
+        <span style="color:#666;font-size:.8rem">${escapeHtml(professionalCategoryLabel(p.category))}</span>
+        ${p.location.city ? `<br><span style="color:#666;font-size:.78rem">📍 ${escapeHtml(p.location.city)}</span>` : ""}<br>
+        <button type="button" data-map-view="${p.id}" style="margin-top:6px;background:#2D235F;color:#fff;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:.8rem">Ver perfil</button>
+      </div>`);
+  }
+  if (_dirUserLoc) {
+    bounds.push(_dirUserLoc);
+    L.circleMarker(_dirUserLoc, { radius: 8, color: "#fff", weight: 2, fillColor: "#F9A825", fillOpacity: 1 }).addTo(_dirMarkers).bindPopup("Estás aquí");
+  }
+  if (bounds.length) { try { _dirMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 }); } catch {} }
+  setTimeout(() => _dirMap && _dirMap.invalidateSize(), 120);
+}
+document.getElementById("dirMap")?.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-map-view]");
+  if (b) openProProfileModal(b.dataset.mapView);
+});
+document.getElementById("dirToggleMapBtn")?.addEventListener("click", () => {
+  const mapEl = document.getElementById("dirMap");
+  _dirMapHidden = !_dirMapHidden;
+  if (mapEl) mapEl.style.display = _dirMapHidden ? "none" : "";
+  const btn = document.getElementById("dirToggleMapBtn");
+  if (btn) btn.textContent = _dirMapHidden ? "🗺️ Mostrar mapa" : "🗺️ Ocultar mapa";
+  if (!_dirMapHidden) setTimeout(() => _dirMap && _dirMap.invalidateSize(), 60);
+});
+document.getElementById("dirNearMeBtn")?.addEventListener("click", async () => {
+  const status = document.getElementById("dirNearMeStatus");
+  if (status) status.textContent = "Obteniendo tu ubicación…";
+  try {
+    _dirUserLoc = await _geolocate();
+    if (Array.isArray(_lastDirList)) {
+      _lastDirList = _lastDirList.slice()
+        .map(p => ({ ...p, _dist: _hasCoords(p.location) ? haversineKm(_dirUserLoc, [p.location.lat, p.location.lng]) : Infinity }))
+        .sort((a, b) => a._dist - b._dist);
+      _renderDirGrid(_lastDirList);
+      await renderDirectoryMap(_lastDirList);
+    }
+    const withCoords = (_lastDirList || []).filter(p => _hasCoords(p.location)).length;
+    if (status) status.textContent = withCoords ? "Ordenado por cercanía a ti 📍" : "Aún no hay profesionales con ubicación cerca.";
+  } catch (err) { if (status) status.textContent = err.message; }
+});
+
+// ── Selector de ubicación (modal reutilizable) ───────────────────────────────
+let _locPickerMap = null, _locPickerMarker = null, _locPickerOnSave = null;
+async function openLocationPicker(current, onSave) {
+  _locPickerOnSave = onSave;
+  const modal = document.getElementById("locPickerModal");
+  const mapEl = document.getElementById("locPickerMap");
+  if (!modal || !mapEl) return;
+  modal.classList.remove("hidden");
+  const precSel = document.getElementById("locPicker_precision");
+  if (precSel) precSel.value = current?.precision === "approx" ? "approx" : "exact";
+  let L;
+  try { L = await loadLeaflet(); } catch { toast("No se pudo cargar el mapa.", "error"); return; }
+  const start = _hasCoords(current) ? [current.lat, current.lng] : PILLA_MAP_CENTER;
+  const zoom = _hasCoords(current) ? 15 : 12;
+  if (!_locPickerMap) {
+    _locPickerMap = L.map(mapEl).setView(start, zoom);
+    L.tileLayer(OSM_TILES, { attribution: OSM_ATTRIB, maxZoom: 19 }).addTo(_locPickerMap);
+    _locPickerMarker = L.marker(start, { draggable: true, icon: _pillaPinIcon(L) }).addTo(_locPickerMap);
+    _locPickerMap.on("click", (e) => _locPickerMarker.setLatLng(e.latlng));
+  } else {
+    _locPickerMap.setView(start, zoom);
+    _locPickerMarker.setLatLng(start);
+  }
+  setTimeout(() => _locPickerMap && _locPickerMap.invalidateSize(), 150);
+}
+document.getElementById("locPicker_useMe")?.addEventListener("click", async () => {
+  if (!_locPickerMarker) return;
+  const btn = document.getElementById("locPicker_useMe");
+  const prev = btn?.textContent; if (btn) { btn.disabled = true; btn.textContent = "Localizando…"; }
+  try {
+    const ll = await _geolocate();
+    _locPickerMarker.setLatLng(ll);
+    _locPickerMap.setView(ll, 16);
+  } catch (err) { toast(err.message, "error"); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = prev; } }
+});
+document.getElementById("locPicker_save")?.addEventListener("click", () => {
+  if (!_locPickerMarker) { document.getElementById("locPickerModal")?.classList.add("hidden"); return; }
+  const { lat, lng } = _locPickerMarker.getLatLng();
+  const precision = document.getElementById("locPicker_precision")?.value === "approx" ? "approx" : "exact";
+  if (_locPickerOnSave) _locPickerOnSave({ lat: Math.round(lat * 1e6) / 1e6, lng: Math.round(lng * 1e6) / 1e6, precision });
+  document.getElementById("locPickerModal")?.classList.add("hidden");
+});
+["locPicker_close", "locPicker_cancel"].forEach(id =>
+  document.getElementById(id)?.addEventListener("click", () => document.getElementById("locPickerModal")?.classList.add("hidden")));
+// Texto de estado reutilizable para el botón de ubicación en los formularios.
+function locStatusText(loc) {
+  if (!_hasCoords(loc)) return "Sin ubicación en el mapa";
+  return loc.precision === "approx" ? "📍 Zona aproximada puesta" : "📍 Ubicación exacta puesta";
+}
+
+// ── Mini-mapa en el perfil público ───────────────────────────────────────────
+async function renderProfileMiniMap(p) {
+  const el = document.getElementById("profileMiniMap");
+  if (!el || !_hasCoords(p.location)) return;
+  let L;
+  try { L = await loadLeaflet(); } catch { return; }
+  const ll = [p.location.lat, p.location.lng];
+  const map = L.map(el, { scrollWheelZoom: false }).setView(ll, p.location.precision === "approx" ? 13 : 15);
+  L.tileLayer(OSM_TILES, { attribution: OSM_ATTRIB, maxZoom: 19 }).addTo(map);
+  if (p.location.precision === "approx") L.circle(ll, { radius: 900, color: "#2D235F", weight: 1, fillColor: "#2D235F", fillOpacity: 0.12 }).addTo(map);
+  else L.marker(ll, { icon: _pillaPinIcon(L) }).addTo(map);
+  setTimeout(() => map.invalidateSize(), 150);
+}
+
+let _lastDirList = null;
+function _renderDirGrid(list) {
+  const grid = document.getElementById("publicDirectoryGrid");
+  if (!grid) return;
+  if (!list.length) { grid.innerHTML = '<p class="login-hint">No hay profesionales que coincidan todavía — sé el primero en registrarte.</p>'; return; }
+  grid.innerHTML = list.map(p => {
+    const waPhone = (p.whatsapp || p.phone || "").replace(/[^0-9]/g, "");
+    const photo = p.photoUrl
+      ? `<img src="${escapeHtml(p.photoUrl)}" alt="" class="pro-card-photo">`
+      : `<div class="pro-card-photo pro-card-photo--placeholder">${escapeHtml((p.name||"?")[0].toUpperCase())}</div>`;
+    const badges = [
+      p.featured ? `<span class="pro-badge pro-badge--gold">★ Destacado</span>` : "",
+      p.plan === "premium" ? `<span class="pro-badge pro-badge--purple">PRO</span>` : ""
+    ].filter(Boolean).join("");
+    const distTag = (typeof p._dist === "number" && isFinite(p._dist))
+      ? `<div class="pro-card-location">🧭 a ${p._dist < 1 ? Math.round(p._dist * 1000) + " m" : p._dist.toFixed(1) + " km"} de ti</div>` : "";
+    return `<div class="pro-card${p.featured ? " pro-card--featured" : ""}">
+      <div class="pro-card-header">
+        ${photo}
+        ${badges ? `<div class="pro-card-badges">${badges}</div>` : ""}
+      </div>
+      <div class="pro-card-body">
+        <h3 class="pro-card-name">${escapeHtml(p.name)}</h3>
+        <div class="pro-card-meta">${escapeHtml(professionalCategoryLabel(p.category))}${p.experienceYears ? ` · ${p.experienceYears} año${p.experienceYears !== 1 ? "s" : ""} exp.` : ""}</div>
+        ${p.company ? `<div class="pro-card-company">${escapeHtml(p.company)}</div>` : ""}
+        ${p.location?.city ? `<div class="pro-card-location">📍 ${escapeHtml(p.location.city)}${p.location.province ? ", " + escapeHtml(p.location.province) : ""}</div>` : ""}
+        ${distTag}
+        ${p.ratings?.count ? `<div class="pro-card-rating">${starHtml(p.ratings.avg, p.ratings.count)}</div>` : ""}
+        ${p.specialty ? `<div class="pro-card-specialty">${escapeHtml(p.specialty)}</div>` : ""}
+      </div>
+      <div class="pro-card-actions">
+        ${waPhone ? `<button class="pca-btn pca-wa" type="button" data-contact-id="${p.id}" data-contact-phone="${escapeHtml(p.whatsapp || p.phone || "")}">WhatsApp</button>` : ""}
+        ${p.phone ? `<a class="pca-btn pca-call" href="tel:${escapeHtml(p.phone.replace(/[^0-9+]/g,""))}">Llamar</a>` : ""}
+        ${waPhone ? `<button class="pca-btn pca-quote" type="button" data-quote-id="${p.id}" data-contact-phone="${escapeHtml(p.whatsapp || p.phone || "")}" data-quote-name="${escapeHtml(p.name)}">Cotizar</button>` : ""}
+        <button class="pca-btn pca-view" type="button" data-view-profile="${p.id}">Ver perfil</button>
+        <button class="pca-btn pca-share" type="button" data-share-type="p" data-share-slug="${escapeHtml(p.slug || p.id)}" data-share-name="${escapeHtml(p.name)}">Compartir</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
 async function loadPublicDirectory() {
   const grid = document.getElementById("publicDirectoryGrid");
   if (!grid) return;
@@ -9033,38 +9265,14 @@ async function loadPublicDirectory() {
       return;
     }
     const list = res.ok ? await res.json() : [];
-    if (!list.length) { grid.innerHTML = '<p class="login-hint">No hay profesionales que coincidan todavía — sé el primero en registrarte.</p>'; return; }
-    grid.innerHTML = list.map(p => {
-      const waPhone = (p.whatsapp || p.phone || "").replace(/[^0-9]/g, "");
-      const photo = p.photoUrl
-        ? `<img src="${escapeHtml(p.photoUrl)}" alt="" class="pro-card-photo">`
-        : `<div class="pro-card-photo pro-card-photo--placeholder">${escapeHtml((p.name||"?")[0].toUpperCase())}</div>`;
-      const badges = [
-        p.featured ? `<span class="pro-badge pro-badge--gold">★ Destacado</span>` : "",
-        p.plan === "premium" ? `<span class="pro-badge pro-badge--purple">PRO</span>` : ""
-      ].filter(Boolean).join("");
-      return `<div class="pro-card${p.featured ? " pro-card--featured" : ""}">
-        <div class="pro-card-header">
-          ${photo}
-          ${badges ? `<div class="pro-card-badges">${badges}</div>` : ""}
-        </div>
-        <div class="pro-card-body">
-          <h3 class="pro-card-name">${escapeHtml(p.name)}</h3>
-          <div class="pro-card-meta">${escapeHtml(professionalCategoryLabel(p.category))}${p.experienceYears ? ` · ${p.experienceYears} año${p.experienceYears !== 1 ? "s" : ""} exp.` : ""}</div>
-          ${p.company ? `<div class="pro-card-company">${escapeHtml(p.company)}</div>` : ""}
-          ${p.location?.city ? `<div class="pro-card-location">📍 ${escapeHtml(p.location.city)}${p.location.province ? ", " + escapeHtml(p.location.province) : ""}</div>` : ""}
-          ${p.ratings?.count ? `<div class="pro-card-rating">${starHtml(p.ratings.avg, p.ratings.count)}</div>` : ""}
-          ${p.specialty ? `<div class="pro-card-specialty">${escapeHtml(p.specialty)}</div>` : ""}
-        </div>
-        <div class="pro-card-actions">
-          ${waPhone ? `<button class="pca-btn pca-wa" type="button" data-contact-id="${p.id}" data-contact-phone="${escapeHtml(p.whatsapp || p.phone || "")}">WhatsApp</button>` : ""}
-          ${p.phone ? `<a class="pca-btn pca-call" href="tel:${escapeHtml(p.phone.replace(/[^0-9+]/g,""))}">Llamar</a>` : ""}
-          ${waPhone ? `<button class="pca-btn pca-quote" type="button" data-quote-id="${p.id}" data-contact-phone="${escapeHtml(p.whatsapp || p.phone || "")}" data-quote-name="${escapeHtml(p.name)}">Cotizar</button>` : ""}
-          <button class="pca-btn pca-view" type="button" data-view-profile="${p.id}">Ver perfil</button>
-          <button class="pca-btn pca-share" type="button" data-share-type="p" data-share-slug="${escapeHtml(p.slug || p.id)}" data-share-name="${escapeHtml(p.name)}">Compartir</button>
-        </div>
-      </div>`;
-    }).join("");
+    // Si venías ordenando por cercanía, mantenemos ese orden en la nueva búsqueda.
+    if (_dirUserLoc) {
+      list.forEach(p => { p._dist = _hasCoords(p.location) ? haversineKm(_dirUserLoc, [p.location.lat, p.location.lng]) : Infinity; });
+      list.sort((a, b) => a._dist - b._dist);
+    }
+    _lastDirList = list;
+    _renderDirGrid(list);
+    renderDirectoryMap(list);
   } catch {
     grid.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>';
   }
@@ -11442,6 +11650,11 @@ async function openProProfileModal(professionalId) {
         ${p.schedule ? `<div><strong style="font-size:.8rem;color:var(--muted)">HORARIO</strong><p style="margin:2px 0;font-size:.9rem">${escapeHtml(p.schedule)}</p></div>` : ""}
         ${p.location?.city ? `<div><strong style="font-size:.8rem;color:var(--muted)">UBICACIÓN</strong><p style="margin:2px 0;font-size:.9rem">📍 ${escapeHtml(p.location.city)}${p.location.province ? ", " + escapeHtml(p.location.province) : ""}</p></div>` : ""}
       </div>
+      ${_hasCoords(p.location) ? `
+        <div id="profileMiniMap" style="width:100%;height:200px;border-radius:10px;border:1px solid var(--line);overflow:hidden;margin:0 0 8px;background:var(--surface-soft)"></div>
+        <a href="${directionsUrl(p.location.lat, p.location.lng)}" target="_blank" rel="noopener" class="secondary-btn" style="display:inline-block;margin-bottom:14px;font-size:.85rem">🧭 Cómo llegar</a>
+        ${p.location.precision === "approx" ? `<p class="login-hint" style="margin:-8px 0 12px;font-size:.78rem">Ubicación aproximada (zona), por privacidad del profesional.</p>` : ""}
+      ` : ""}
       ${(p.whatsapp || p.phone) ? `<button class="primary-btn pro-modal-contact" type="button" data-mc-phone="${escapeHtml(p.whatsapp||p.phone)}" data-mc-name="${escapeHtml(p.name)}" style="display:inline-block;margin-bottom:16px">📞 Contactar por WhatsApp</button>` : ""}
       <hr style="margin:12px 0;border:none;border-top:1px solid var(--line)">
       <h4 style="margin:0 0 10px">Reseñas (${ratings.length})</h4>
@@ -11486,6 +11699,7 @@ async function openProProfileModal(professionalId) {
         <p id="proRatingError" class="login-error hidden"></p>
         <p id="proRatingOk" class="login-hint hidden" style="color:var(--accent-dark)"></p>
       </div>`;
+    renderProfileMiniMap(p);
     _attachRatingFormListeners();
   } catch {
     content.innerHTML = '<p class="login-hint">Error al cargar el perfil.</p>';
@@ -13306,6 +13520,10 @@ function renderProMiPerfil() {
         <label>Ciudad
           <select id="proPf_city"><option value="">Seleccionar…</option></select>
         </label>
+        <div class="span-2" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <button id="proPf_locBtn" type="button" class="secondary-btn" style="font-size:.85rem;margin:0">📍 Poner mi ubicación en el mapa</button>
+          <span id="proPf_locStatus" class="login-hint" style="margin:0">${escapeHtml(locStatusText(_hasCoords(p.location) ? p.location : null))}</span>
+        </div>
         <label class="span-2">Descripción
           <textarea id="proPf_description" rows="3">${escapeHtml(p.description || "")}</textarea>
         </label>
@@ -13388,6 +13606,16 @@ function renderProMiPerfil() {
     finally { e.target.value = ""; }
   });
 
+  // Ubicación en el mapa (v55.34)
+  _proPfLocation = _hasCoords(p.location) ? { lat: p.location.lat, lng: p.location.lng, precision: p.location.precision || "exact" } : null;
+  document.getElementById("proPf_locBtn")?.addEventListener("click", () => {
+    openLocationPicker(_proPfLocation, (loc) => {
+      _proPfLocation = loc;
+      const st = document.getElementById("proPf_locStatus");
+      if (st) st.textContent = locStatusText(loc) + " — recuerda guardar";
+    });
+  });
+
   // Idoneidad: mostrar/ocultar detalles y subir documento
   _proIdoPhotoUrl = p.idoneidad?.photoUrl || "";
   document.getElementById("proPf_idoHas")?.addEventListener("change", (e) => {
@@ -13406,6 +13634,7 @@ function renderProMiPerfil() {
   });
 }
 let _proIdoPhotoUrl = "";
+let _proPfLocation = null;
 
 document.getElementById("proSavePerfilBtn")?.addEventListener("click", async () => {
   const errEl = document.getElementById("proPf_error");
@@ -13426,7 +13655,8 @@ document.getElementById("proSavePerfilBtn")?.addEventListener("click", async () 
     location: {
       province: document.getElementById("proPf_province")?.value || "",
       city: document.getElementById("proPf_city")?.value || "",
-      address: AUTH.professionalData?.location?.address || ""
+      address: AUTH.professionalData?.location?.address || "",
+      ...(_proPfLocation ? { lat: _proPfLocation.lat, lng: _proPfLocation.lng, precision: _proPfLocation.precision } : {})
     },
     socialLinks: {
       facebook: document.getElementById("proPf_facebook")?.value.trim() || "",
@@ -13792,6 +14022,8 @@ async function loadEbanistaProfile() {
     set("ebp_specialty", p.specialty); set("ebp_experience", p.experienceYears || "");
     set("ebp_phone", p.phone); set("ebp_whatsapp", p.whatsapp);
     set("ebp_province", p.location?.province); set("ebp_city", p.location?.city);
+    _ebpLocation = _hasCoords(p.location) ? { lat: p.location.lat, lng: p.location.lng, precision: p.location.precision || "exact" } : null;
+    const ebpLocSt = document.getElementById("ebp_locStatus"); if (ebpLocSt) ebpLocSt.textContent = locStatusText(_ebpLocation);
     set("ebp_description", p.description); set("ebp_services", (p.services || []).join("\n"));
     _ebpSetPhoto(p.photoUrl || "");
     _ebpPortfolio = Array.isArray(p.portfolioUrls) ? p.portfolioUrls.slice() : [];
@@ -13827,7 +14059,10 @@ document.getElementById("ebp_saveBtn")?.addEventListener("click", async () => {
     name: val("ebp_name"), category: document.getElementById("ebp_category")?.value || "ebanista",
     specialty: val("ebp_specialty"), experienceYears: Number(val("ebp_experience")) || 0,
     phone: val("ebp_phone"), whatsapp: val("ebp_whatsapp"),
-    location: { province: val("ebp_province"), city: val("ebp_city"), address: "" },
+    location: {
+      province: val("ebp_province"), city: val("ebp_city"), address: "",
+      ...(_ebpLocation ? { lat: _ebpLocation.lat, lng: _ebpLocation.lng, precision: _ebpLocation.precision } : {})
+    },
     description: val("ebp_description"), photoUrl: document.getElementById("ebp_photo")?.value || "",
     portfolioUrls: _ebpPortfolio.slice(0, 20),
     services: val("ebp_services").split("\n").map(s => s.trim()).filter(Boolean).slice(0, 20)
@@ -13842,6 +14077,15 @@ document.getElementById("ebp_saveBtn")?.addEventListener("click", async () => {
     loadEbanistaProfile();
   } catch { toast("Sin conexión al servidor.", "error"); }
   finally { btn.disabled = false; btn.textContent = prev; }
+});
+// v55.34: ubicación del ebanista en el mapa (reutiliza el modal selector).
+let _ebpLocation = null;
+document.getElementById("ebp_locBtn")?.addEventListener("click", () => {
+  openLocationPicker(_ebpLocation, (loc) => {
+    _ebpLocation = loc;
+    const st = document.getElementById("ebp_locStatus");
+    if (st) st.textContent = locStatusText(loc) + " — recuerda guardar";
+  });
 });
 // v55.32: subida de imágenes (no URL) para el perfil del ebanista — reutiliza smartUploadImage.
 let _ebpPortfolio = [];

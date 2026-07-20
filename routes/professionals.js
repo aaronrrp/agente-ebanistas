@@ -42,11 +42,31 @@ function publicProfessional(p) {
   const { passwordHash, passwordSalt, ...rest } = p;
   return rest;
 }
+// Coordenadas en salida PÚBLICA (v55.34): si el profesional eligió "zona
+// aproximada", el punto exacto NUNCA sale del servidor — se redondea a ~2
+// decimales (~1.1 km) y se oculta la dirección exacta. Si eligió "exacta",
+// pasa tal cual. Se usa solo en los endpoints públicos, no en los del dueño
+// (que sí necesita ver/editar su punto real).
+function sanitizeLocationForPublic(loc) {
+  if (!loc || typeof loc !== "object") return loc;
+  const out = { ...loc };
+  if (out.precision === "approx" && typeof out.lat === "number" && typeof out.lng === "number") {
+    out.lat = Math.round(out.lat * 100) / 100;
+    out.lng = Math.round(out.lng * 100) / 100;
+    out.address = "";
+  }
+  return out;
+}
+function publicProfessionalPublic(p) {
+  const r = publicProfessional(p);
+  if (r.location) r.location = sanitizeLocationForPublic(r.location);
+  return r;
+}
 // Para el listado público no se manda el email/teléfono crudo sin que el usuario
 // haga clic en "Contactar" -- en esta fase sí se manda (no hay todavía un mecanismo
 // de mensajería intermedio), pero se deja esta función separada para poder limitarlo
 // más adelante sin tocar el resto del módulo.
-function publicProfessionalForListing(p) { return publicProfessional(p); }
+function publicProfessionalForListing(p) { return publicProfessionalPublic(p); }
 
 // ── Sesión de profesional (mismo patrón que sellerSessions en server.js) ──────
 const professionalSessions = new Map(); // token -> { professionalId, ts }
@@ -104,7 +124,7 @@ async function handle(req, res, { method, p, parts, getCallerIdentity, tenants }
   if (method === "GET" && parts[0] === "api" && parts[1] === "professionals" && parts[2] === "slug" && parts[3]) {
     const prof = professionals.find(x => x.slug === parts[3] && x.status === "approved");
     if (!prof) { sendJson(res, 404, { error: "Perfil no encontrado." }); return true; }
-    sendJson(res, 200, publicProfessional(prof));
+    sendJson(res, 200, publicProfessionalPublic(prof));
     return true;
   }
 
@@ -289,7 +309,7 @@ async function handle(req, res, { method, p, parts, getCallerIdentity, tenants }
     if (!prof || prof.status !== "approved") { sendJson(res, 404, { error: "No encontrado." }); return true; }
     prof.views = (prof.views || 0) + 1;
     saveProfessionals(professionals);
-    sendJson(res, 200, publicProfessional(prof));
+    sendJson(res, 200, publicProfessionalPublic(prof));
     return true;
   }
 
