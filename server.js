@@ -54,6 +54,26 @@ function geminiHeaders() {
     ? { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.GEMINI_API_KEY}` }
     : { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY };
 }
+// v55.22 — auto-descubrimiento de modelos: en vez de adivinar IDs (Google retira modelos
+// seguido), se le pregunta a la API qué modelos soportan generateContent y se usa uno válido.
+let geminiDiscovered = null;              // cache de nombres válidos (ordenados: flash primero)
+const geminiRetired = new Set();          // modelos que dieron "no longer available" → se saltan
+let geminiWorkingFallback = null;         // último respaldo que SÍ funcionó (para probarlo antes)
+async function discoverGeminiModels() {
+  if (geminiDiscovered) return geminiDiscovered;
+  try {
+    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200", { headers: geminiHeaders() });
+    const d = await r.json();
+    if (!r.ok || !Array.isArray(d.models)) { console.warn("[callGemini] ListModels falló:", d.error?.message || r.status); return (geminiDiscovered = []); }
+    const rank = (n) => (/flash/i.test(n) ? 0 : 5) + (/(tts|image|embedding|aqa|learnlm|vision)/i.test(n) ? 50 : 0) + (/preview|exp/i.test(n) ? 2 : 0);
+    geminiDiscovered = d.models
+      .filter(m => (m.supportedGenerationMethods || []).includes("generateContent"))
+      .map(m => String(m.name || "").replace(/^models\//, "")).filter(Boolean)
+      .sort((a, b) => rank(a) - rank(b));
+    console.log("[callGemini] modelos disponibles (generateContent):", geminiDiscovered.slice(0, 10).join(", "));
+    return geminiDiscovered;
+  } catch (e) { console.warn("[callGemini] error listando modelos:", e.message); return (geminiDiscovered = []); }
+}
 // En producción (Render define RENDER=true) NO hay contraseña por defecto: si falta
 // ADMIN_PASSWORD el login de admin queda deshabilitado. El fallback "admin1234" solo
 // existe para desarrollo local.
@@ -897,18 +917,32 @@ async function callGemini(sysPrompt, userContent, useWebSearch = true) {
   // RETIRADO o no existe ("no longer available"/"not found"/404) — Google retira modelos seguido.
   const isOverload = (r, d) => r.status === 429 || r.status === 503 || r.status === 404 ||
     /overloaded|high demand|unavailable|exhausted|try again later|no longer available|not found|not supported|does not exist|is not found/i.test(d?.error?.message || "");
-  const modelos = geminiModelFallback && geminiModelFallback !== geminiModel
-    ? [geminiModel, geminiModelFallback] : [geminiModel];
-  let apiRes, data;
-  for (let i = 0; i < modelos.length; i++) {
-    activeModel = modelos[i];
+  const isRetired = (r, d) => r.status === 404 ||
+    /no longer available|not found|not supported|does not exist|is not found/i.test(d?.error?.message || "");
+  // v55.22: cola de modelos AUTO-DESCUBIERTA. Primario + el que funcionó antes + respaldo
+  // configurado, saltando los que ya sabemos retirados. Si todos fallan por saturación o retiro,
+  // se le PREGUNTA a Google qué modelos existen (ListModels, cacheado) y se prueban esos → así el
+  // código nunca queda sin un modelo válido aunque Google retire varios (deja de haber que adivinar).
+  const queue = [];
+  for (const m of [geminiModel, geminiWorkingFallback, geminiModelFallback]) {
+    if (m && !queue.includes(m) && !geminiRetired.has(m)) queue.push(m);
+  }
+  const tried = new Set();
+  let apiRes, data, discovered = false;
+  while (queue.length) {
+    activeModel = queue.shift();
+    if (tried.has(activeModel)) continue;
+    tried.add(activeModel);
     ({ apiRes, data } = await runCascade());
-    if (apiRes.ok) break;
-    if (isOverload(apiRes, data) && i < modelos.length - 1) {
-      console.warn(`[callGemini] ${activeModel} saturado — cayendo al modelo de respaldo ${modelos[i + 1]}`);
-      continue;
+    if (apiRes.ok) { if (activeModel !== geminiModel) geminiWorkingFallback = activeModel; break; }
+    if (isRetired(apiRes, data)) { geminiRetired.add(activeModel); console.warn(`[callGemini] modelo RETIRADO: ${activeModel}`); }
+    else if (!isOverload(apiRes, data)) break; // error ajeno al modelo (auth, etc.) → no seguir probando modelos
+    if (queue.length === 0 && !discovered) {
+      discovered = true;
+      const avail = await discoverGeminiModels();
+      for (const m of avail) if (!tried.has(m) && !geminiRetired.has(m)) queue.push(m);
+      console.warn(`[callGemini] fallback dinámico — ${queue.length} modelo(s) descubierto(s) por probar`);
     }
-    break;
   }
   if (!apiRes.ok) {
     console.error("[callGemini] error response:", JSON.stringify(data));
