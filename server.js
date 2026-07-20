@@ -29,6 +29,8 @@ const imageModel = process.env.OPENAI_IMAGE_MODEL || "gpt-image-1";
 // Gemini si hay GEMINI_API_KEY, si no OpenAI. Ambos se llaman por fetch (cero deps).
 // Los modelos son configurables por si Google/OpenAI cambian los nombres.
 const geminiModel = process.env.GEMINI_MODEL || "gemini-3.5-flash";
+// v55.18: modelo Gemini de RESPALDO si el primario está saturado ("high demand"). Más estable.
+const geminiModelFallback = process.env.GEMINI_MODEL_FALLBACK || "gemini-2.5-flash";
 const geminiImageModel = process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image";
 const AI_PROVIDER = String(process.env.AI_PROVIDER || (process.env.GEMINI_API_KEY ? "gemini" : "openai")).toLowerCase();
 const hasGemini = () => Boolean(process.env.GEMINI_API_KEY);
@@ -837,6 +839,7 @@ async function callGemini(sysPrompt, userContent, useWebSearch = true) {
       if (m) parts.push({ inline_data: { mime_type: m[1], data: m[2] } });
     }
   }
+  let activeModel = geminiModel;
   const doCall = async (withSearch, withThinkingOff) => {
     const reqBody = {
       system_instruction: { parts: [{ text: sysPrompt }] },
@@ -844,12 +847,11 @@ async function callGemini(sysPrompt, userContent, useWebSearch = true) {
       generationConfig: { maxOutputTokens: 3500 }
     };
     // v55.13: los Gemini 2.5+/3.x traen razonamiento interno ("thinking") ACTIVADO por
-    // defecto — suma segundos de latencia y cobra esos tokens. Para un asistente de chat
-    // lo apagamos: respuestas más rápidas y más baratas, con la misma calidad práctica.
+    // defecto — suma segundos de latencia y cobra esos tokens. Para un chat lo apagamos.
     if (withThinkingOff) reqBody.generationConfig.thinkingConfig = { thinkingBudget: 0 };
     if (withSearch === "gs") reqBody.tools = [{ google_search: {} }];
     else if (withSearch === "gsr") reqBody.tools = [{ google_search_retrieval: {} }];
-    const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`, {
+    const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent`, {
       method: "POST",
       headers: geminiHeaders(),
       body: JSON.stringify(reqBody)
@@ -858,38 +860,52 @@ async function callGemini(sysPrompt, userContent, useWebSearch = true) {
     return { apiRes, data };
   };
 
-  // Cascada de tolerancia (v55.12/13): búsqueda web y thinking-off son capas OPCIONALES —
-  // si la API del modelo/tier rechaza alguna, se reintenta sin ella y se memoriza para
-  // las próximas llamadas. Ninguna capa opcional debe tumbar una respuesta.
-  const s0 = (useWebSearch && geminiSearchMode !== "off") ? geminiSearchMode : false;
-  const t0 = geminiThinkingOk;
-  const planes = [[s0, t0]];
-  if (s0 === "gs") planes.push(["gsr", t0]);   // formato alterno de búsqueda
-  if (s0) planes.push([false, t0]);            // sin búsqueda
-  if (t0) planes.push([false, false]);         // sin búsqueda ni thinking-off
-  let apiRes, data, usado = [s0, t0];
-  for (const [s, t] of planes) {
-    ({ apiRes, data } = await doCall(s, t));
-    usado = [s, t];
-    if (apiRes.ok) break;
-    console.warn(`[callGemini] intento (búsqueda=${s}, sinPensar=${t}) falló: ${apiRes.status} ${data.error?.message || "?"}`);
-  }
-  if (apiRes.ok) {
-    if (s0 && usado[0] !== s0) {
-      geminiSearchMode = usado[0] || "off";
-      console.warn(`[callGemini] búsqueda web: modo memorizado → ${geminiSearchMode}`);
+  // Cascada de tolerancia por modelo: búsqueda web y thinking-off son capas OPCIONALES;
+  // si la API las rechaza se reintenta sin ellas y se memoriza. + auth alterno (keys "AQ.…").
+  const runCascade = async () => {
+    const s0 = (useWebSearch && geminiSearchMode !== "off") ? geminiSearchMode : false;
+    const t0 = geminiThinkingOk;
+    const planes = [[s0, t0]];
+    if (s0 === "gs") planes.push(["gsr", t0]);
+    if (s0) planes.push([false, t0]);
+    if (t0) planes.push([false, false]);
+    let r, d, usado = [s0, t0];
+    for (const [s, t] of planes) {
+      ({ apiRes: r, data: d } = await doCall(s, t));
+      usado = [s, t];
+      if (r.ok) break;
+      console.warn(`[callGemini] ${activeModel} (búsqueda=${s}, sinPensar=${t}) falló: ${r.status} ${d.error?.message || "?"}`);
     }
-    if (t0 && !usado[1]) { geminiThinkingOk = false; console.warn("[callGemini] thinkingConfig no soportado — se deja el razonamiento por defecto (memorizado)"); }
-  }
-  // v55.15: si todo falló con pinta de AUTENTICACIÓN (400/401/403), prueba el otro estilo
-  // de header (x-goog-api-key ↔ Authorization: Bearer) con la petición mínima. Las keys
-  // nuevas de Google ("AQ.…") pueden requerir Bearer; las clásicas ("AIza…") usan el header.
-  if (!apiRes.ok && [400, 401, 403].includes(apiRes.status)) {
-    geminiUseBearer = !geminiUseBearer;
-    console.warn(`[callGemini] probando estilo de auth alterno: ${geminiUseBearer ? "Authorization: Bearer" : "x-goog-api-key"}`);
-    ({ apiRes, data } = await doCall(false, false));
-    if (!apiRes.ok) { geminiUseBearer = !geminiUseBearer; } // tampoco sirvió → revertir
-    else console.warn("[callGemini] estilo de auth alterno FUNCIONÓ (memorizado para las próximas llamadas)");
+    if (r.ok) {
+      if (s0 && usado[0] !== s0) { geminiSearchMode = usado[0] || "off"; console.warn(`[callGemini] búsqueda web memorizada → ${geminiSearchMode}`); }
+      if (t0 && !usado[1]) { geminiThinkingOk = false; console.warn("[callGemini] thinkingConfig no soportado (memorizado)"); }
+    }
+    if (!r.ok && [400, 401, 403].includes(r.status)) {
+      geminiUseBearer = !geminiUseBearer;
+      console.warn(`[callGemini] probando auth alterno: ${geminiUseBearer ? "Bearer" : "x-goog-api-key"}`);
+      ({ apiRes: r, data: d } = await doCall(false, false));
+      if (!r.ok) geminiUseBearer = !geminiUseBearer;
+      else console.warn("[callGemini] auth alterno FUNCIONÓ (memorizado)");
+    }
+    return { apiRes: r, data: d };
+  };
+
+  // v55.18: si el modelo primario está SATURADO (429/503 "high demand"/overloaded), se cae a un
+  // modelo Gemini de respaldo más estable — el chat aguanta los picos SIN necesitar OpenAI.
+  const isOverload = (r, d) => r.status === 429 || r.status === 503 ||
+    /overloaded|high demand|unavailable|exhausted|try again later/i.test(d?.error?.message || "");
+  const modelos = geminiModelFallback && geminiModelFallback !== geminiModel
+    ? [geminiModel, geminiModelFallback] : [geminiModel];
+  let apiRes, data;
+  for (let i = 0; i < modelos.length; i++) {
+    activeModel = modelos[i];
+    ({ apiRes, data } = await runCascade());
+    if (apiRes.ok) break;
+    if (isOverload(apiRes, data) && i < modelos.length - 1) {
+      console.warn(`[callGemini] ${activeModel} saturado — cayendo al modelo de respaldo ${modelos[i + 1]}`);
+      continue;
+    }
+    break;
   }
   if (!apiRes.ok) {
     console.error("[callGemini] error response:", JSON.stringify(data));
@@ -897,9 +913,7 @@ async function callGemini(sysPrompt, userContent, useWebSearch = true) {
     err.status = apiRes.status; err.code = data.error?.status;
     throw err;
   }
-  // Consumo visible en logs (v55.11) — para comparar costos Gemini vs OpenAI.
-  // Gemini 3.5 Flash cobra por token; estos números salen en los logs de Render.
-  logGeminiCost(`callGemini (${geminiModel})`, data.usageMetadata);
+  logGeminiCost(`callGemini (${activeModel})`, data.usageMetadata);
   const text = (data.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("").trim();
   const parsed = parseJson(text);
   if (parsed) return parsed;
