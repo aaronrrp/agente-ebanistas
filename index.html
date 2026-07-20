@@ -1264,8 +1264,12 @@
           <label class="span-2">Descripción
             <textarea id="coP_description" rows="3" placeholder="Descripción del producto…"></textarea>
           </label>
-          <label class="span-2">URL de foto principal
-            <input id="coP_photoUrl" type="url" placeholder="https://…">
+          <label class="span-2">Foto principal
+            <div style="display:flex;align-items:center;gap:12px;margin-top:6px">
+              <img id="coP_photoPreview" alt="" style="width:64px;height:64px;border-radius:8px;object-fit:cover;background:var(--surface-soft);border:1px solid var(--line);display:none">
+              <label class="secondary-btn" style="cursor:pointer;margin:0">📷 Subir foto<input id="coP_photoFile" type="file" accept="image/*" style="display:none"></label>
+            </div>
+            <input id="coP_photoUrl" type="hidden">
           </label>
           <label class="span-2">Etiquetas (separadas por coma)
             <input id="coP_tags" type="text" placeholder="Ej: importado, oferta, nuevo">
@@ -1334,8 +1338,12 @@
           <label class="span-2">Descripción
             <textarea id="coPr_description" rows="3"></textarea>
           </label>
-          <label class="span-2">URL de imagen
-            <input id="coPr_photoUrl" type="url">
+          <label class="span-2">Imagen
+            <div style="display:flex;align-items:center;gap:12px;margin-top:6px">
+              <img id="coPr_photoPreview" alt="" style="width:64px;height:64px;border-radius:8px;object-fit:cover;background:var(--surface-soft);border:1px solid var(--line);display:none">
+              <label class="secondary-btn" style="cursor:pointer;margin:0">📷 Subir imagen<input id="coPr_photoFile" type="file" accept="image/*" style="display:none"></label>
+            </div>
+            <input id="coPr_photoUrl" type="hidden">
           </label>
           <label>Estado
             <select id="coPr_active">
@@ -2158,9 +2166,18 @@
           <label>Ciudad<input id="ebp_city" type="text" placeholder="Ej: Ciudad de Panamá"></label>
         </div>
         <label style="display:block;margin-top:10px">Descripción<textarea id="ebp_description" rows="3" placeholder="Cuéntale a los clientes qué haces y por qué elegirte."></textarea></label>
-        <label style="display:block;margin-top:10px">Foto de perfil (URL de imagen)<input id="ebp_photo" type="url" placeholder="https://..."></label>
-        <label style="display:block;margin-top:10px">Portafolio (una URL de imagen por línea)<textarea id="ebp_portfolio" rows="3" placeholder="https://imagen1.jpg"></textarea></label>
-        <label style="display:block;margin-top:10px">Servicios (uno por línea)<textarea id="ebp_services" rows="3" placeholder="Closets a medida&#10;Cocinas"></textarea></label>
+        <div style="margin-top:12px"><strong style="font-size:.9rem">Foto de perfil</strong>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:6px">
+            <img id="ebp_photoPreview" alt="" style="width:64px;height:64px;border-radius:50%;object-fit:cover;background:var(--surface-soft);border:1px solid var(--line);display:none">
+            <label class="secondary-btn" style="cursor:pointer;margin:0">📷 Subir foto<input id="ebp_photoFile" type="file" accept="image/*" style="display:none"></label>
+          </div>
+          <input id="ebp_photo" type="hidden">
+        </div>
+        <div style="margin-top:14px"><strong style="font-size:.9rem">Portafolio (fotos de tus trabajos)</strong>
+          <div id="ebp_portfolioGrid" style="display:flex;flex-wrap:wrap;gap:8px;margin:6px 0"></div>
+          <label class="secondary-btn" style="cursor:pointer;margin:0;display:inline-block">🖼️ Agregar fotos<input id="ebp_portfolioFile" type="file" accept="image/*" multiple style="display:none"></label>
+        </div>
+        <label style="display:block;margin-top:14px">Servicios (uno por línea)<textarea id="ebp_services" rows="3" placeholder="Closets a medida&#10;Cocinas"></textarea></label>
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
           <button id="ebp_saveBtn" class="primary-btn" type="button">💾 Guardar y publicar</button>
           <a id="ebp_viewPublic" class="secondary-btn" href="#" target="_blank" rel="noopener" style="display:none;text-decoration:none">👁 Ver mi perfil público</a>

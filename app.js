@@ -12535,6 +12535,7 @@ function coOpenProductModal(product) {
   document.getElementById("coP_status").value = product?.status || "active";
   document.getElementById("coP_availability").value = product?.availability || "in_stock";
   document.getElementById("coP_tags").value = product?.tags?.join(", ") || "";
+  _coSyncPhoto("coP_photoPreview", product?.photoUrl);
   _populateCatSelects();
   const catSel = document.getElementById("coP_category");
   if (catSel && product?.category) catSel.value = product.category;
@@ -12561,6 +12562,28 @@ document.getElementById("coProductosContent")?.addEventListener("click", async (
     renderCoProductos();
   }
 });
+
+// v55.32: subida de imágenes (no URL) para empresas — producto y promoción.
+function _coSyncPhoto(previewId, url) {
+  const img = document.getElementById(previewId);
+  if (!img) return;
+  if (url) { img.src = url; img.style.display = "block"; } else { img.src = ""; img.style.display = "none"; }
+}
+function _coWirePhotoUpload(fileId, hiddenId, previewId) {
+  document.getElementById(fileId)?.addEventListener("change", async (e) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    toast("Subiendo imagen…");
+    try {
+      const url = await smartUploadImage(f, "profile", coAuthHeader);
+      const hid = document.getElementById(hiddenId); if (hid) hid.value = url;
+      _coSyncPhoto(previewId, url);
+      toast("Imagen lista ✅");
+    } catch (err) { toast(err.message || "No se pudo subir la imagen.", "error"); }
+    finally { e.target.value = ""; }
+  });
+}
+_coWirePhotoUpload("coP_photoFile", "coP_photoUrl", "coP_photoPreview");
+_coWirePhotoUpload("coPr_photoFile", "coPr_photoUrl", "coPr_photoPreview");
 
 document.getElementById("coProductSaveBtn")?.addEventListener("click", async () => {
   const errEl = document.getElementById("coProductError");
@@ -12651,6 +12674,7 @@ function coOpenPromoModal(promo) {
   document.getElementById("coPr_endsAt").value = promo?.endsAt || "";
   document.getElementById("coPr_description").value = promo?.description || "";
   document.getElementById("coPr_photoUrl").value = promo?.photoUrl || "";
+  _coSyncPhoto("coPr_photoPreview", promo?.photoUrl);
   document.getElementById("coPr_active").value = String(promo?.active !== false);
   document.getElementById("coPromoError").classList.add("hidden");
   document.getElementById("coPromoModal").classList.remove("hidden");
@@ -13717,9 +13741,10 @@ async function loadEbanistaProfile() {
     set("ebp_specialty", p.specialty); set("ebp_experience", p.experienceYears || "");
     set("ebp_phone", p.phone); set("ebp_whatsapp", p.whatsapp);
     set("ebp_province", p.location?.province); set("ebp_city", p.location?.city);
-    set("ebp_description", p.description); set("ebp_photo", p.photoUrl);
-    set("ebp_portfolio", (p.portfolioUrls || []).join("\n"));
-    set("ebp_services", (p.services || []).join("\n"));
+    set("ebp_description", p.description); set("ebp_services", (p.services || []).join("\n"));
+    _ebpSetPhoto(p.photoUrl || "");
+    _ebpPortfolio = Array.isArray(p.portfolioUrls) ? p.portfolioUrls.slice() : [];
+    _ebpRenderPortfolio();
     if (st) { st.className = "subscription-banner active " + (data.exists ? "ok" : ""); st.textContent = data.exists ? "✅ Tu perfil está publicado en el directorio de PiLLA." : "Aún no has publicado tu perfil. Llénalo y guarda para aparecer en el directorio."; }
     const link = document.getElementById("ebp_viewPublic");
     if (link) { if (data.exists) { link.href = `/p/${p.slug || p.id}`; link.style.display = "inline-block"; } else link.style.display = "none"; }
@@ -13752,8 +13777,8 @@ document.getElementById("ebp_saveBtn")?.addEventListener("click", async () => {
     specialty: val("ebp_specialty"), experienceYears: Number(val("ebp_experience")) || 0,
     phone: val("ebp_phone"), whatsapp: val("ebp_whatsapp"),
     location: { province: val("ebp_province"), city: val("ebp_city"), address: "" },
-    description: val("ebp_description"), photoUrl: val("ebp_photo"),
-    portfolioUrls: val("ebp_portfolio").split("\n").map(s => s.trim()).filter(Boolean).slice(0, 20),
+    description: val("ebp_description"), photoUrl: document.getElementById("ebp_photo")?.value || "",
+    portfolioUrls: _ebpPortfolio.slice(0, 20),
     services: val("ebp_services").split("\n").map(s => s.trim()).filter(Boolean).slice(0, 20)
   };
   if (!body.name) { toast("Ponle un nombre a tu perfil.", "error"); return; }
@@ -13766,6 +13791,43 @@ document.getElementById("ebp_saveBtn")?.addEventListener("click", async () => {
     loadEbanistaProfile();
   } catch { toast("Sin conexión al servidor.", "error"); }
   finally { btn.disabled = false; btn.textContent = prev; }
+});
+// v55.32: subida de imágenes (no URL) para el perfil del ebanista — reutiliza smartUploadImage.
+let _ebpPortfolio = [];
+const _ebpAuth = () => ({ Authorization: `Bearer ${AUTH.ebToken || ""}` });
+function _ebpSetPhoto(url) {
+  const hid = document.getElementById("ebp_photo"); if (hid) hid.value = url || "";
+  const img = document.getElementById("ebp_photoPreview");
+  if (img) { if (url) { img.src = url; img.style.display = "block"; } else img.style.display = "none"; }
+}
+function _ebpRenderPortfolio() {
+  const grid = document.getElementById("ebp_portfolioGrid"); if (!grid) return;
+  grid.innerHTML = _ebpPortfolio.map((u, i) => `
+    <div style="position:relative;width:72px;height:72px">
+      <img src="${escapeHtml(u)}" alt="" style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--line)">
+      <button type="button" data-ebp-rm="${i}" title="Quitar" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:none;background:#E74C3C;color:#fff;cursor:pointer;font-size:12px;line-height:1">✕</button>
+    </div>`).join("");
+}
+document.getElementById("ebp_portfolioGrid")?.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-ebp-rm]"); if (!b) return;
+  _ebpPortfolio.splice(Number(b.dataset.ebpRm), 1); _ebpRenderPortfolio();
+});
+document.getElementById("ebp_photoFile")?.addEventListener("change", async (e) => {
+  const f = e.target.files?.[0]; if (!f) return;
+  toast("Subiendo foto…");
+  try { _ebpSetPhoto(await smartUploadImage(f, "profile", _ebpAuth)); toast("Foto lista ✅"); }
+  catch (err) { toast(err.message || "No se pudo subir la foto.", "error"); }
+  finally { e.target.value = ""; }
+});
+document.getElementById("ebp_portfolioFile")?.addEventListener("change", async (e) => {
+  const files = Array.from(e.target.files || []); if (!files.length) return;
+  toast(`Subiendo ${files.length} foto(s)…`);
+  for (const f of files) {
+    if (_ebpPortfolio.length >= 20) { toast("Máximo 20 fotos.", "error"); break; }
+    try { _ebpPortfolio.push(await smartUploadImage(f, "portfolio", _ebpAuth)); _ebpRenderPortfolio(); }
+    catch (err) { toast(err.message || "No se pudo subir una foto.", "error"); }
+  }
+  e.target.value = "";
 });
 
 // ── UX v51: mostrar/ocultar contraseña en el login ───────────────────────────
