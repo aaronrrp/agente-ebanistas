@@ -1313,6 +1313,29 @@ async function handleAi(req, res) {
     ? { ancho_mm: Math.round(Number(ci.width) * 10), alto_mm: Math.round(Number(ci.height) * 10), profundidad_mm: Math.round(Number(ci.depth) * 10) }
     : extractCmDimensionsFromText(payload.message);
 
+  // v55.16: la IA recibe el reloj real del servidor — responde hora/fecha como una IA normal.
+  const nowBlock = `\n\n══ AHORA MISMO ══\nFecha y hora actual en Panamá (UTC-5): ${new Date().toLocaleString("es-PA", { timeZone: "America/Panama", dateStyle: "full", timeStyle: "short" })}.`;
+
+  // v55.20: MODO LIGERO (asistente flotante). Prompt CORTO de asistente general en vez del
+  // systemPrompt gigante de ebanistería → muchísimos menos tokens de entrada = respuestas casi
+  // instantáneas y más baratas. Sin búsqueda web (velocidad). Se activa con { lite: true }.
+  if (payload.lite) {
+    const LITE_PROMPT = `Eres el asistente de PiLLA, plataforma para profesionales de la construcción y el mueble en Panamá. Responde CUALQUIER pregunta (dudas, ideas, cálculos, cómo usar la plataforma, temas generales) de forma BREVE, clara y útil, en español y en texto natural (NUNCA JSON). Si el usuario quiere el diseño técnico completo de un mueble (render + despiece + cortes), sugiérele abrir la sección "Diseñar IA". Sé directo y rápido.`;
+    const hist = Array.isArray(payload.history)
+      ? payload.history.slice(-6).map(h => `${h.role === "user" ? "Usuario" : "Asistente"}: ${h.text}`).join("\n") : "";
+    const liteText = (hist ? hist + "\n" : "") + "Usuario: " + String(payload.message || "");
+    try {
+      const parsed = await callAI(LITE_PROMPT + nowBlock, [{ type: "input_text", text: liteText }], false);
+      const txt = (parsed && parsed.assistantText) ? parsed.assistantText
+                : (typeof parsed === "string" ? parsed : "Listo.");
+      sendJson(res, 200, { source: lastTextProvider || "gemini", assistantText: txt, actions: [] });
+    } catch (e) {
+      const { status, message } = friendlyAiError(e);
+      sendJson(res, status, { error: message });
+    }
+    return;
+  }
+
   const content = [{
     type: "input_text",
     text: JSON.stringify({ message: payload.message || "", tenant: slimTenant, currentItem: ci, dimensionesExterioresMm })
@@ -1327,8 +1350,6 @@ async function handleAi(req, res) {
     // Dominio mueble (hay señales semánticas, o ya hay un currentItem, o es la 2da llamada de
     // desglose) → nunca necesita búsqueda web. Solo se deja activa para preguntas generales.
     const isFurnitureDomain = semantic.count > 0 || Boolean(payload.currentItem) || Boolean(payload.skipImageRouter);
-    // v55.16: la IA recibe el reloj real del servidor — responde hora/fecha como una IA normal.
-    const nowBlock = `\n\n══ AHORA MISMO ══\nFecha y hora actual en Panamá (UTC-5): ${new Date().toLocaleString("es-PA", { timeZone: "America/Panama", dateStyle: "full", timeStyle: "short" })}.`;
     const parsed = await callAI(systemPrompt + pricesBlock + historyBlock + nowBlock, content, !isFurnitureDomain);
     const normalized = normalizeAi(parsed, parsed?.assistantText);
     if (imageDecision === "button") {

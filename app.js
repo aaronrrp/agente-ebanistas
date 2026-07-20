@@ -9757,14 +9757,14 @@ setInterval(updateNotifBadge, 45000);
       // v55.16: con TIMEOUT — antes un servidor lento/dormido dejaba el "…" cargando infinito.
       let ok, data;
       if (typeof postAi === "function") {
-        ({ ok, data } = await postAi("/api/ebanista-ai", { message: msg, history, skipImageRouter: true }));
+        ({ ok, data } = await postAi("/api/ebanista-ai", { message: msg, history, skipImageRouter: true, lite: true }));
       } else {
         const ctrl = new AbortController();
         const t = setTimeout(() => ctrl.abort(), 75000);
         const res = await fetch("/api/ebanista-ai", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: msg, history, skipImageRouter: true }),
+          body: JSON.stringify({ message: msg, history, skipImageRouter: true, lite: true }),
           signal: ctrl.signal
         });
         clearTimeout(t);
