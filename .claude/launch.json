@@ -5,8 +5,7 @@
       "name": "agente-ebanistas",
       "runtimeExecutable": "node",
       "runtimeArgs": ["server.js"],
-      "port": 5174,
-      "autoPort": false
+      "port": 5174
     }
   ]
 }
