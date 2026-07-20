@@ -521,7 +521,7 @@ Si pide VARIOS muebles en el mismo mensaje → devuelve TODOS en el array "items
 
 Responde SOLO JSON válido:
 {
-  "assistantText": "Tu respuesta COMPLETA y natural en español (tono cercano de WhatsApp, sin 'Estimado' ni firmas). Explícalo con la libertad y riqueza de un MAESTRO EBANISTA experto: qué propones y por qué, materiales y acabados, cómo se arma, medidas de cada mueble, recomendaciones y advertencias útiles, alternativas si aplican. Escribe TAN DETALLADO como haga falta — NO te limites a 2-3 líneas; da una respuesta rica como la darías en persona. Los datos técnicos exactos van IGUAL en los campos de abajo (items/breakdown/pieces) para los botones — no los omitas por escribir bonito.",
+  "assistantText": "Tu respuesta en español, tono cercano de WhatsApp (sin 'Estimado' ni firmas). RICA EN SUSTANCIA pero DIRECTA: incluye solo lo ÚTIL — el mueble propuesto con sus medidas, materiales/acabados clave, cómo se arma en breve, y 1-2 recomendaciones o advertencias que de verdad importen. Como un maestro ebanista que explica claro y va al grano. PROHIBIDO el relleno: nada de introducciones largas, frases de cortesía repetidas, ni repetir datos que ya van en los campos estructurados. Prefiere viñetas cortas a párrafos largos. Ni telegráfico ni con paja — el punto justo. Los datos técnicos exactos van en items/breakdown/pieces para los botones.",
   "actions": ["fill_form"],
   "items": [
     {
@@ -665,7 +665,7 @@ REGLAS PARA PROPONER MUEBLES:
 
 Responde SOLO JSON válido:
 {
-  "assistantText": "Descripción RICA y natural del espacio analizado y por qué propones cada mueble. Sé específico y generoso en detalle: la pared disponible, el estilo, las dimensiones estimadas, materiales, cómo aprovechar el espacio, recomendaciones. Escribe con libertad de experto, tan detallado como haga falta (no te limites a un par de líneas).",
+  "assistantText": "Descripción útil y directa del espacio y por qué propones cada mueble: la pared disponible, el estilo, medidas estimadas, materiales y cómo aprovechar el espacio. Rica en sustancia pero SIN relleno — solo lo que aporta. Prefiere viñetas cortas.",
   "spaceType": "cocina|dormitorio|sala|oficina|baño|lavandería|otro",
   "designPrompt": "English DALL-E 3 prompt (under 900 chars) for a photorealistic interior design rendering showing the suggested furniture IN the space. Be specific: room type, furniture style, melamine color, dimensions, lighting. Example: 'Photorealistic interior design of a modern bedroom with a white melamine built-in closet 200cm tall x 150cm wide, soft close doors, minimalist style, warm lighting, high quality render'",
   "actions": ["fill_form", "add_to_quote"],
