@@ -40,6 +40,25 @@ function publicCompany(c) {
   const { passwordHash, passwordSalt, paymentNote, ...rest } = c; // paymentNote es solo para el admin, nunca sale al público ni a la empresa misma
   return rest;
 }
+// Coordenadas públicas (v55.34, mismo criterio que professionals.js): en modo
+// "approx" el punto exacto no sale del servidor — se redondea a ~2 decimales y
+// se oculta la dirección. Cada sucursal tiene su propia ubicación en el mapa.
+function sanitizeLocationForPublic(loc) {
+  if (!loc || typeof loc !== "object") return loc;
+  const out = { ...loc };
+  if (out.precision === "approx" && typeof out.lat === "number" && typeof out.lng === "number") {
+    out.lat = Math.round(out.lat * 100) / 100;
+    out.lng = Math.round(out.lng * 100) / 100;
+    out.address = "";
+  }
+  return out;
+}
+function publicCompanyPublic(c) {
+  const r = publicCompany(c);
+  if (r.location) r.location = sanitizeLocationForPublic(r.location);
+  if (Array.isArray(r.branches)) r.branches = r.branches.map(b => ({ ...b, location: sanitizeLocationForPublic(b.location) }));
+  return r;
+}
 // Para las vistas de Admin: todo MENOS las contraseñas -- a diferencia de
 // publicCompany(), el admin sí necesita ver/editar paymentNote.
 function adminCompanyView(c) {
@@ -101,13 +120,13 @@ async function handle(req, res, { method, p, parts }) {
   if (method === "GET" && parts[0] === "api" && parts[1] === "companies" && parts[2] === "slug" && parts[3]) {
     const co = companies.find(x => x.slug === parts[3] && x.status === "approved");
     if (!co) { sendJson(res, 404, { error: "Empresa no encontrada." }); return true; }
-    sendJson(res, 200, publicCompany(co));
+    sendJson(res, 200, publicCompanyPublic(co));
     return true;
   }
 
   if (method === "GET" && p === "/api/companies") {
     const q = Object.fromEntries(new URL(req.url, "http://x").searchParams);
-    sendJson(res, 200, companies.filter(c => matchesFilters(c, q)).map(publicCompany));
+    sendJson(res, 200, companies.filter(c => matchesFilters(c, q)).map(publicCompanyPublic));
     return true;
   }
 
@@ -445,6 +464,7 @@ async function handle(req, res, { method, p, parts }) {
       phone: data.phone || "",
       schedule: data.schedule || "",
       manager: data.manager || "",
+      location: (data.location && typeof data.location === "object") ? data.location : null,
       status: "active",
       createdAt: new Date().toISOString()
     };
@@ -464,7 +484,7 @@ async function handle(req, res, { method, p, parts }) {
       const data = body ? JSON.parse(body) : {};
       const branch = (company.branches || []).find(b => b.id === branchId);
       if (!branch) { sendJson(res, 404, { error: "Sucursal no encontrada." }); return true; }
-      for (const f of ["name", "address", "province", "city", "phone", "schedule", "manager", "status"]) {
+      for (const f of ["name", "address", "province", "city", "phone", "schedule", "manager", "status", "location"]) {
         if (data[f] !== undefined) branch[f] = data[f];
       }
       saveCompanies(companies);
@@ -491,7 +511,7 @@ async function handle(req, res, { method, p, parts }) {
     if (!company || company.status !== "approved") { sendJson(res, 404, { error: "No encontrado." }); return true; }
     company.views = (company.views || 0) + 1;
     saveCompanies(companies);
-    sendJson(res, 200, publicCompany(company));
+    sendJson(res, 200, publicCompanyPublic(company));
     return true;
   }
 

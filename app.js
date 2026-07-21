@@ -10218,6 +10218,80 @@ function ensureCompanyCategoryOptions() {
   }
 }
 
+// ── Mapa de empresas (v55.35) — cada sucursal es un pin ──────────────────────
+let _coMap = null, _coMarkers = null, _coUserLoc = null, _coMapHidden = false, _lastCoList = null;
+function _companyPins(list) {
+  const pins = [];
+  for (const c of (list || [])) {
+    const branches = Array.isArray(c.branches) ? c.branches.filter(b => _hasCoords(b.location)) : [];
+    if (branches.length) { for (const b of branches) pins.push({ company: c, branch: b, loc: b.location }); }
+    else if (_hasCoords(c.location)) pins.push({ company: c, branch: null, loc: c.location });
+  }
+  return pins;
+}
+async function renderCompaniesMap(list) {
+  const wrap = document.getElementById("coMapWrap");
+  const mapEl = document.getElementById("coMap");
+  if (!wrap || !mapEl) return;
+  const pins = _companyPins(list);
+  if (!pins.length && !_coUserLoc) { wrap.style.display = "none"; return; }
+  wrap.style.display = "";
+  let L;
+  try { L = await loadLeaflet(); } catch { wrap.style.display = "none"; return; }
+  if (!_coMap) {
+    _coMap = L.map(mapEl, { scrollWheelZoom: false }).setView(PILLA_MAP_CENTER, 11);
+    L.tileLayer(OSM_TILES, { attribution: OSM_ATTRIB, maxZoom: 19 }).addTo(_coMap);
+    _coMarkers = L.layerGroup().addTo(_coMap);
+  }
+  _coMarkers.clearLayers();
+  const bounds = [];
+  for (const pin of pins) {
+    const ll = [pin.loc.lat, pin.loc.lng];
+    bounds.push(ll);
+    if (pin.loc.precision === "approx") L.circle(ll, { radius: 900, color: "#2D235F", weight: 1, fillColor: "#2D235F", fillOpacity: 0.12 }).addTo(_coMarkers);
+    const c = pin.company, wa = (c.whatsapp || c.phone || "").replace(/[^0-9]/g, "");
+    L.marker(ll, { icon: _pillaPinIcon(L) }).addTo(_coMarkers).bindPopup(
+      `<div style="text-align:center;min-width:150px">
+        ${c.logoUrl ? `<img src="${escapeHtml(c.logoUrl)}" alt="" style="width:52px;height:52px;border-radius:10px;object-fit:cover;margin:0 auto 6px;display:block">` : ""}
+        <strong>${escapeHtml(c.name)}</strong>
+        ${pin.branch ? `<br><span style="color:#666;font-size:.8rem">${escapeHtml(pin.branch.name)}</span>` : ""}
+        ${pin.loc.city ? `<br><span style="color:#666;font-size:.78rem">📍 ${escapeHtml(pin.loc.city)}</span>` : ""}
+        <br><a href="${directionsUrl(pin.loc.lat, pin.loc.lng)}" target="_blank" rel="noopener" style="display:inline-block;margin-top:6px;font-size:.8rem">🧭 Cómo llegar</a>
+        ${wa ? `<br><button type="button" data-co-map-contact="${c.id}" data-co-map-phone="${escapeHtml(c.whatsapp || c.phone)}" style="margin-top:6px;background:#2D235F;color:#fff;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:.8rem">Contactar</button>` : ""}
+      </div>`);
+  }
+  if (_coUserLoc) {
+    bounds.push(_coUserLoc);
+    L.circleMarker(_coUserLoc, { radius: 8, color: "#fff", weight: 2, fillColor: "#F9A825", fillOpacity: 1 }).addTo(_coMarkers).bindPopup("Estás aquí");
+  }
+  if (bounds.length) { try { _coMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 }); } catch {} }
+  setTimeout(() => _coMap && _coMap.invalidateSize(), 120);
+}
+document.getElementById("coMap")?.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-co-map-contact]");
+  if (!b) return;
+  fetch(`/api/companies/${b.dataset.coMapContact}/contact-click`, { method: "POST" }).catch(() => {});
+  openWhatsApp(b.dataset.coMapPhone, "Hola, vi su empresa en PiLLA y me gustaría más información.");
+});
+document.getElementById("coToggleMapBtn")?.addEventListener("click", () => {
+  const mapEl = document.getElementById("coMap");
+  _coMapHidden = !_coMapHidden;
+  if (mapEl) mapEl.style.display = _coMapHidden ? "none" : "";
+  const btn = document.getElementById("coToggleMapBtn");
+  if (btn) btn.textContent = _coMapHidden ? "🗺️ Mostrar mapa" : "🗺️ Ocultar mapa";
+  if (!_coMapHidden) setTimeout(() => _coMap && _coMap.invalidateSize(), 60);
+});
+document.getElementById("coNearMeBtn")?.addEventListener("click", async () => {
+  const status = document.getElementById("coNearMeStatus");
+  if (status) status.textContent = "Obteniendo tu ubicación…";
+  try {
+    _coUserLoc = await _geolocate();
+    await renderCompaniesMap(_lastCoList);
+    if (_coMap && _coUserLoc) _coMap.setView(_coUserLoc, 13);
+    if (status) status.textContent = "Mostrando tu ubicación 📍";
+  } catch (err) { if (status) status.textContent = err.message; }
+});
+
 async function loadPublicCompanies() {
   ensureCompanyCategoryOptions();
   const grid = document.getElementById("publicCompaniesGrid");
@@ -10235,6 +10309,8 @@ async function loadPublicCompanies() {
   try {
     const res = await fetch(`/api/companies?${params.toString()}`);
     const list = res.ok ? await res.json() : [];
+    _lastCoList = list;
+    renderCompaniesMap(list);
     if (!list.length) { grid.innerHTML = '<p class="login-hint">No hay empresas que coincidan todavía — sé la primera en registrarte.</p>'; return; }
     grid.innerHTML = list.map(c => {
       const waPhone = (c.whatsapp || c.phone || "").replace(/[^0-9]/g, "");
@@ -12526,6 +12602,14 @@ document.getElementById("coSaveEmpresaBtn")?.addEventListener("click", async () 
 // SUCURSALES
 // ════════════════════════════════════════════════════════════════════════════
 let _coBranchEditId = null;
+let _coBranchLocation = null; // v55.35: ubicación de la sucursal en el mapa
+document.getElementById("coB_locBtn")?.addEventListener("click", () => {
+  openLocationPicker(_coBranchLocation, (loc) => {
+    _coBranchLocation = loc;
+    const st = document.getElementById("coB_locStatus");
+    if (st) st.textContent = locStatusText(loc) + " — recuerda guardar";
+  });
+});
 
 async function renderCoSucursales() {
   const el = document.getElementById("coSucursalesContent");
@@ -12564,6 +12648,8 @@ function coOpenBranchModal(branch) {
   document.getElementById("coB_manager").value = branch?.manager || "";
   document.getElementById("coB_schedule").value = branch?.schedule || "";
   document.getElementById("coB_status").value = branch?.status || "active";
+  _coBranchLocation = _hasCoords(branch?.location) ? { lat: branch.location.lat, lng: branch.location.lng, precision: branch.location.precision || "exact" } : null;
+  const coBLocSt = document.getElementById("coB_locStatus"); if (coBLocSt) coBLocSt.textContent = locStatusText(_coBranchLocation);
   document.getElementById("coBranchError").classList.add("hidden");
   document.getElementById("coBranchModal").classList.remove("hidden");
 }
@@ -12596,7 +12682,8 @@ document.getElementById("coBranchSaveBtn")?.addEventListener("click", async () =
     phone: document.getElementById("coB_phone").value.trim(),
     manager: document.getElementById("coB_manager").value.trim(),
     schedule: document.getElementById("coB_schedule").value.trim(),
-    status: document.getElementById("coB_status").value
+    status: document.getElementById("coB_status").value,
+    location: _coBranchLocation || null
   };
   if (!payload.name) { errEl.textContent = "El nombre es obligatorio."; errEl.classList.remove("hidden"); return; }
   try {
