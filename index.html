@@ -203,6 +203,11 @@
             <strong>Buscar empresas</strong>
             <span>Ferreterías, melamina, herrajes y maquinaria con catálogos y precios.</span>
           </button>
+          <button class="home-card" type="button" data-home-go="comunidad">
+            <span class="home-card-icon" data-icon="users" data-icon-circle="var(--brand-green)"></span>
+            <strong>Comunidad</strong>
+            <span>Pregunta y recomienda: "busco un ebanista en La Chorrera que haga cocinas".</span>
+          </button>
           <button class="home-card" type="button" data-home-go="retazos">
             <span class="home-card-icon" data-icon="recycle" data-icon-circle="var(--brand-green)"></span>
             <strong>Centro Sostenible</strong>
@@ -499,6 +504,30 @@
           <div id="coMap" style="width:100%;height:320px;border-radius:12px;border:1px solid var(--line);background:var(--surface-soft);overflow:hidden"></div>
         </div>
         <div id="publicCompaniesGrid" class="public-directory-grid"></div>
+      </section>
+
+      <!-- Vista: Comunidad (v55.36) — muro de preguntas y recomendaciones -->
+      <section id="publicComunidadView" class="hidden">
+        <button class="secondary-btn public-back-btn" type="button" data-public-nav="inicio">← Inicio</button>
+        <div class="subsection" style="max-width:720px;margin:1rem auto">
+          <h2 style="margin:0 0 4px">🧑‍🤝‍🧑 Comunidad PiLLA</h2>
+          <p class="login-hint" style="margin:0 0 14px">Pregunta y recomienda: "busco un ebanista en La Chorrera que haga cocinas", "¿quién repara sillas de madera?", "recomiendo a…". Publicar y responder requiere una cuenta.</p>
+          <div class="co-section-card" style="margin-bottom:16px;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--surface)">
+            <textarea id="cm_body" rows="3" placeholder="¿Qué buscas o qué quieres recomendar?" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+              <input id="cm_province" type="text" placeholder="Provincia (opcional)" style="flex:1;min-width:130px;padding:8px;border:1px solid var(--line);border-radius:8px">
+              <input id="cm_category" type="text" placeholder="Categoría (opcional)" style="flex:1;min-width:130px;padding:8px;border:1px solid var(--line);border-radius:8px">
+              <button id="cm_postBtn" class="primary-btn" type="button">Publicar</button>
+            </div>
+            <p id="cm_error" class="login-error hidden" style="margin:8px 0 0"></p>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+            <input id="cm_search" type="text" placeholder="Buscar en la comunidad…" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:8px">
+            <button id="cm_searchBtn" class="secondary-btn" type="button">🔍</button>
+            <button id="cm_refreshBtn" class="secondary-btn" type="button">🔄</button>
+          </div>
+          <div id="cm_feed"><p class="login-hint">Cargando…</p></div>
+        </div>
       </section>
 
       <!-- Vista: registro de empresa -->

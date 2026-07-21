@@ -2542,6 +2542,7 @@ const routeModules = [
   require("./routes/admin-config.js"),
   require("./routes/admin-dashboard.js"),
   require("./routes/ads.js"),
+  require("./routes/community.js"),
   require("./routes/ratings.js"),
   require("./routes/catalog.js"),
   require("./routes/locations.js"),

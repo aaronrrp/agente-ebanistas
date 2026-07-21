@@ -8905,6 +8905,123 @@ async function initLocationSelects() {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  COMUNIDAD (v55.36) — muro de preguntas y recomendaciones (estilo YoMap)
+//  Cualquiera lee; publicar/responder requiere sesión (gate reutilizado).
+// ═══════════════════════════════════════════════════════════════════════════
+function currentDisplayName() {
+  const t = (typeof state !== "undefined" ? (state.tenants || []) : []).find(x => x.id === AUTH.tenantId);
+  return (AUTH.professionalData?.name || AUTH.companyData?.name || t?.companyName || "").trim();
+}
+function _cmRoleBadge(role) {
+  return ({ ebanista: "Ebanista", professional: "Profesional", company: "Empresa", vendedor: "Vendedor", usuario_gratuito: "Usuario" })[role] || "Usuario";
+}
+function _cmCanDelete(authRole) {
+  // Solo decide si MOSTRAR el botón; el servidor valida de verdad (autor o admin).
+  const me = AUTH.mode === "ebanista" ? "ebanista"
+    : AUTH.professionalData ? "professional"
+    : AUTH.companyData ? "company"
+    : (_publicPostAuth?.role || null);
+  return Boolean(me && me === authRole);
+}
+function _cmTimeAgo(iso) {
+  const d = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (d < 60) return "hace un momento";
+  if (d < 3600) return `hace ${Math.floor(d / 60)} min`;
+  if (d < 86400) return `hace ${Math.floor(d / 3600)} h`;
+  return new Date(iso).toLocaleDateString();
+}
+async function loadComunidad(q) {
+  const feed = document.getElementById("cm_feed");
+  if (!feed) return;
+  feed.innerHTML = '<p class="login-hint">Cargando…</p>';
+  try {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    const res = await fetch(`/api/community?${params.toString()}`);
+    _cmRenderFeed(res.ok ? await res.json() : []);
+  } catch { feed.innerHTML = '<p class="login-hint">Sin conexión al servidor.</p>'; }
+}
+function _cmRenderFeed(list) {
+  const feed = document.getElementById("cm_feed");
+  if (!feed) return;
+  if (!list.length) { feed.innerHTML = '<p class="login-hint">Todavía no hay publicaciones. ¡Sé el primero en preguntar o recomendar!</p>'; return; }
+  feed.innerHTML = list.map(p => {
+    const meta = [p.category, p.province].filter(Boolean).map(escapeHtml).join(" · ");
+    return `<div class="co-section-card" style="padding:14px;border:1px solid var(--line);border-radius:12px;margin-bottom:12px;background:var(--surface)" data-cm-post="${p.id}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+        <div>
+          <strong>${escapeHtml(p.authorName || "Usuario")}</strong>
+          <span style="font-size:.72rem;background:var(--accent-soft);color:var(--accent);border-radius:999px;padding:2px 8px;margin-left:6px">${escapeHtml(_cmRoleBadge(p.authRole))}</span>
+          <div style="font-size:.75rem;color:var(--muted)">${_cmTimeAgo(p.createdAt)}${meta ? " · " + meta : ""}</div>
+        </div>
+        ${_cmCanDelete(p.authRole) ? `<button type="button" data-cm-del="${p.id}" class="tiny-btn" style="color:var(--red,#e53e3e)">🗑</button>` : ""}
+      </div>
+      <p style="margin:8px 0;white-space:pre-wrap">${escapeHtml(p.body)}</p>
+      ${(p.replies || []).length ? `<div style="border-left:2px solid var(--line);padding-left:10px;margin:8px 0">
+        ${p.replies.map(r => `<div style="margin-bottom:6px">
+          <strong style="font-size:.85rem">${escapeHtml(r.authorName || "Usuario")}</strong>
+          <span style="font-size:.7rem;color:var(--muted)">${escapeHtml(_cmRoleBadge(r.authRole))} · ${_cmTimeAgo(r.createdAt)}</span>
+          <div style="font-size:.9rem;white-space:pre-wrap">${escapeHtml(r.body)}</div>
+        </div>`).join("")}
+      </div>` : ""}
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <input type="text" data-cm-reply-input="${p.id}" placeholder="Responder…" style="flex:1;padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-size:.88rem">
+        <button type="button" data-cm-reply="${p.id}" class="secondary-btn" style="font-size:.85rem">Responder</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+document.getElementById("cm_postBtn")?.addEventListener("click", async () => {
+  const err = document.getElementById("cm_error");
+  err?.classList.add("hidden");
+  if (!requireSessionToContact()) return;
+  const body = (document.getElementById("cm_body")?.value || "").trim();
+  if (body.length < 4) { if (err) { err.textContent = "Escribe tu mensaje (mínimo 4 caracteres)."; err.classList.remove("hidden"); } return; }
+  const payload = {
+    body,
+    category: (document.getElementById("cm_category")?.value || "").trim(),
+    province: (document.getElementById("cm_province")?.value || "").trim(),
+    authorName: currentDisplayName()
+  };
+  try {
+    const res = await fetch("/api/community", { method: "POST", headers: { "Content-Type": "application/json", ...publicAuthHeader() }, body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (!res.ok) { if (err) { err.textContent = data.error || "No se pudo publicar."; err.classList.remove("hidden"); } return; }
+    ["cm_body", "cm_category", "cm_province"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
+    toast("Publicado en la comunidad ✓");
+    loadComunidad();
+  } catch { if (err) { err.textContent = "Sin conexión al servidor."; err.classList.remove("hidden"); } }
+});
+document.getElementById("cm_searchBtn")?.addEventListener("click", () => loadComunidad((document.getElementById("cm_search")?.value || "").trim()));
+document.getElementById("cm_search")?.addEventListener("keydown", (e) => { if (e.key === "Enter") loadComunidad(e.target.value.trim()); });
+document.getElementById("cm_refreshBtn")?.addEventListener("click", () => { const s = document.getElementById("cm_search"); if (s) s.value = ""; loadComunidad(); });
+document.getElementById("cm_feed")?.addEventListener("click", async (e) => {
+  const replyBtn = e.target.closest("[data-cm-reply]");
+  const delBtn = e.target.closest("[data-cm-del]");
+  if (replyBtn) {
+    if (!requireSessionToContact()) return;
+    const id = replyBtn.dataset.cmReply;
+    const input = document.querySelector(`[data-cm-reply-input="${id}"]`);
+    const body = (input?.value || "").trim();
+    if (body.length < 2) { toast("Escribe tu respuesta.", "error"); return; }
+    try {
+      const res = await fetch(`/api/community/${id}/replies`, { method: "POST", headers: { "Content-Type": "application/json", ...publicAuthHeader() }, body: JSON.stringify({ body, authorName: currentDisplayName() }) });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); toast(d.error || "No se pudo responder.", "error"); return; }
+      loadComunidad((document.getElementById("cm_search")?.value || "").trim());
+    } catch { toast("Sin conexión al servidor.", "error"); }
+    return;
+  }
+  if (delBtn) {
+    if (!confirm("¿Eliminar tu publicación?")) return;
+    try {
+      const res = await fetch(`/api/community/${delBtn.dataset.cmDel}`, { method: "DELETE", headers: publicAuthHeader() });
+      if (res.ok) loadComunidad((document.getElementById("cm_search")?.value || "").trim());
+      else toast("No se pudo eliminar.", "error");
+    } catch { toast("Sin conexión al servidor.", "error"); }
+  }
+});
+
 function showPublicDirectorio(initialView = "inicio") {
   document.getElementById("appLoading")?.remove();
   document.getElementById("loginScreen").style.display = "none";
@@ -9371,6 +9488,7 @@ document.getElementById("pf_successContinueBtn")?.addEventListener("click", () =
 const PUBLIC_SUBVIEW_IDS = [
   "publicHomeView", "consumerGateView",
   "publicDirectoryView", "publicRegisterView", "publicCompaniesView", "publicCompanyRegisterView",
+  "publicComunidadView",
   "publicRetazosView", "rz_loginGateView", "rz_publishView",
   "publicTrabajosView", "publicMaterialesView", "publicCalculadorasView",
   "publicAcademiaView", "publicInspiracionView", "publicReferidosView", "publicReservasView",
@@ -9425,6 +9543,9 @@ function publicNavGo(nav) {
   } else if (nav === "empresas") {
     document.getElementById("publicCompaniesView")?.classList.remove("hidden");
     loadPublicCompanies?.();
+  } else if (nav === "comunidad") {
+    document.getElementById("publicComunidadView")?.classList.remove("hidden");
+    loadComunidad?.();
   } else if (nav === "retazos") {
     document.getElementById("publicRetazosView")?.classList.remove("hidden");
     loadPublicRetazos?.();
