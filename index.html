@@ -208,6 +208,11 @@
             <strong>Comunidad</strong>
             <span>Pregunta y recomienda: "busco un ebanista en La Chorrera que haga cocinas".</span>
           </button>
+          <button class="home-card" type="button" data-home-go="favoritos">
+            <span class="home-card-icon" data-icon="heart" data-icon-circle="var(--terracota)"></span>
+            <strong>Mis favoritos</strong>
+            <span>Los profesionales y empresas que guardaste con el corazón, a la mano.</span>
+          </button>
           <button class="home-card" type="button" data-home-go="retazos">
             <span class="home-card-icon" data-icon="recycle" data-icon-circle="var(--brand-green)"></span>
             <strong>Centro Sostenible</strong>
@@ -527,6 +532,16 @@
             <button id="cm_refreshBtn" class="secondary-btn" type="button">🔄</button>
           </div>
           <div id="cm_feed"><p class="login-hint">Cargando…</p></div>
+        </div>
+      </section>
+
+      <!-- Vista: Favoritos (v55.37) — guardados con el corazón -->
+      <section id="publicFavoritosView" class="hidden">
+        <button class="secondary-btn public-back-btn" type="button" data-public-nav="inicio">← Inicio</button>
+        <div class="subsection" style="max-width:900px;margin:1rem auto">
+          <h2 style="margin:0 0 4px">❤️ Mis favoritos</h2>
+          <p class="login-hint" style="margin:0 0 14px">Se guardan en este dispositivo. Toca el corazón en cualquier profesional o empresa para agregarlo.</p>
+          <div id="fav_content"><p class="login-hint">Cargando…</p></div>
         </div>
       </section>
 

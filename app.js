@@ -9123,6 +9123,93 @@ function currentBestAuthToken() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  FAVORITOS (v55.37) — guardado local por dispositivo (localStorage)
+//  Se guarda en el navegador del usuario: persiste aunque Render reinicie los
+//  datos del servidor (plan free) y no necesita backend. Guarda una foto/nombre
+//  "snapshot" para pintar la tarjeta sin volver a pedir al servidor.
+// ═══════════════════════════════════════════════════════════════════════════
+const FAVS_KEY = "pilla_favs";
+function _loadFavs() { try { return JSON.parse(localStorage.getItem(FAVS_KEY)) || []; } catch { return []; } }
+function _saveFavs(list) { try { localStorage.setItem(FAVS_KEY, JSON.stringify(list.slice(0, 200))); } catch {} }
+let _favs = _loadFavs();
+function isFav(type, id) { return _favs.some(f => f.type === type && f.id === id); }
+function toggleFav(obj) {
+  const i = _favs.findIndex(f => f.type === obj.type && f.id === obj.id);
+  if (i >= 0) _favs.splice(i, 1); else _favs.unshift(obj);
+  _saveFavs(_favs);
+  return isFav(obj.type, obj.id);
+}
+function _favSnapshotFromPro(p) { return { type: "p", id: p.id, name: p.name, photo: p.photoUrl || "", category: p.category, slug: p.slug || p.id, phone: p.phone || "", whatsapp: p.whatsapp || "" }; }
+function _favSnapshotFromCompany(c) { return { type: "c", id: c.id, name: c.name, photo: c.logoUrl || "", category: c.category, slug: c.slug || c.id, phone: c.phone || "", whatsapp: c.whatsapp || "" }; }
+function _favBtnHtml(type, id) {
+  return `<button class="pca-fav" type="button" data-fav-type="${type}" data-fav-id="${id}" title="Guardar en favoritos" aria-label="Favorito" style="position:absolute;top:8px;right:8px;z-index:2;background:rgba(255,255,255,.92);border:none;border-radius:50%;width:32px;height:32px;cursor:pointer;font-size:1rem;line-height:1;box-shadow:0 1px 4px rgba(0,0,0,.22)">${isFav(type, id) ? "❤️" : "🤍"}</button>`;
+}
+// Alterna el favorito buscando el snapshot en la última lista cargada.
+function _handleFavToggle(btn) {
+  const type = btn.dataset.favType, id = btn.dataset.favId;
+  let snap = null;
+  if (type === "p") { const p = (_lastDirList || []).find(x => x.id === id); if (p) snap = _favSnapshotFromPro(p); }
+  else if (type === "c") { const c = (_lastCoList || []).find(x => x.id === id); if (c) snap = _favSnapshotFromCompany(c); }
+  if (!snap) snap = { type, id, name: "", photo: "", category: "", slug: id, phone: "", whatsapp: "" };
+  const nowFav = toggleFav(snap);
+  btn.textContent = nowFav ? "❤️" : "🤍";
+  try { toast(nowFav ? "Guardado en favoritos ❤️" : "Quitado de favoritos"); } catch {}
+}
+// Listener global: el corazón funciona en cualquier tarjeta (directorio, empresas).
+document.addEventListener("click", (e) => {
+  const favBtn = e.target.closest(".pca-fav");
+  if (favBtn) { e.preventDefault(); e.stopPropagation(); _handleFavToggle(favBtn); }
+});
+// ── Vista Favoritos ──────────────────────────────────────────────────────────
+function renderFavoritos() {
+  const el = document.getElementById("fav_content");
+  if (!el) return;
+  _favs = _loadFavs();
+  if (!_favs.length) {
+    el.innerHTML = '<p class="login-hint">Aún no has guardado favoritos. Toca el corazón 🤍 en cualquier profesional o empresa para guardarlo aquí y encontrarlo rápido.</p>';
+    return;
+  }
+  el.innerHTML = `<div class="public-directory-grid">${_favs.map(f => {
+    const wa = (f.whatsapp || f.phone || "").replace(/[^0-9]/g, "");
+    const photo = f.photo
+      ? `<img src="${escapeHtml(f.photo)}" alt="" class="pro-card-photo">`
+      : `<div class="pro-card-photo pro-card-photo--placeholder">${escapeHtml((f.name || "?")[0].toUpperCase())}</div>`;
+    return `<div class="pro-card">
+      <div class="pro-card-header">
+        ${photo}
+        <span class="pro-badge ${f.type === "c" ? "pro-badge--gold" : "pro-badge--purple"}" style="position:absolute;top:8px;right:8px">${f.type === "c" ? "Empresa" : "Profesional"}</span>
+      </div>
+      <div class="pro-card-body">
+        <h3 class="pro-card-name">${escapeHtml(f.name || "Sin nombre")}</h3>
+        ${f.category ? `<div class="pro-card-meta">${escapeHtml(f.type === "c" ? (companyCategoryLabel?.(f.category) || f.category) : professionalCategoryLabel(f.category))}</div>` : ""}
+      </div>
+      <div class="pro-card-actions">
+        ${f.type === "p" ? `<button class="pca-btn pca-view" type="button" data-fav-view="${f.id}">Ver perfil</button>` : ""}
+        ${wa ? `<button class="pca-btn pca-wa" type="button" data-fav-wa="${escapeHtml(f.whatsapp || f.phone)}" data-fav-wa-type="${f.type}" data-fav-wa-id="${f.id}">WhatsApp</button>` : ""}
+        <button class="pca-btn pca-share" type="button" data-fav-remove-type="${f.type}" data-fav-remove-id="${f.id}">Quitar ✕</button>
+      </div>
+    </div>`;
+  }).join("")}</div>`;
+}
+document.getElementById("fav_content")?.addEventListener("click", (e) => {
+  const viewBtn = e.target.closest("[data-fav-view]");
+  const waBtn = e.target.closest("[data-fav-wa]");
+  const rmBtn = e.target.closest("[data-fav-remove-id]");
+  if (viewBtn) { openProProfileModal(viewBtn.dataset.favView); return; }
+  if (waBtn) {
+    const t = waBtn.dataset.favWaType, id = waBtn.dataset.favWaId;
+    const endpoint = t === "c" ? `/api/companies/${id}/contact-click` : `/api/professionals/${id}/contact-click`;
+    fetch(endpoint, { method: "POST" }).catch(() => {});
+    openWhatsApp(waBtn.dataset.favWa, "Hola, te guardé en favoritos en PiLLA y me gustaría contactarte.");
+    return;
+  }
+  if (rmBtn) {
+    toggleFav({ type: rmBtn.dataset.favRemoveType, id: rmBtn.dataset.favRemoveId });
+    renderFavoritos();
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  MAPA Y UBICACIÓN (Leaflet + OpenStreetMap, sin API key) — v55.34
 //  Inspirado en apps tipo YoMap: mostrar en un mapa la ubicación (taller o zona)
 //  de cada profesional. Leaflet se carga bajo demanda desde CDN (mismo criterio
@@ -9332,6 +9419,7 @@ function _renderDirGrid(list) {
     return `<div class="pro-card${p.featured ? " pro-card--featured" : ""}">
       <div class="pro-card-header">
         ${photo}
+        ${_favBtnHtml("p", p.id)}
         ${badges ? `<div class="pro-card-badges">${badges}</div>` : ""}
       </div>
       <div class="pro-card-body">
@@ -9488,7 +9576,7 @@ document.getElementById("pf_successContinueBtn")?.addEventListener("click", () =
 const PUBLIC_SUBVIEW_IDS = [
   "publicHomeView", "consumerGateView",
   "publicDirectoryView", "publicRegisterView", "publicCompaniesView", "publicCompanyRegisterView",
-  "publicComunidadView",
+  "publicComunidadView", "publicFavoritosView",
   "publicRetazosView", "rz_loginGateView", "rz_publishView",
   "publicTrabajosView", "publicMaterialesView", "publicCalculadorasView",
   "publicAcademiaView", "publicInspiracionView", "publicReferidosView", "publicReservasView",
@@ -9546,6 +9634,9 @@ function publicNavGo(nav) {
   } else if (nav === "comunidad") {
     document.getElementById("publicComunidadView")?.classList.remove("hidden");
     loadComunidad?.();
+  } else if (nav === "favoritos") {
+    document.getElementById("publicFavoritosView")?.classList.remove("hidden");
+    renderFavoritos?.();
   } else if (nav === "retazos") {
     document.getElementById("publicRetazosView")?.classList.remove("hidden");
     loadPublicRetazos?.();
@@ -10442,6 +10533,7 @@ async function loadPublicCompanies() {
       return `<div class="pro-card${c.featured ? " pro-card--featured" : ""}">
         <div class="pro-card-header">
           ${logo}
+          ${_favBtnHtml("c", c.id)}
           ${badges}
         </div>
         <div class="pro-card-body">
